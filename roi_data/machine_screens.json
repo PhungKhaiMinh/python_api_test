@@ -1,0 +1,99 @@
+{
+    "machines": {
+        "F1": {
+            "name": "Máy F1",
+            "screens": [
+                {
+                    "id": 1,
+                    "screen_id": "Faults",
+                    "description": "Màn hình hiển thị lỗi"
+                },
+                {
+                    "id": 2,
+                    "screen_id": "Production Data",
+                    "description": "Màn hình dữ liệu sản xuất"
+                },
+                {
+                    "id": 3,
+                    "screen_id": "Feeders and Conveyors",
+                    "description": "Màn hình băng tải và cấp liệu"
+                },
+                {
+                    "id": 4,
+                    "screen_id": "Main Machine Parameters",
+                    "description": "Màn hình thông số chính của máy"
+                },
+                {
+                    "id": 5,
+                    "screen_id": "Selectors and Maintenance",
+                    "description": "Màn hình chọn và bảo trì"
+                }
+            ]
+        },
+        "F41": {
+            "name": "Máy F41",
+            "screens": [
+                {
+                    "id": 1,
+                    "screen_id": "Clamp",
+                    "description": "Màn hình kẹp"
+                },
+                {
+                    "id": 2,
+                    "screen_id": "Ejector",
+                    "description": "Màn hình đẩy"
+                },
+                {
+                    "id": 3,
+                    "screen_id": "Injection",
+                    "description": "Màn hình phun"
+                },
+                {
+                    "id": 4,
+                    "screen_id": "Temp",
+                    "description": "Màn hình nhiệt độ"
+                },
+                {
+                    "id": 5,
+                    "screen_id": "Production",
+                    "description": "Màn hình sản xuất"
+                },
+                {
+                    "id": 6,
+                    "screen_id": "Alarm",
+                    "description": "Màn hình báo động"
+                }
+            ]
+        },
+        "F42": {
+            "name": "Máy F42",
+            "screens": [
+                {
+                    "id": 1,
+                    "screen_id": "Setting",
+                    "description": "Màn hình cài đặt"
+                },
+                {
+                    "id": 2,
+                    "screen_id": "Temp",
+                    "description": "Màn hình nhiệt độ"
+                },
+                {
+                    "id": 3,
+                    "screen_id": "Plasticizer",
+                    "description": "Màn hình nhựa hóa"
+                },
+                {
+                    "id": 4,
+                    "screen_id": "Overview",
+                    "description": "Màn hình tổng quan"
+                },
+                {
+                    "id": 5,
+                    "screen_id": "Tracking",
+                    "description": "Màn hình theo dõi"
+                }
+            ]
+        }
+    }
+} 

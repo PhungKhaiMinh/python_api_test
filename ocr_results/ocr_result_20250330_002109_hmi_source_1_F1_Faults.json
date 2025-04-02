@@ -1,0 +1,93 @@
+{
+  "filename": "hmi_source_1_F1_Faults.jpg",
+  "machine_code": "F1",
+  "screen_id": "Faults",
+  "timestamp": "2025-03-30 00:21:09",
+  "template_path": "d:\\Wrembly\\python_api_test\\roi_data\\reference_images\\template_F1_Faults.jpg",
+  "results": [
+    {
+      "roi_index": "a",
+      "text": "120",
+      "confidence": 0.9941557719636074,
+      "has_text": true,
+      "original_value": "120"
+    },
+    {
+      "roi_index": "b",
+      "text": "0.5",
+      "confidence": 0.9999739840005138,
+      "has_text": true,
+      "original_value": "0.5"
+    },
+    {
+      "roi_index": "c",
+      "text": "9.0",
+      "confidence": 0.9999985546643163,
+      "has_text": true,
+      "original_value": "9.0"
+    },
+    {
+      "roi_index": "d",
+      "text": "3.0",
+      "confidence": 0.9999958016447406,
+      "has_text": true,
+      "original_value": "3.0"
+    },
+    {
+      "roi_index": "e",
+      "text": "0.00",
+      "confidence": 0.9999715089797974,
+      "has_text": true,
+      "original_value": "0.00"
+    },
+    {
+      "roi_index": "f",
+      "text": "25.0",
+      "confidence": 0.9186761267793789,
+      "has_text": true,
+      "original_value": "25.0"
+    },
+    {
+      "roi_index": "g",
+      "text": "50.00",
+      "confidence": 0.9817388978840762,
+      "has_text": true,
+      "original_value": "50.00"
+    },
+    {
+      "roi_index": "h",
+      "text": "35",
+      "confidence": 0.9549791753099438,
+      "has_text": true,
+      "original_value": "35"
+    },
+    {
+      "roi_index": "i",
+      "text": "180",
+      "confidence": 0.9919804674484142,
+      "has_text": true,
+      "original_value": "180"
+    },
+    {
+      "roi_index": "k",
+      "text": "60.00",
+      "confidence": 0.9962687419973278,
+      "has_text": true,
+      "original_value": "60.00"
+    },
+    {
+      "roi_index": "l",
+      "text": "35",
+      "confidence": 0.9999148644275015,
+      "has_text": true,
+      "original_value": "35"
+    },
+    {
+      "roi_index": "m",
+      "text": "180",
+      "confidence": 0.9999976599328428,
+      "has_text": true,
+      "original_value": "180"
+    }
+  ]
+}

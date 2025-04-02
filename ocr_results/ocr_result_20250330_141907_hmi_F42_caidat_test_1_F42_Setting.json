@@ -1,0 +1,86 @@
+{
+  "filename": "hmi_F42_caidat_test_1_F42_Setting.jpg",
+  "machine_code": "F42",
+  "screen_id": "Setting",
+  "timestamp": "2025-03-30 14:19:07",
+  "template_path": "d:\\Wrembly\\python_api_test\\roi_data\\reference_images\\template_F42_Setting.jpg",
+  "results": [
+    {
+      "roi_index": "Do_day_khuon_setting",
+      "text": "435.0",
+      "confidence": 0.7211748380420296,
+      "has_text": true,
+      "original_value": "435.0"
+    },
+    {
+      "roi_index": "Alpha_setting",
+      "text": "10.0",
+      "confidence": 0.9893999695777893,
+      "has_text": true,
+      "original_value": "10.0"
+    },
+    {
+      "roi_index": "Vtri_khuon",
+      "text": "250.00",
+      "confidence": 0.9368254728598046,
+      "has_text": true,
+      "original_value": "250.00"
+    },
+    {
+      "roi_index": "Do_day_khuon_hien_tai",
+      "text": "443.24",
+      "confidence": 0.6155083541619428,
+      "has_text": true,
+      "original_value": "443.24"
+    },
+    {
+      "roi_index": "Vtri_bp_day",
+      "text": "0.00",
+      "confidence": 0.9590153098106384,
+      "has_text": true,
+      "original_value": "0.00"
+    },
+    {
+      "roi_index": "Momen_bp_day",
+      "text": "0",
+      "confidence": 0.9999994039536411,
+      "has_text": true,
+      "original_value": "0"
+    },
+    {
+      "roi_index": "Luc_kep_setting",
+      "text": "120.0",
+      "confidence": 0.9999888577815387,
+      "has_text": true,
+      "original_value": "120.0"
+    },
+    {
+      "roi_index": "Gioi_han_mo_khuon",
+      "text": "50.0",
+      "confidence": 0.9992568492889404,
+      "has_text": true,
+      "original_value": "50.0"
+    },
+    {
+      "roi_index": "Luc_kep",
+      "text": "6",
+      "confidence": 0.999999046325911,
+      "has_text": true,
+      "original_value": "6"
+    },
+    {
+      "roi_index": "Momen_kep",
+      "text": "0",
+      "confidence": 0.880788853068112,
+      "has_text": true,
+      "original_value": "0"
+    },
+    {
+      "roi_index": "Gioi_han_ap_suat_tiep_xuc",
+      "text": "3.0",
+      "confidence": 0.9575513005256653,
+      "has_text": true,
+      "original_value": "3.0"
+    }
+  ]
+}

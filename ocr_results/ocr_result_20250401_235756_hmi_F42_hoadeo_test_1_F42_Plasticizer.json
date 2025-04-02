@@ -1,0 +1,135 @@
+{
+  "filename": "hmi_F42_hoadeo_test_1_F42_Plasticizer.jpg",
+  "machine_code": "F42",
+  "screen_id": "Plasticizer",
+  "timestamp": "2025-04-01 23:57:56",
+  "template_path": "d:\\Wrembly\\python_api_test\\roi_data\\reference_images\\template_F42_Plasticizer.jpg",
+  "results": [
+    {
+      "roi_index": "Vtri_khuon",
+      "text": "0.00",
+      "confidence": 0.9999886155128479,
+      "has_text": true,
+      "original_value": "0.00"
+    },
+    {
+      "roi_index": "Dday_khuon",
+      "text": "417.25",
+      "confidence": 0.9928150773465314,
+      "has_text": true,
+      "original_value": "417.25"
+    },
+    {
+      "roi_index": "Vtri_EJ",
+      "text": "0.30",
+      "confidence": 0.9999993443489075,
+      "has_text": true,
+      "original_value": "0.30"
+    },
+    {
+      "roi_index": "Luc_kep",
+      "text": "120",
+      "confidence": 0.9999554011992565,
+      "has_text": true,
+      "original_value": "120"
+    },
+    {
+      "roi_index": "Chu_ki",
+      "text": "29.52",
+      "confidence": 0.8375139419746325,
+      "has_text": true,
+      "original_value": "29.52"
+    },
+    {
+      "roi_index": "Dien",
+      "text": "1.597",
+      "confidence": 0.999944342073517,
+      "has_text": true,
+      "original_value": "1.597"
+    },
+    {
+      "roi_index": "D_lg",
+      "text": "11.34",
+      "confidence": 0.9464598544173897,
+      "has_text": true,
+      "original_value": "11.34"
+    },
+    {
+      "roi_index": "Giu_con_lai",
+      "text": "0.00",
+      "confidence": 0.9999938011169434,
+      "has_text": true,
+      "original_value": "0.00"
+    },
+    {
+      "roi_index": "L_mat_con_lai",
+      "text": "10.1",
+      "confidence": 0.9999760985374451,
+      "has_text": true,
+      "original_value": "10.1"
+    },
+    {
+      "roi_index": "Tvit",
+      "text": "103.47",
+      "confidence": 0.4638950631538079,
+      "has_text": true,
+      "original_value": "103.47"
+    },
+    {
+      "roi_index": "Xoay_truc_vit",
+      "text": "111",
+      "confidence": 0.9968382756580684,
+      "has_text": true,
+      "original_value": "111"
+    },
+    {
+      "roi_index": "Trc_dien",
+      "text": "130.00",
+      "confidence": 0.9999716757224429,
+      "has_text": true,
+      "original_value": "130.00"
+    },
+    {
+      "roi_index": "V_P",
+      "text": "18.00",
+      "confidence": 0.9983743073014814,
+      "has_text": true,
+      "original_value": "18.00"
+    },
+    {
+      "roi_index": "Dem",
+      "text": "17.78",
+      "confidence": 0.9998876751723285,
+      "has_text": true,
+      "original_value": "17.78"
+    },
+    {
+      "roi_index": "Kthuc_giu",
+      "text": "31.39",
+      "confidence": 0.9999226439130757,
+      "has_text": true,
+      "original_value": "31.39"
+    },
+    {
+      "roi_index": "Dinh_dien",
+      "text": "1300",
+      "confidence": 0.9999509453773499,
+      "has_text": true,
+      "original_value": "1300"
+    },
+    {
+      "roi_index": "Toan_dinh",
+      "text": "1303",
+      "confidence": 0.999984085559845,
+      "has_text": true,
+      "original_value": "1303"
+    },
+    {
+      "roi_index": "Ap_suat_ep",
+      "text": "1300",
+      "confidence": 0.9999876618385315,
+      "has_text": true,
+      "original_value": "1300"
+    }
+  ]
+}

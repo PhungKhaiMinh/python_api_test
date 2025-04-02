@@ -1,0 +1,107 @@
+{
+  "filename": "hmi_source_1_F1_Faults.jpg",
+  "machine_code": "F1",
+  "screen_id": "Faults",
+  "timestamp": "2025-03-29 14:26:35",
+  "template_path": "d:\\Wrembly\\python_api_test\\roi_data\\reference_images\\template_F1_Faults.jpg",
+  "results": [
+    {
+      "roi_index": "q",
+      "text": "23.94",
+      "confidence": 0.9972451303415761,
+      "has_text": true,
+      "original_value": "23.94"
+    },
+    {
+      "roi_index": "w",
+      "text": "5.16",
+      "confidence": 0.99991375207901,
+      "has_text": true,
+      "original_value": "5.16"
+    },
+    {
+      "roi_index": "e",
+      "text": "2.691",
+      "confidence": 0.788488286193211,
+      "has_text": true,
+      "original_value": "2.691"
+    },
+    {
+      "roi_index": "r",
+      "text": "0.00",
+      "confidence": 0.9999777674674988,
+      "has_text": true,
+      "original_value": "0.00"
+    },
+    {
+      "roi_index": "t",
+      "text": "10.29",
+      "confidence": 0.8217544745118646,
+      "has_text": true,
+      "original_value": "10.29"
+    },
+    {
+      "roi_index": "y",
+      "text": "4.76",
+      "confidence": 0.7740937973764577,
+      "has_text": true,
+      "original_value": "4.76"
+    },
+    {
+      "roi_index": "u",
+      "text": "0.00",
+      "confidence": 0.9999856352806091,
+      "has_text": true,
+      "original_value": "0.00"
+    },
+    {
+      "roi_index": "i",
+      "text": "155",
+      "confidence": 0.9947646309346768,
+      "has_text": true,
+      "original_value": "155"
+    },
+    {
+      "roi_index": "o",
+      "text": "24.5",
+      "confidence": 0.9787759105600435,
+      "has_text": true,
+      "original_value": "24.5"
+    },
+    {
+      "roi_index": "p",
+      "text": "24.4",
+      "confidence": 0.7075118882256014,
+      "has_text": true,
+      "original_value": "24.4"
+    },
+    {
+      "roi_index": "a",
+      "text": "24.3",
+      "confidence": 0.9998530745506287,
+      "has_text": true,
+      "original_value": "24.3"
+    },
+    {
+      "roi_index": "s",
+      "text": "24.2",
+      "confidence": 0.9994618892669678,
+      "has_text": true,
+      "original_value": "24.2"
+    },
+    {
+      "roi_index": "d",
+      "text": "10.0",
+      "confidence": 0.9994117021560669,
+      "has_text": true,
+      "original_value": "10.0"
+    },
+    {
+      "roi_index": "f",
+      "text": "1.700",
+      "confidence": 0.6916794875930821,
+      "has_text": true,
+      "original_value": "1.700"
+    }
+  ]
+}
