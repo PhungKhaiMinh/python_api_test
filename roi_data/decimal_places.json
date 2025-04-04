@@ -113,6 +113,31 @@
       "Het_xoay": 0,
       "Keo_ve+Vtri": 2,
       "Keo_ve+Ap_sau": 1
+    },
+    "Tracking": {
+      "so_lan_bom-chdo": 0,
+      "so_lan_bom": 0,
+      "bo_dem_san_xuat-chdo": 0,
+      "so_coc": 0,
+      "sp_khong_loi": 0,
+      "sp_khong_loi-con_lai": 0,
+      "sp_khong_loi-du_dinh": 0,
+      "cau_kien_san_pham": 0,
+      "cau_kien_san_pham-con_lai": 0,
+      "cau_kien_san_pham-du_dinh": 0,
+      "hoan_thanh": 0,
+      "t_gian_con_lai-hour": 0,
+      "t_gian_con_lai-min": 0,
+      "dem_khoang_sp-chdo": 0,
+      "so_lan_bom_moi_lo": 0,
+      "so_lan_bom_moi_lo-so_con_lai": 0,
+      "so_lan_bom_moi_lo-du_dinh": 0,
+      "lan_bom_san_xuat": 0,
+      "lan_bom_san_xuat-so_con_lai": 0,
+      "lan_bom_san_xuat-so_du_dinh": 0,
+      "toc_do_hoan_thanh": 0,
+      "tgian_nap_khoang_sp_con_lai-hour": 0,
+      "tgian_nap_khoang_sp_con_lai-min": 0
     }
   }
 }

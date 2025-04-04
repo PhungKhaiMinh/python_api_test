@@ -10,6 +10,7 @@ from skimage.filters import threshold_sauvola
 import fnmatch
 import traceback
 import random
+from math import sqrt, atan2, degrees
 
 # Thêm try-except khi import EasyOCR
 try:
@@ -327,7 +328,7 @@ def get_roi_coordinates(machine_code, screen_id=None):
         return [], []
 
 # Sửa lại hàm perform_ocr_on_roi để sử dụng ảnh đã căn chỉnh
-def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=None, roi_names=None):
+def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=None, roi_names=None, machine_code=None, screen_id=None):
     """
     Thực hiện OCR trên các vùng ROI đã xác định
     
@@ -337,6 +338,8 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
         original_filename: Tên file gốc
         template_path: Đường dẫn đến ảnh template nếu có
         roi_names: Danh sách tên của các ROI
+        machine_code: Mã máy (tùy chọn)
+        screen_id: ID màn hình (tùy chọn)
         
     Returns:
         Danh sách kết quả OCR cho mỗi ROI
@@ -379,8 +382,8 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
             print("Không thể lấy thông tin máy hiện tại")
             return []
         
-        machine_code = machine_info['machine_code']
-        screen_id = machine_info['screen_id']
+        machine_code = machine_info['machine_code'] if machine_code is None else machine_code
+        screen_id = machine_info['screen_id'] if screen_id is None else screen_id
         
         # Đọc cấu hình số thập phân
         decimal_places_config = get_decimal_places_config()
@@ -402,12 +405,11 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                         break
                 
                 if is_normalized:
-                    print(f"Detected normalized coordinates for ROI {i}: {coords}")
+                    # print(f"Detected normalized coordinates for ROI {i}: {coords}")
                     # Chuyển đổi từ tọa độ chuẩn hóa sang tọa độ pixel
                     x1, y1, x2, y2 = coords
                     x1, x2 = int(x1 * img_width), int(x2 * img_width)
                     y1, y2 = int(y1 * img_height), int(y2 * img_height)
-                    print(f"Converted to pixel coordinates: ({x1},{y1},{x2},{y2})")
                 else:
                     # Đã là tọa độ pixel, chỉ cần chuyển sang int
                     x1, y1, x2, y2 = coords
@@ -419,7 +421,7 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                 y1, y2 = min(y1, y2), max(y1, y2)
                 
                 roi_name = roi_names[i] if i < len(roi_names) else f"ROI_{i}"
-                print(f"Processing ROI {i} ({roi_name}) with coordinates: ({x1},{y1},{x2},{y2})")
+                # print(f"Processing ROI {i} ({roi_name}) with coordinates: ({x1},{y1},{x2},{y2})")
                 
                 # Kiểm tra tọa độ hợp lệ
                 if x1 < 0 or y1 < 0 or x2 >= image.shape[1] or y2 >= image.shape[0] or x1 >= x2 or y1 >= y2:
@@ -443,21 +445,10 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                 best_confidence = 0
                 original_value = ""
                 
-                # Thử OCR trên vùng an toàn trước
-                # safe_zone_results = check_safe_zone(roi_processed, margin_percent=10.0)
-                # if safe_zone_results and len(safe_zone_results) > 0:
-                #     print(f"Found text in safe zone for ROI {i} ({roi_name})")
-                #     best_result = max(safe_zone_results, key=lambda x: x[2])
-                #     best_text = best_result[1]
-                #     best_confidence = best_result[2]
-                #     original_value = best_text
-                #     has_text = True
-                # else:
-                print(f"No text found in safe zone for ROI {i} ({roi_name}), trying full ROI")
                 # Thử OCR trên toàn bộ ROI
                 try:
                     # Specify the characters to read (digits only)
-                    ocr_results = reader.readtext(roi_processed, allowlist='0123456789.', detail=1, paragraph=False,batch_size=1, text_threshold=0.6, link_threshold=0.3, low_text=0.4, mag_ratio=1, slope_ths=0.05)
+                    ocr_results = reader.readtext(roi_processed, allowlist='0123456789.-ABCDGHIKLNOTUabcdghiklnotu', detail=1, paragraph=False, batch_size=1, text_threshold=0.4, link_threshold=0.3, low_text=0.3, mag_ratio=1.5, slope_ths=0.05)
                     if ocr_results and len(ocr_results) > 0:
                         # Lấy kết quả có confidence cao nhất
                         best_result = max(ocr_results, key=lambda x: x[2])
@@ -466,16 +457,50 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                         original_value = best_text
                         has_text = True
                         print(f"Found text in full ROI: '{best_text}' with confidence {best_confidence}")
+                        
+                        # Đếm số lượng chữ số và chữ cái
+                        digit_count = sum(1 for char in best_text if char.isdigit())
+                        letter_count = sum(1 for char in best_text if char.isalpha())
+                        print(f"Text contains {digit_count} digits and {letter_count} letters")
+                        
+                        # Kiểm tra nếu có nhiều chữ cái hơn chữ số
+                        is_text_result = letter_count > digit_count
                     else:
                         print(f"No text found in ROI {i} ({roi_name})")
                 except Exception as ocr_error:
                     print(f"OCR error on ROI {i} ({roi_name}): {str(ocr_error)}")
                 
-                # Kiểm tra và áp dụng quy định decimal_places nếu text là số
+                # Xử lý kết quả OCR dựa vào loại kết quả (số hoặc chữ)
                 formatted_text = best_text
+                
+                # Nếu là kết quả chủ yếu là chữ, không cần xử lý thêm
+                if has_text and is_text_result:
+                    print(f"Result for ROI {roi_name} is primarily text: '{best_text}', keeping as is")
+                    best_text = best_text.upper()
+                    # Thêm kết quả cho ROI này (không có original_value cho kết quả text)
+                    if len(best_text) == 1:
+                        best_text = best_text.replace('O', '0').replace('I', '1')
+                    results.append({
+                        "roi_index": roi_name,
+                        "text": best_text,
+                        "confidence": best_confidence,
+                        "has_text": has_text
+                    })
+                    print(f"Added text result for ROI {i} ({roi_name}): '{best_text}'")
+                    continue  # Bỏ qua phần xử lý định dạng số tiếp theo
+                
+                # Nếu kết quả chủ yếu là số, xử lý theo định dạng decimal_places
+                is_negative = best_text.startswith('-')
+                best_text = best_text.upper()
+                print(best_text)
+                best_text = best_text.replace('O', '0').replace('I', '1')
+                if '-' in best_text[1:]:
+                    best_text = best_text[:-1] + best_text[-1].replace('-', '')
                 if has_text and re.match(r'^-?\d+\.?\d*$', best_text):
                     try:
                         # Kiểm tra xem có cấu hình cho ROI này không
+                        best_text = best_text[1:] if is_negative else best_text
+                        
                         if (machine_code in decimal_places_config and 
                             screen_id in decimal_places_config[machine_code] and 
                             roi_name in decimal_places_config[machine_code][screen_id]):
@@ -484,13 +509,14 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                             print(f"Found decimal places config for ROI {roi_name}: {decimal_places}")
                             
                             # Chuyển đổi thành số float
-                            num_value = float(best_text)
+                            num_value = best_text
                             original_str = str(num_value)
                             
                             # Xử lý các trường hợp khác nhau dựa trên decimal_places
                             if decimal_places == 0:
                                 # Nếu decimal_places là 0, giữ lại tất cả các chữ số nhưng bỏ dấu chấm
                                 formatted_text = str(num_value).replace('.', '')
+                                formatted_text = '-' + str(formatted_text) if is_negative else str(formatted_text)
                                 print(f"Removed decimal point for ROI {roi_name}: {formatted_text}")
                             else:
                                 # Đếm số chữ số thập phân hiện tại
@@ -498,67 +524,53 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                                 if '.' in original_str:
                                     dec_part = original_str.split('.')[1]
                                     # Đếm số thập phân có ý nghĩa (bỏ các số 0 không có ý nghĩa ở cuối)
-                                    if all(d == '0' for d in dec_part):
-                                        # Nếu tất cả là số 0 thì giữ nguyên số lượng số 0
-                                        current_decimal_places = len(dec_part)
-                                    else:
-                                        # Bỏ các số 0 ở cuối
-                                        dec_part_significant = dec_part.rstrip('0')
-                                        current_decimal_places = len(dec_part_significant)
+                                    # Lưu ý: tất cả số 0 đều có ý nghĩa nếu phù hợp với decimal_places
+                                    current_decimal_places = len(dec_part)
                                 
                                 # Nếu số chữ số thập phân hiện tại bằng đúng số chữ số thập phân cần có
                                 if current_decimal_places == decimal_places:
                                     # Giữ nguyên số
                                     formatted_text = original_str
+                                    formatted_text = '-' + str(formatted_text) if is_negative else str(formatted_text)
                                     print(f"Already correct format for ROI {roi_name}: {original_str}")
                                 else:
                                     # Phần số nguyên và phần thập phân riêng biệt
                                     if '.' in original_str:
                                         int_part, dec_part = original_str.split('.')
                                         
-                                        # Trường hợp đặc biệt: Số thập phân chỉ có 0 (ví dụ: 230.0, 1000.00)
-                                        if all(d == '0' for d in dec_part):
-                                            # Giữ nguyên phần nguyên và thêm/bớt số 0 thập phân
-                                            if decimal_places > 0:
-                                                # Điều chỉnh số lượng số 0 theo decimal_places
-                                                formatted_text = f"{int_part}.{'0' * decimal_places}"
-                                            else:
-                                                # Nếu decimal_places = 0, bỏ dấu chấm
-                                                formatted_text = int_part
-                                        else:
-                                            # Số thập phân có các chữ số khác 0
-                                            # Xóa dấu chấm và lấy tất cả các chữ số để định dạng lại
-                                            num_str = int_part + dec_part.rstrip('0')
-                                            
-                                            # Kiểm tra độ dài chuỗi số
-                                            if len(num_str) <= decimal_places:
-                                                # Trường hợp số chữ số ít hơn hoặc bằng số chữ số thập phân
+                                        # Kết hợp phần nguyên và phần thập phân thành một chuỗi không có dấu chấm
+                                        all_digits = int_part + dec_part
+                                        
+                                        # Đặt dấu chấm vào vị trí thích hợp theo decimal_places
+                                        if decimal_places > 0:
+                                            if len(all_digits) <= decimal_places:
                                                 # Thêm số 0 phía trước và đặt dấu chấm sau số 0 đầu tiên
-                                                padded_str = num_str.zfill(decimal_places)
+                                                padded_str = all_digits.zfill(decimal_places)
                                                 formatted_text = f"0.{padded_str}"
+                                                formatted_text = '-' + str(formatted_text) if is_negative else str(formatted_text)
                                             else:
                                                 # Đặt dấu chấm vào vị trí thích hợp: (độ dài - decimal_places)
-                                                insert_pos = len(num_str) - decimal_places
-                                                formatted_text = f"{num_str[:insert_pos]}.{num_str[insert_pos:]}"
+                                                insert_pos = len(all_digits) - decimal_places
+                                                formatted_text = f"{all_digits[:insert_pos]}.{all_digits[insert_pos:]}"
+                                                formatted_text = '-' + str(formatted_text) if is_negative else str(formatted_text)
+                                        else:
+                                            # Nếu decimal_places = 0, bỏ dấu chấm
+                                            formatted_text = all_digits
+                                            formatted_text = '-' + str(formatted_text) if is_negative else str(formatted_text)
                                     else:
                                         # Không có dấu chấm (số nguyên)
-                                        num_str = original_str
-                                        
+                                        num_str = str(int(best_text))
+                                        print(decimal_places)
                                         # Thêm phần thập phân nếu cần
                                         if decimal_places > 0:
-                                            # Đặt dấu chấm vào vị trí thích hợp
-                                            if len(num_str) <= decimal_places:
-                                                # Số chữ số ít hơn hoặc bằng số thập phân cần có
-                                                padded_str = num_str.zfill(decimal_places)
-                                                formatted_text = f"0.{padded_str}"
-                                            else:
-                                                # Đặt dấu chấm vào vị trí thích hợp
-                                                insert_pos = len(num_str) - decimal_places
-                                                formatted_text = f"{num_str[:insert_pos]}.{num_str[insert_pos:]}"
+                                            # Thêm dấu chấm và số 0 theo đúng quy định decimal_places
+                                            formatted_text = f"{num_str}.{'0' * decimal_places}"
+                                            formatted_text = '-' + str(formatted_text) if is_negative else str(formatted_text)
+                                            print(f"Added {decimal_places} decimal zeros to {num_str} for ROI {roi_name}")
                                         else:
                                             # Giữ nguyên số nguyên nếu không cần thập phân
                                             formatted_text = num_str
-                                    
+                                            formatted_text = '-' + str(formatted_text) if is_negative else str(formatted_text)
                                     print(f"Formatted value for ROI {roi_name}: Original: {num_value}, Formatted: {formatted_text}")
                     except Exception as e:
                         print(f"Error applying decimal places format for ROI {roi_name}: {str(e)}")
@@ -572,20 +584,20 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                     "original_value": original_value
                 })
                 print(f"Added result for ROI {i} ({roi_name}): Original: '{best_text}', Formatted: '{formatted_text}'")
-                
+                if best_confidence < 0.3:
+                    print(f"The result with highest confidence is still below 30%. Returning empty results.")
+                    return []
                 # Kiểm tra độ tin cậy của OCR
-                if best_confidence < 0.3:  # Nếu độ tin cậy < 40%
-                    print(f"Warning: Low confidence ({best_confidence:.2f}) for ROI {roi_name}, text: '{best_text}'")
+                # if best_confidence < 0.3:  # Nếu độ tin cậy < 30%
+                #     print(f"Warning: Low confidence ({best_confidence:.2f}) for ROI {roi_name}, text: '{best_text}'")
                 
             except Exception as roi_error:
                 print(f"Error processing ROI {i}: {str(roi_error)}")
                 traceback.print_exc()
                 continue
         
-        # Kiểm tra nếu kết quả có độ tin cậy cao nhất < 40%, trả về mảng rỗng
-        if results and max(results, key=lambda x: x["confidence"])["confidence"] < 0.3:
-            print(f"The result with highest confidence is still below 40%. Returning empty results.")
-            return []
+        # Kiểm tra nếu kết quả có độ tin cậy cao nhất < 30%, trả về mảng rỗng
+
             
         return results
     
@@ -687,6 +699,52 @@ def upload_image():
             
             print(f"Image loaded successfully, shape: {image.shape}")
             
+            # Thêm mới: Phát hiện màn hình HMI
+            hmi_detected = False
+            visualization_path = None
+            hmi_screen, visualization, roi_coords = detect_hmi_screen(image)
+            
+            # Lưu trữ thông tin phát hiện HMI
+            hmi_detection_info = {
+                "hmi_detected": False,
+                "hmi_image": None,
+                "visualization": None
+            }
+            
+            if hmi_screen is not None:
+                hmi_detected = True
+                # Lưu ảnh visualization
+                visualization_filename = f"hmi_visualization.png"
+                visualization_path = os.path.join(app.config['UPLOAD_FOLDER'], visualization_filename)
+                cv2.imwrite(visualization_path, visualization)
+                # Sử dụng HMI đã phát hiện thay vì ảnh gốc
+                print("Màn hình HMI đã được phát hiện và cắt!")
+                image = hmi_screen
+                
+                # Cập nhật thông tin phát hiện HMI
+                hmi_detection_info = {
+                    "hmi_detected": True,
+                    "hmi_image": f"/api/images/hmi_detection/{visualization_filename}",
+                    "visualization": visualization_filename
+                }
+            else:
+                print("Không phát hiện màn hình HMI trong ảnh")
+                # Tạo ảnh visualization với thông báo không tìm thấy HMI
+                height, width = image.shape[:2]
+                visualization = image.copy()
+                cv2.putText(visualization, "No HMI Screen Detected", (int(width/2)-150, int(height/2)), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                
+                visualization_filename = f"no_hmi_visualization_{int(time.time())}.png"
+                visualization_path = os.path.join(app.config['UPLOAD_FOLDER'], visualization_filename)
+                cv2.imwrite(visualization_path, visualization)
+                
+                hmi_detection_info = {
+                    "hmi_detected": False,
+                    "hmi_image": None,
+                    "visualization": f"/api/images/hmi_detection/{visualization_filename}"
+                }
+            
             # Tìm id màn hình dựa trên screen_id (tên màn hình)
             screen_numeric_id = get_screen_numeric_id(machine_code, screen_id)
             print(f"Found numeric screen ID: {screen_numeric_id} for screen name: {screen_id}")
@@ -742,7 +800,9 @@ def upload_image():
                 roi_coordinates, 
                 filename, 
                 template_path,
-                roi_names
+                roi_names,
+                machine_code,  # Truyền machine_code từ request
+                screen_id      # Truyền screen_id từ request
             )
             
             # Lưu kết quả OCR vào file JSON
@@ -760,7 +820,8 @@ def upload_image():
                     "screen_id": screen_id,
                     "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
                     "template_path": template_path if template_path else None,
-                    "results": ocr_results
+                    "results": ocr_results,
+                    "hmi_detection": hmi_detection_info  # Thêm thông tin phát hiện HMI
             }
             
             # Lưu kết quả OCR vào file JSON
@@ -1467,26 +1528,45 @@ def set_all_decimal_values():
 
 # Thêm hàm mới để lấy ID số của màn hình từ tên màn hình
 def get_screen_numeric_id(machine_code, screen_name):
-    """Lấy ID số của màn hình dựa trên tên màn hình"""
+    """
+    Lấy ID số của một màn hình dựa trên tên màn hình
+    
+    Args:
+        machine_code: Mã máy (ví dụ: F1)
+        screen_name: Tên màn hình (ví dụ: Plasticizer)
+        
+    Returns:
+        int: ID số của màn hình, hoặc None nếu không tìm thấy
+    """
     try:
+        # Sử dụng đường dẫn tuyệt đối để đảm bảo tìm thấy file
         machine_screens_path = os.path.join(app.config['ROI_DATA_FOLDER'], 'machine_screens.json')
         if not os.path.exists(machine_screens_path):
+            print(f"Machine screens file not found at {machine_screens_path}")
             return None
         
+        print(f"Reading machine screens from: {machine_screens_path}")
         with open(machine_screens_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
+        print(f"Looking for screen '{screen_name}' in machine '{machine_code}'")
+        
         if machine_code not in data['machines']:
+            print(f"Machine code '{machine_code}' not found in machine_screens.json")
             return None
         
         # Tìm màn hình có screen_id (tên màn hình) trùng khớp
         for screen in data['machines'][machine_code]['screens']:
+            print(f"Checking screen: ID={screen['id']}, screen_id={screen['screen_id']}")
             if screen['screen_id'] == screen_name:
+                print(f"Found matching screen! ID={screen['id']}, screen_id={screen['screen_id']}")
                 return screen['id']
         
+        print(f"No matching screen found for '{screen_name}' in machine '{machine_code}'")
         return None
     except Exception as e:
         print(f"Error getting screen numeric ID: {str(e)}")
+        traceback.print_exc()
         return None
 
 # Hàm tiền xử lý ảnh để tối ưu cho OCR với màn hình HMI
@@ -1704,14 +1784,23 @@ def get_reference_image(filename):
 # API: Xóa ảnh template mẫu
 @app.route('/api/reference_images/<filename>', methods=['DELETE'])
 def delete_reference_image(filename):
-    """Xóa ảnh template mẫu"""
-    file_path = os.path.join(app.config['REFERENCE_IMAGES_FOLDER'], secure_filename(filename))
+    """Xóa file ảnh template mẫu"""
+    file_path = os.path.join(app.config['REFERENCE_IMAGES_FOLDER'], filename)
     
     if os.path.exists(file_path):
         os.remove(file_path)
-        return jsonify({"message": f"Reference template {filename} has been deleted successfully"}), 200
+        return jsonify({"message": f"Reference image {filename} has been deleted successfully"}), 200
     else:
-        return jsonify({"error": "Reference template not found"}), 404
+        return jsonify({"error": "Reference image not found"}), 404
+
+# API: Truy cập ảnh kết quả phát hiện HMI
+@app.route('/api/images/hmi_detection/<filename>', methods=['GET'])
+def get_hmi_detection_image(filename):
+    """Trả về file ảnh kết quả phát hiện HMI"""
+    try:
+        return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+    except:
+        abort(404)
 
 # Hàm mới: Lấy đường dẫn đến ảnh template mẫu dựa trên machine_code và screen_id
 def get_reference_template_path(machine_code, screen_id):
@@ -1749,7 +1838,6 @@ def preprocess_roi_for_ocr(roi, roi_index, original_filename, roi_name=None, ima
     # Sử dụng tên ROI nếu có, nếu không sử dụng chỉ số
     x1, y1, x2, y2 = x1, y1, x2, y2
     identifier = roi_name if roi_name else f"ROI_{roi_index}"
-    print(f"Preprocessing ROI {roi_index} ({identifier})")
     
     # Kiểm tra nếu ảnh rỗng
     if roi is None or roi.size == 0 or roi.shape[0] <= 5 or roi.shape[1] <= 5:
@@ -1771,9 +1859,9 @@ def preprocess_roi_for_ocr(roi, roi_index, original_filename, roi_name=None, ima
     gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
 
     quality_info = check_image_quality(gray)
-    print(f"Image quality for ROI {identifier}: {quality_info}")
-    if not quality_info['is_good_quality']:
-        print(f"Enhancing image quality for ROI {identifier} due to: {quality_info['issues']}")
+    print(f"---Image quality for ROI {identifier}: {quality_info}")
+    # Kiểm tra quality_info có phải là None không
+    if quality_info is not None and not quality_info['is_good_quality']:
         
         # Cải thiện chất lượng ảnh
         enhanced_gray = enhance_image_quality(gray, quality_info)
@@ -1812,7 +1900,7 @@ def preprocess_roi_for_ocr(roi, roi_index, original_filename, roi_name=None, ima
         x, y, w, h = cv2.boundingRect(cnt)
         
         # Loại bỏ contour nếu chiều rộng <= 20 pixel hoặc chiều cao <= 30 pixel
-        if w <= 10 or h <= 20:
+        if w <= 12 and h <= 20:
             continue
         
         y_coords = [point[0][1] for point in cnt]  # Lấy tọa độ y của các điểm trong contour
@@ -1869,7 +1957,7 @@ def preprocess_roi_for_ocr(roi, roi_index, original_filename, roi_name=None, ima
         # 12. Morphological Closing
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))  # Tăng lên (5,5) thay vì (2,2)
         closing = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
-        
+        closing = cv2.blur(closing, (3, 3))
         # Lưu ảnh đã xử lý
         processed_filename = f"{base_filename}_{identifier}_processed2.png"
         processed_path = os.path.join(processed_folder, processed_filename)
@@ -1879,70 +1967,13 @@ def preprocess_roi_for_ocr(roi, roi_index, original_filename, roi_name=None, ima
         return closing  # Trả về ảnh grayscale
     else:
         print(f"Không tìm thấy contour hợp lệ để cắt cho ROI {identifier}.")
-        closing = cv2.blur(closing, (3, 3))
+        closing = cv2.blur(closing, (4, 4))
         # Trả về ảnh grayscale nếu không tìm thấy contour
         processed_filename = f"{base_filename}_{identifier}_processed.png"
         processed_path = os.path.join(processed_folder, processed_filename)
         cv2.imwrite(processed_path, closing)
         return closing  # Hoặc closing
 
-def check_safe_zone(roi_processed, margin_percent=5.0):
-    """
-    Kiểm tra vùng an toàn trong ROI và trả về kết quả OCR
-    """
-    if roi_processed is None or roi_processed.size == 0:
-        print("ROI is empty, cannot check safe zone")
-        return None
-    
-    height, width = roi_processed.shape
-    print(f"ROI dimensions: {width}x{height}")
-    
-    # Tính toán kích thước vùng an toàn
-    margin_x = int(width * margin_percent / 100)
-    margin_y = int(height * margin_percent / 100)
-    
-    # Tính toán tọa độ vùng an toàn
-    safe_x1 = margin_x
-    safe_y1 = margin_y
-    safe_x2 = width - margin_x
-    safe_y2 = height - margin_y
-    
-    print(f"Safe zone coordinates: ({safe_x1},{safe_y1},{safe_x2},{safe_y2})")
-    
-    # Kiểm tra nếu vùng an toàn quá nhỏ
-    if safe_x2 <= safe_x1 or safe_y2 <= safe_y1:
-        print("Safe zone is too small")
-        return None
-    
-    # Cắt vùng an toàn
-    safe_zone = roi_processed[safe_y1:safe_y2, safe_x1:safe_x2]
-    
-    # Đảm bảo vùng an toàn không rỗng
-    if safe_zone is None or safe_zone.size == 0 or safe_zone.shape[0] < 5 or safe_zone.shape[1] < 5:
-        print("Safe zone is too small or empty")
-        return None
-    
-    try:
-        # Tạo đối tượng reader cho OCR nếu chưa có
-        if 'reader' not in globals():
-            global reader
-            reader = easyocr.Reader(['en'], gpu=False)
-        
-        # Sử dụng EasyOCR để nhận diện text trong vùng an toàn
-        results = reader.readtext(safe_zone)
-        
-        if results and len(results) > 0:
-            print(f"Found {len(results)} text regions in safe zone")
-            for i, (bbox, text, conf) in enumerate(results):
-                print(f"  Text {i+1}: '{text}' (confidence: {conf:.4f})")
-        else:
-            print("No text found in safe zone")
-        
-        return results
-    except Exception as e:
-        print(f"Error in safe zone OCR: {str(e)}")
-        traceback.print_exc()
-        return None
 
 def is_named_roi_format(roi_list):
     """Kiểm tra xem danh sách ROI có phải là định dạng mới (có name và coordinates) hay không"""
@@ -2130,22 +2161,7 @@ def check_image_quality(image):
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     else:
         gray = image.copy()
-    
-    # 1. Kiểm tra độ sắc nét (blurriness) bằng biến đổi Laplacian
-    laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
-    result['blurriness'] = laplacian_var
-    
-    # Ngưỡng blurriness: thấp đồng nghĩa với ảnh mờ
-    blur_threshold = 50.0  # Ngưỡng này có thể điều chỉnh
-    if laplacian_var < blur_threshold:
-        result['is_good_quality'] = False
-        result['issues'].append('blurry')
-        return result
-    # 2. Kiểm tra độ sáng và độ tương phản
-    # Tính histogram của ảnh
-    hist = cv2.calcHist([gray], [0], None, [256], [0, 256])
-    hist = hist.flatten() / gray.size
-    
+
     # Tính độ sáng trung bình
     brightness = np.mean(gray)
     result['brightness'] = brightness
@@ -2153,29 +2169,6 @@ def check_image_quality(image):
     # Tính độ tương phản bằng độ lệch chuẩn
     contrast = np.std(gray)
     result['contrast'] = contrast
-    
-    # Kiểm tra độ sáng quá thấp hoặc quá cao
-    if brightness > 220:
-        result['is_good_quality'] = False
-        result['issues'].append('too_bright')
-        return result
-    # Kiểm tra độ tương phản quá thấp
-    if contrast < 20:
-        result['is_good_quality'] = False
-        result['issues'].append('low_contrast')
-        return result
-    # 3. Kiểm tra hiện tượng chói (glare)
-    # Tìm vùng sáng quá mức (gần trắng)
-    bright_threshold = 250
-    bright_pixels = np.sum(gray > bright_threshold)
-    bright_ratio = bright_pixels / gray.size
-    
-    # Nếu tỷ lệ pixel sáng quá cao, coi là có glare
-    if bright_ratio > 0.2:  # 20% pixel quá sáng
-        result['has_glare'] = True
-        result['is_good_quality'] = False
-        result['issues'].append('glare')
-        return result
     # 4. Kiểm tra Moiré pattern (sử dụng FFT)
     # Chuyển đổi ảnh sang không gian tần số bằng FFT
     fft = np.fft.fft2(gray)
@@ -2208,12 +2201,50 @@ def check_image_quality(image):
     peak_ratio = peaks / np.sum(mask)  # Tỷ lệ so với vùng được lọc
     
     # Quyết định
-    if brightness > 200 and peak_ratio > 0.005:
+    if (brightness > 200) and (contrast > 20) and (peak_ratio > 0.005):
         result['has_moire'] = True
         result['is_good_quality'] = False
         result['issues'].append('moire_pattern')
+        return result
+    # 1. Kiểm tra độ sắc nét (blurriness) bằng biến đổi Laplacian
+    laplacian_var = cv2.Laplacian(gray, cv2.CV_64F).var()
+    result['blurriness'] = laplacian_var
     
-    return result
+    # Ngưỡng blurriness: thấp đồng nghĩa với ảnh mờ
+    blur_threshold = 7.0  # Ngưỡng này có thể điều chỉnh
+    if laplacian_var < blur_threshold:
+        result['is_good_quality'] = False
+        result['issues'].append('blurry')
+        return result
+    # 2. Kiểm tra độ sáng và độ tương phản
+    # Tính histogram của ảnh
+    hist = cv2.calcHist([gray], [0], None, [256], [0, 256])
+    hist = hist.flatten() / gray.size
+    
+    # Kiểm tra độ sáng quá thấp hoặc quá cao
+    if brightness > 220:
+        result['is_good_quality'] = False
+        result['issues'].append('too_bright')
+        return result
+    # Kiểm tra độ tương phản quá thấp
+    if contrast < 16:
+        result['is_good_quality'] = False
+        result['issues'].append('low_contrast')
+
+        return result
+    # 3. Kiểm tra hiện tượng chói (glare)
+    # Tìm vùng sáng quá mức (gần trắng)
+    bright_threshold = 250
+    bright_pixels = np.sum(gray > bright_threshold)
+    bright_ratio = bright_pixels / gray.size
+    
+    # Nếu tỷ lệ pixel sáng quá cao, coi là có glare
+    if bright_ratio > 0.2:  # 20% pixel quá sáng
+        result['has_glare'] = True
+        result['is_good_quality'] = False
+        result['issues'].append('glare')
+        return result
+
 
 # Hàm mới để cải thiện chất lượng ảnh dựa trên kết quả kiểm tra
 def enhance_image_quality(image, quality_info):
@@ -2250,14 +2281,14 @@ def enhance_image_quality(image, quality_info):
     if 'blurry' in quality_info['issues']:
         # Áp dụng bộ lọc làm sắc nét (sharpening filter)
         kernel = np.array([[-1, -1, -1],
-                           [-1,  9, -1],
+                           [-1, 10, -1],
                            [-1, -1, -1]])
         enhanced = cv2.filter2D(enhanced, -1, kernel)
     
     # 2. Xử lý khi ảnh quá sáng
     if 'too_bright' in quality_info['issues']:
         # Giảm độ sáng bằng cách giảm giá trị pixel
-        alpha = 0.9  # Điều chỉnh độ sáng (< 1 làm tối, > 1 làm sáng)
+        alpha = 0.8  # Điều chỉnh độ sáng (< 1 làm tối, > 1 làm sáng)
         enhanced = cv2.convertScaleAbs(enhanced, alpha=alpha, beta=0)
     
     # 3. Xử lý khi ảnh có độ tương phản thấp
@@ -2281,6 +2312,424 @@ def enhance_image_quality(image, quality_info):
     # 5. Xử lý khi ảnh có moire pattern
     
     return enhanced
+
+# Thêm các hàm phát hiện màn hình HMI từ hmi_image_detector.py
+def enhance_image(image):
+    """Cải thiện chất lượng ảnh trước khi phát hiện cạnh"""
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    enhanced = clahe.apply(gray)
+    blurred = cv2.GaussianBlur(enhanced, (7, 7), 0)
+    return blurred, enhanced
+
+def adaptive_edge_detection(image):
+    """Phát hiện cạnh với nhiều phương pháp và kết hợp kết quả"""
+    median_val = np.median(image)
+    lower = int(max(0, (1.0 - 0.25) * median_val))  
+    upper = int(min(255, (1.0 + 0.25) * median_val))  
+    canny_edges = cv2.Canny(image, lower, upper)
+    
+    sobelx = cv2.Sobel(image, cv2.CV_64F, 1, 0, ksize=5)
+    sobely = cv2.Sobel(image, cv2.CV_64F, 0, 1, ksize=5)
+    sobel_edges = cv2.magnitude(sobelx, sobely)
+    sobel_edges = cv2.normalize(sobel_edges, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
+    _, sobel_edges = cv2.threshold(sobel_edges, 50, 255, cv2.THRESH_BINARY)
+    
+    combined_edges = cv2.bitwise_or(canny_edges, sobel_edges)
+    
+    kernel = np.ones((3, 3), np.uint8)
+    dilated_edges = cv2.dilate(combined_edges, kernel, iterations=1)
+    final_edges = cv2.erode(dilated_edges, kernel, iterations=1)
+    
+    return canny_edges, sobel_edges, final_edges
+
+def process_lines(lines, img_shape, min_length=30, max_lines_per_direction=20):
+    """Xử lý và nhóm các đường thẳng theo hướng ngang/dọc, giới hạn số lượng đường"""
+    if lines is None:
+        return [], []
+    
+    horizontal_lines = []
+    vertical_lines = []
+    
+    all_h_lines = []
+    all_v_lines = []
+    
+    height, width = img_shape[:2]
+    min_dimension = min(height, width)
+    
+    min_length = max(min_length, int(min_dimension * 0.03))
+    
+    for line in lines:
+        x1, y1, x2, y2 = line[0]
+        length = sqrt((x2-x1)**2 + (y2-y1)**2)
+        
+        if length < min_length:
+            continue
+        
+        if x2 != x1:
+            angle = degrees(atan2(y2-y1, x2-x1))
+        else:
+            angle = 90
+        
+        if abs(angle) < 35 or abs(angle) > 145:
+            all_h_lines.append([x1, y1, x2, y2, angle, length])
+        elif abs(angle - 90) < 35 or abs(angle + 90) < 35:
+            all_v_lines.append([x1, y1, x2, y2, angle, length])
+    
+    all_h_lines.sort(key=lambda x: x[5], reverse=True)
+    all_v_lines.sort(key=lambda x: x[5], reverse=True)
+    
+    min_lines = min(3, len(all_h_lines))
+    horizontal_lines = [line[:5] for line in all_h_lines[:max(min_lines, max_lines_per_direction)]]
+    
+    min_lines = min(3, len(all_v_lines))
+    vertical_lines = [line[:5] for line in all_v_lines[:max(min_lines, max_lines_per_direction)]]
+    
+    return horizontal_lines, vertical_lines
+
+def find_largest_rectangle(intersections, img_shape):
+    """Tìm hình chữ nhật lớn nhất từ các giao điểm"""
+    if len(intersections) < 4:
+        return None
+    
+    left_point = min(intersections, key=lambda p: p[0])
+    right_point = max(intersections, key=lambda p: p[0])
+    top_point = min(intersections, key=lambda p: p[1])
+    bottom_point = max(intersections, key=lambda p: p[1])
+    
+    top_left = (left_point[0], top_point[1])
+    top_right = (right_point[0], top_point[1])
+    bottom_left = (left_point[0], bottom_point[1])
+    bottom_right = (right_point[0], bottom_point[1])
+    
+    threshold = 30
+    
+    def find_nearest_intersection(point):
+        nearest = min(intersections, key=lambda p: (p[0]-point[0])**2 + (p[1]-point[1])**2)
+        distance = sqrt((nearest[0]-point[0])**2 + (nearest[1]-point[1])**2)
+        if distance < threshold:
+            return nearest
+        return point
+    
+    refined_top_left = find_nearest_intersection(top_left)
+    refined_top_right = find_nearest_intersection(top_right)
+    refined_bottom_left = find_nearest_intersection(bottom_left)
+    refined_bottom_right = find_nearest_intersection(bottom_right)
+    
+    width = refined_top_right[0] - refined_top_left[0]
+    height = refined_bottom_left[1] - refined_top_left[1]
+    area = width * height
+    
+    height_img, width_img = img_shape[:2]
+    total_area = height_img * width_img
+    
+    if area < 0.01 * total_area or area > 0.9 * total_area:
+        return None
+    
+    if width <= 0 or height <= 0:
+        return None
+    
+    aspect_ratio = max(width, height) / (min(width, height) + 1e-6)
+    if aspect_ratio > 5:
+        return None
+    
+    return (refined_top_left, refined_top_right, refined_bottom_right, refined_bottom_left, area)
+
+def order_points(pts):
+    """Sắp xếp 4 điểm theo thứ tự: top-left, top-right, bottom-right, bottom-left"""
+    rect = np.zeros((4, 2), dtype=np.float32)
+    
+    s = pts.sum(axis=1)
+    rect[0] = pts[np.argmin(s)]
+    rect[2] = pts[np.argmax(s)]
+    
+    diff = np.diff(pts, axis=1)
+    rect[1] = pts[np.argmin(diff)]
+    rect[3] = pts[np.argmax(diff)]
+    
+    return rect
+
+def find_rectangle_from_classified_lines(horizontal_lines, vertical_lines, img_shape):
+    """Tìm hình chữ nhật từ các đường đã phân loại ngang và dọc"""
+    if len(horizontal_lines) < 2 or len(vertical_lines) < 2:
+        return None
+    
+    top_line = min(horizontal_lines, key=lambda line: min(line[1], line[3]))
+    bottom_line = max(horizontal_lines, key=lambda line: max(line[1], line[3]))
+    
+    left_line = min(vertical_lines, key=lambda line: min(line[0], line[2]))
+    right_line = max(vertical_lines, key=lambda line: max(line[0], line[2]))
+    
+    top_y = min(top_line[1], top_line[3])
+    bottom_y = max(bottom_line[1], bottom_line[3])
+    
+    left_x = min(left_line[0], left_line[2])
+    right_x = max(right_line[0], right_line[2])
+    
+    top_left_x = max(min(top_line[0], top_line[2]), left_x)
+    top_right_x = min(max(top_line[0], top_line[2]), right_x)
+    bottom_left_x = max(min(bottom_line[0], bottom_line[2]), left_x)
+    bottom_right_x = min(max(bottom_line[0], bottom_line[2]), right_x)
+    
+    left_top_y = max(min(left_line[1], left_line[3]), top_y)
+    left_bottom_y = min(max(left_line[1], left_line[3]), bottom_y)
+    right_top_y = max(min(right_line[1], right_line[3]), top_y)
+    right_bottom_y = min(max(right_line[1], right_line[3]), bottom_y)
+    
+    if (top_right_x - top_left_x < 10 or bottom_right_x - bottom_left_x < 10 or
+        left_bottom_y - left_top_y < 10 or right_bottom_y - right_top_y < 10):
+        return None
+    
+    height, width = img_shape[:2]
+    
+    if left_x < 0: left_x = 0
+    if top_y < 0: top_y = 0
+    if right_x >= width: right_x = width - 1
+    if bottom_y >= height: bottom_y = height - 1
+    
+    rect_width = right_x - left_x
+    rect_height = bottom_y - top_y
+    
+    if rect_width < 20 or rect_height < 20:
+        return None
+    
+    aspect_ratio = max(rect_width, rect_height) / (min(rect_width, rect_height) + 1e-6)
+    if aspect_ratio > 5:
+        return None
+    
+    top_left = (int(left_x), int(top_y))
+    top_right = (int(right_x), int(top_y))
+    bottom_right = (int(right_x), int(bottom_y))
+    bottom_left = (int(left_x), int(bottom_y))
+    
+    area = rect_width * rect_height
+    
+    total_area = height * width
+    if area < 0.01 * total_area or area > 0.9 * total_area:
+        return None
+    
+    return (top_left, top_right, bottom_right, bottom_left, area)
+
+def extend_lines(lines, width, height):
+    """Kéo dài các đường thẳng đến biên của ảnh"""
+    extended_lines = []
+    
+    for x1, y1, x2, y2, angle in lines:
+        # Xử lý đường dọc (x không đổi)
+        if abs(x2 - x1) < 5:  # Đường dọc hoặc gần dọc
+            extended_lines.append([x1, 0, x1, height - 1, angle])
+            continue
+            
+        # Xử lý đường ngang (y không đổi)
+        if abs(y2 - y1) < 5:  # Đường ngang hoặc gần ngang
+            extended_lines.append([0, y1, width - 1, y1, angle])
+            continue
+        
+        # Xử lý các đường xiên
+        m = (y2 - y1) / (x2 - x1)  # Hệ số góc
+        b = y1 - m * x1  # Hệ số tự do
+        
+        # Tính toán giao điểm với các cạnh của ảnh
+        intersections = []
+        
+        # Giao với cạnh trái (x=0)
+        y_left = m * 0 + b
+        if 0 <= y_left < height:
+            intersections.append((0, int(y_left)))
+            
+        # Giao với cạnh phải (x=width-1)
+        y_right = m * (width - 1) + b
+        if 0 <= y_right < height:
+            intersections.append((width - 1, int(y_right)))
+            
+        # Giao với cạnh trên (y=0)
+        if abs(m) > 1e-10:  # Tránh chia cho số quá nhỏ
+            x_top = (0 - b) / m
+            if 0 <= x_top < width:
+                intersections.append((int(x_top), 0))
+            
+        # Giao với cạnh dưới (y=height-1)
+        if abs(m) > 1e-10:  # Tránh chia cho số quá nhỏ
+            x_bottom = ((height - 1) - b) / m
+            if 0 <= x_bottom < width:
+                intersections.append((int(x_bottom), height - 1))
+        
+        # Nếu có đủ hai giao điểm, tạo đường kéo dài
+        if len(intersections) >= 2:
+            # Lấy hai giao điểm đầu tiên
+            p1, p2 = intersections[:2]
+            extended_lines.append([p1[0], p1[1], p2[0], p2[1], angle])
+    
+    return extended_lines
+
+def find_intersections(horizontal_lines, vertical_lines, max_intersections=200):
+    """Tìm giao điểm của các đường ngang và dọc"""
+    intersections = []
+    
+    for h_line in horizontal_lines:
+        for v_line in vertical_lines:
+            if len(intersections) >= max_intersections:
+                break
+                
+            x1_h, y1_h, x2_h, y2_h, _ = h_line
+            x1_v, y1_v, x2_v, y2_v, _ = v_line
+            
+            # Xử lý trường hợp đặc biệt của đường ngang và dọc
+            if abs(y1_h - y2_h) < 5 and abs(x1_v - x2_v) < 5:
+                # Giao điểm của đường ngang thuần túy và đường dọc thuần túy
+                intersections.append((int(x1_v), int(y1_h)))
+                continue
+            
+            try:
+                # Chuyển sang float để tránh tràn số
+                x1_h, y1_h, x2_h, y2_h = float(x1_h), float(y1_h), float(x2_h), float(y2_h)
+                x1_v, y1_v, x2_v, y2_v = float(x1_v), float(y1_v), float(x2_v), float(y2_v)
+                
+                # Kiểm tra nếu đường ngang gần như ngang
+                if abs(y2_h - y1_h) < 1e-10:
+                    if abs(x2_v - x1_v) < 1e-10:
+                        x_intersect = x1_v
+                    else:
+                        t = (y1_h - y1_v) / (y2_v - y1_v)
+                        x_intersect = x1_v + t * (x2_v - x1_v)
+                    
+                    intersections.append((int(x_intersect), int(y1_h)))
+                    continue
+                
+                # Kiểm tra nếu đường dọc gần như dọc
+                if abs(x2_v - x1_v) < 1e-10:
+                    if abs(x2_h - x1_h) < 1e-10:
+                        y_intersect = y1_h
+                    else:
+                        t = (x1_v - x1_h) / (x2_h - x1_h)
+                        y_intersect = y1_h + t * (y2_h - y1_h)
+                    
+                    intersections.append((int(x1_v), int(y_intersect)))
+                    continue
+                
+                denom = (y2_v - y1_v) * (x2_h - x1_h) - (x2_v - x1_v) * (y2_h - y1_h)
+                
+                if abs(denom) < 1e-10:
+                    continue
+                
+                # Tính tham số t cho đường 1
+                ua = ((x2_v - x1_v) * (y1_h - y1_v) - (y2_v - y1_v) * (x1_h - x1_v)) / denom
+                
+                # Tính tọa độ giao điểm
+                x_intersect = x1_h + ua * (x2_h - x1_h)
+                y_intersect = y1_h + ua * (y2_h - y1_h)
+                
+                # Kiểm tra giao điểm có nằm trong đoạn đường không
+                if (min(x1_h, x2_h) - 10 <= x_intersect <= max(x1_h, x2_h) + 10 and
+                    min(y1_v, y2_v) - 10 <= y_intersect <= max(y1_v, y2_v) + 10):
+                    intersections.append((int(x_intersect), int(y_intersect)))
+            
+            except (ValueError, OverflowError, ZeroDivisionError) as e:
+                continue
+    
+    return intersections
+
+def detect_hmi_screen(image):
+    """Phát hiện màn hình HMI trong ảnh và trả về vùng đã cắt"""
+    # Tạo bản sao để vẽ kết quả
+    result_image = image.copy()
+    
+    # Bước 1: Tăng cường chất lượng ảnh
+    enhanced_img, enhanced_clahe = enhance_image(image)
+    
+    # Bước 2: Phát hiện cạnh
+    canny_edges, sobel_edges, edges = adaptive_edge_detection(enhanced_img)
+    
+    # Bước 3: Tìm contour
+    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    # Lọc contour theo diện tích
+    min_contour_area = image.shape[0] * image.shape[1] * 0.001
+    large_contours = [cnt for cnt in contours if cv2.contourArea(cnt) > min_contour_area]
+    
+    # Tạo contour mask
+    contour_mask = np.zeros_like(edges)
+    cv2.drawContours(contour_mask, large_contours, -1, 255, 2)
+    
+    # Bước 4: Phát hiện đường thẳng
+    lines = cv2.HoughLinesP(contour_mask, 1, np.pi/180, threshold=30, minLineLength=20, maxLineGap=20)
+    
+    # Nếu không tìm được đường thẳng, thử điều chỉnh tham số
+    if lines is None or len(lines) < 2:
+        lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=20, minLineLength=15, maxLineGap=30)
+        
+        if lines is None or len(lines) < 2:
+            lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=15, minLineLength=10, maxLineGap=40)
+    
+    if lines is None:
+        print("Không tìm thấy đường thẳng trong ảnh.")
+        return None, result_image, None
+    
+    # Bước 5: Phân loại đường ngang/dọc
+    height, width = image.shape[:2]
+    horizontal_lines, vertical_lines = process_lines(lines, image.shape, min_length=30)
+    
+    if len(horizontal_lines) < 2 or len(vertical_lines) < 2:
+        print("Không tìm thấy đủ đường ngang và dọc.")
+        return None, result_image, None
+    
+    # PHẦN MỚI: Thử tìm hình chữ nhật từ các đường đã phân loại
+    largest_rectangle = find_rectangle_from_classified_lines(horizontal_lines, vertical_lines, image.shape)
+    
+    # Nếu không tìm được hình chữ nhật từ các đường đã phân loại, tiếp tục với quy trình thông thường
+    if largest_rectangle is None:
+        print("Không tìm thấy hình chữ nhật từ các đường đã phân loại, tiếp tục với quy trình thông thường...")
+        
+        # Bước 6: Kéo dài đường
+        extended_h_lines = extend_lines(horizontal_lines, width, height)
+        extended_v_lines = extend_lines(vertical_lines, width, height)
+        
+        # Bước 7: Tìm giao điểm
+        intersections = find_intersections(extended_h_lines, extended_v_lines)
+        
+        if len(intersections) < 4:
+            print("Không tìm thấy đủ giao điểm để tạo hình chữ nhật.")
+            return None, result_image, None
+        
+        # Bước 8: Tìm hình chữ nhật lớn nhất từ các giao điểm xa nhất
+        largest_rectangle = find_largest_rectangle(intersections, image.shape)
+        
+        if largest_rectangle is None:
+            print("Không tìm thấy hình chữ nhật phù hợp.")
+            return None, result_image, None
+    
+    # Lấy các góc của hình chữ nhật
+    top_left, top_right, bottom_right, bottom_left, _ = largest_rectangle
+    
+    # Tính tọa độ của vùng HMI
+    x_min = min(top_left[0], bottom_left[0])
+    y_min = min(top_left[1], top_right[1])
+    x_max = max(top_right[0], bottom_right[0])
+    y_max = max(bottom_left[1], bottom_right[1])
+    
+    # Kiểm tra biên
+    if x_min < 0: x_min = 0
+    if y_min < 0: y_min = 0
+    if x_max >= image.shape[1]: x_max = image.shape[1] - 1
+    if y_max >= image.shape[0]: y_max = image.shape[0] - 1
+    
+    # Cắt vùng HMI
+    hmi_screen = None
+    roi_coords = None
+    
+    if x_max > x_min and y_max > y_min:
+        roi_coords = (x_min, y_min, x_max, y_max)
+        
+        # Vẽ hình chữ nhật lên ảnh kết quả
+        cv2.rectangle(result_image, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
+        
+        # Cắt vùng HMI
+        hmi_screen = image[y_min:y_max, x_min:x_max]
+        
+        # Lưu kết quả phát hiện
+        print(f"Đã phát hiện màn hình HMI: x={x_min}, y={y_min}, width={x_max-x_min}, height={y_max-y_min}")
+    
+    return hmi_screen, result_image, roi_coords
 
 if __name__ == '__main__':
     print("DEBUG INFO:")
