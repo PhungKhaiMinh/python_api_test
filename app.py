@@ -475,11 +475,84 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                 
                 # Nếu là kết quả chủ yếu là chữ, không cần xử lý thêm
                 if has_text and is_text_result:
+                    best_text = best_text.replace('0', 'O').replace('1', 'I').replace('2', 'Z').replace('3', 'E').replace('4', 'A').replace('5', 'S').replace('6', 'G').replace('7', 'T').replace('8', 'B').replace('9', 'P')
                     print(f"Result for ROI {roi_name} is primarily text: '{best_text}', keeping as is")
                     best_text = best_text.upper()
                     # Thêm kết quả cho ROI này (không có original_value cho kết quả text)
                     if len(best_text) == 1:
                         best_text = best_text.replace('O', '0').replace('I', '1')
+                    # Giả sử best_text là một chuỗi đầu vào
+
+                    # Kiểm tra nếu ROI này có allowed_values trong roi_info.json
+                    try:
+                        roi_json_path = 'roi_data/roi_info.json'
+                        if not os.path.exists(roi_json_path):
+                            roi_json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'roi_data/roi_info.json')
+                        
+                        with open(roi_json_path, 'r', encoding='utf-8') as f:
+                            roi_info = json.load(f)
+                        
+                        # Tìm allowed_values cho ROI hiện tại
+                        if (machine_code in roi_info.get("machines", {}) and 
+                            "screens" in roi_info["machines"][machine_code] and 
+                            screen_id in roi_info["machines"][machine_code]["screens"]):
+                            
+                            roi_list = roi_info["machines"][machine_code]["screens"][screen_id]
+                            allowed_values = None
+                            
+                            for roi_item in roi_list:
+                                if isinstance(roi_item, dict) and roi_item.get("name") == roi_name and "allowed_values" in roi_item:
+                                    allowed_values = roi_item["allowed_values"]
+                                    break
+                            
+                            # Nếu có allowed_values và không rỗng, so sánh với best_text
+                            if allowed_values and len(allowed_values) > 0:
+                                print(f"Found allowed_values for ROI {roi_name}: {allowed_values}")
+                                
+                                # Bước 1: Ưu tiên khớp từ ký tự đầu tiên
+                                first_char_matches = []
+                                
+                                for value in allowed_values:
+                                    if best_text and value and best_text[0] == value[0]:
+                                        first_char_matches.append(value)
+                                
+                                if first_char_matches:
+                                    # Có ít nhất một giá trị khớp ký tự đầu tiên
+                                    best_match = first_char_matches[0]
+                                    best_match_count = 1
+                                    
+                                    # Tìm giá trị có nhiều ký tự khớp liên tiếp nhất
+                                    for value in first_char_matches:
+                                        current_count = 0
+                                        for i in range(min(len(best_text), len(value))):
+                                            if best_text[i] == value[i]:
+                                                current_count += 1
+                                            else:
+                                                break
+                                        
+                                        if current_count > best_match_count:
+                                            best_match = value
+                                            best_match_count = current_count
+                                            print(f"Better match found: '{value}' with {current_count} consecutive character(s)")
+                                    
+                                    print(f"Changed best_text from '{best_text}' to '{best_match}' based on first character match")
+                                    best_text = best_match
+                                else:
+                                    # Không có giá trị nào khớp ký tự đầu tiên, tìm khớp ở vị trí khác
+                                    match_found = False
+                                    for value in allowed_values:
+                                        for i in range(1, min(len(best_text), len(value))):
+                                            if best_text[i] == value[i]:
+                                                print(f"Match found at position {i}: '{best_text[i]}' with '{value}'")
+                                                best_text = value
+                                                print(f"Changed best_text to '{value}' based on match at position {i}")
+                                                match_found = True
+                                                break
+                                        if match_found:
+                                            break
+                    except Exception as e:
+                        print(f"Error checking allowed_values for ROI {roi_name}: {str(e)}")
+                    
                     results.append({
                         "roi_index": roi_name,
                         "text": best_text,
@@ -578,7 +651,7 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                 # Thêm kết quả cho ROI này
                 results.append({
                     "roi_index": roi_name,
-                    "text": formatted_text,  # Trả về text đã định dạng theo quy định số chữ số thập phân
+                    "text": formatted_text.replace('C','0'),  # Trả về text đã định dạng theo quy định số chữ số thập phân
                     "confidence": best_confidence,
                     "has_text": has_text,
                     "original_value": original_value
@@ -735,7 +808,7 @@ def upload_image():
                 cv2.putText(visualization, "No HMI Screen Detected", (int(width/2)-150, int(height/2)), 
                             cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
                 
-                visualization_filename = f"no_hmi_visualization_{int(time.time())}.png"
+                visualization_filename = f"no_hmi_visualization.png"
                 visualization_path = os.path.join(app.config['UPLOAD_FOLDER'], visualization_filename)
                 cv2.imwrite(visualization_path, visualization)
                 
@@ -2288,7 +2361,7 @@ def enhance_image_quality(image, quality_info):
     # 2. Xử lý khi ảnh quá sáng
     if 'too_bright' in quality_info['issues']:
         # Giảm độ sáng bằng cách giảm giá trị pixel
-        alpha = 0.8  # Điều chỉnh độ sáng (< 1 làm tối, > 1 làm sáng)
+        alpha = 0.9  # Điều chỉnh độ sáng (< 1 làm tối, > 1 làm sáng)
         enhanced = cv2.convertScaleAbs(enhanced, alpha=alpha, beta=0)
     
     # 3. Xử lý khi ảnh có độ tương phản thấp
