@@ -657,7 +657,7 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                     "original_value": original_value
                 })
                 print(f"Added result for ROI {i} ({roi_name}): Original: '{best_text}', Formatted: '{formatted_text}'")
-                if best_confidence < 0.3:
+                if best_confidence < 0.2:
                     print(f"The result with highest confidence is still below 30%. Returning empty results.")
                     return []
                 # Kiểm tra độ tin cậy của OCR
@@ -787,18 +787,24 @@ def upload_image():
             if hmi_screen is not None:
                 hmi_detected = True
                 # Lưu ảnh visualization
-                visualization_filename = f"hmi_visualization.png"
+                visualization_filename = f"hmi_visualization_{machine_code}_{screen_id}.png"
                 visualization_path = os.path.join(app.config['UPLOAD_FOLDER'], visualization_filename)
                 cv2.imwrite(visualization_path, visualization)
-                # Sử dụng HMI đã phát hiện thay vì ảnh gốc
-                print("Màn hình HMI đã được phát hiện và cắt!")
+                # Sử dụng HMI đã phát hiện và tinh chỉnh thay vì ảnh gốc
+                print("Màn hình HMI đã được phát hiện, tinh chỉnh và cắt!")
                 image = hmi_screen
+                
+                # Lưu ảnh HMI đã tinh chỉnh
+                refined_hmi_filename = f"refined_hmi_{machine_code}_{screen_id}.png"
+                refined_hmi_path = os.path.join(app.config['UPLOAD_FOLDER'], refined_hmi_filename)
+                print(f"Saving refined HMI to: {refined_hmi_path}")
+                cv2.imwrite(refined_hmi_path, hmi_screen)
                 
                 # Cập nhật thông tin phát hiện HMI
                 hmi_detection_info = {
                     "hmi_detected": True,
-                    "hmi_image": f"/api/images/hmi_detection/{visualization_filename}",
-                    "visualization": visualization_filename
+                    "hmi_image": f"/api/images/hmi_detection/{refined_hmi_filename}",
+                    "visualization": f"/api/images/hmi_detection/{visualization_filename}"
                 }
             else:
                 print("Không phát hiện màn hình HMI trong ảnh")
@@ -1871,8 +1877,11 @@ def delete_reference_image(filename):
 def get_hmi_detection_image(filename):
     """Trả về file ảnh kết quả phát hiện HMI"""
     try:
+        print(f"Accessing HMI detection image: {filename}")
+        print(f"Looking in directory: {app.config['UPLOAD_FOLDER']}")
         return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
-    except:
+    except Exception as e:
+        print(f"Error serving HMI detection image: {str(e)}")
         abort(404)
 
 # Hàm mới: Lấy đường dẫn đến ảnh template mẫu dựa trên machine_code và screen_id
@@ -2390,33 +2399,42 @@ def enhance_image_quality(image, quality_info):
 def enhance_image(image):
     """Cải thiện chất lượng ảnh trước khi phát hiện cạnh"""
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    # Tăng clip limit để cải thiện độ tương phản
+    clahe = cv2.createCLAHE(clipLimit=4.0, tileGridSize=(11, 11))  # Tăng từ 2.0 lên 4.0
     enhanced = clahe.apply(gray)
-    blurred = cv2.GaussianBlur(enhanced, (7, 7), 0)
+    
+    # Tăng độ tương phản
+    enhanced = cv2.convertScaleAbs(enhanced, alpha=1.2, beta=0)  # Thêm bước tăng contrast
+    
+    # Làm mịn ảnh với kernel nhỏ hơn để giữ nguyên cạnh sắc nét hơn
+    blurred = cv2.GaussianBlur(enhanced, (5, 5), 0)  # Giảm từ (7, 7) xuống (5, 5)
     return blurred, enhanced
 
 def adaptive_edge_detection(image):
     """Phát hiện cạnh với nhiều phương pháp và kết hợp kết quả"""
     median_val = np.median(image)
-    lower = int(max(0, (1.0 - 0.25) * median_val))  
-    upper = int(min(255, (1.0 + 0.25) * median_val))  
+    # Giảm ngưỡng để tăng độ nhạy cảm phát hiện cạnh
+    lower = int(max(0, (1.0 - 0.33) * median_val))  # Giảm từ 0.25 xuống 0.33
+    upper = int(min(255, (1.0 + 0.33) * median_val))  # Tăng từ 0.25 lên 0.33
     canny_edges = cv2.Canny(image, lower, upper)
     
     sobelx = cv2.Sobel(image, cv2.CV_64F, 1, 0, ksize=5)
     sobely = cv2.Sobel(image, cv2.CV_64F, 0, 1, ksize=5)
     sobel_edges = cv2.magnitude(sobelx, sobely)
     sobel_edges = cv2.normalize(sobel_edges, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
-    _, sobel_edges = cv2.threshold(sobel_edges, 50, 255, cv2.THRESH_BINARY)
+    # Giảm ngưỡng sobel để bắt được nhiều cạnh hơn
+    _, sobel_edges = cv2.threshold(sobel_edges, 40, 255, cv2.THRESH_BINARY)  # Giảm từ 50 xuống 40
     
     combined_edges = cv2.bitwise_or(canny_edges, sobel_edges)
     
+    # Tăng số lần giãn nở để kết nối các cạnh bị đứt đoạn
     kernel = np.ones((3, 3), np.uint8)
-    dilated_edges = cv2.dilate(combined_edges, kernel, iterations=1)
+    dilated_edges = cv2.dilate(combined_edges, kernel, iterations=2)  # Tăng từ 1 lên 2
     final_edges = cv2.erode(dilated_edges, kernel, iterations=1)
     
     return canny_edges, sobel_edges, final_edges
 
-def process_lines(lines, img_shape, min_length=30, max_lines_per_direction=20):
+def process_lines(lines, img_shape, min_length=20, max_lines_per_direction=30):
     """Xử lý và nhóm các đường thẳng theo hướng ngang/dọc, giới hạn số lượng đường"""
     if lines is None:
         return [], []
@@ -2430,7 +2448,8 @@ def process_lines(lines, img_shape, min_length=30, max_lines_per_direction=20):
     height, width = img_shape[:2]
     min_dimension = min(height, width)
     
-    min_length = max(min_length, int(min_dimension * 0.03))
+    # Giảm độ dài tối thiểu để phát hiện nhiều đường hơn
+    min_length = max(min_length, int(min_dimension * 0.02))  # Giảm từ 0.03 xuống 0.02
     
     for line in lines:
         x1, y1, x2, y2 = line[0]
@@ -2444,18 +2463,20 @@ def process_lines(lines, img_shape, min_length=30, max_lines_per_direction=20):
         else:
             angle = 90
         
-        if abs(angle) < 35 or abs(angle) > 145:
+        # Mở rộng phạm vi phân loại đường ngang/dọc
+        if abs(angle) < 40 or abs(angle) > 140:  # Đường ngang (mở rộng phạm vi từ 35 lên 40)
             all_h_lines.append([x1, y1, x2, y2, angle, length])
-        elif abs(angle - 90) < 35 or abs(angle + 90) < 35:
+        elif abs(angle - 90) < 40 or abs(angle + 90) < 40:  # Đường dọc (mở rộng phạm vi từ 35 lên 40)
             all_v_lines.append([x1, y1, x2, y2, angle, length])
     
     all_h_lines.sort(key=lambda x: x[5], reverse=True)
     all_v_lines.sort(key=lambda x: x[5], reverse=True)
     
-    min_lines = min(3, len(all_h_lines))
+    # Đảm bảo có đủ số lượng đường ngang và dọc tối thiểu
+    min_lines = min(4, len(all_h_lines))  # Tăng số lượng dòng tối thiểu từ 3 lên 4
     horizontal_lines = [line[:5] for line in all_h_lines[:max(min_lines, max_lines_per_direction)]]
     
-    min_lines = min(3, len(all_v_lines))
+    min_lines = min(4, len(all_v_lines))  # Tăng số lượng dòng tối thiểu từ 3 lên 4
     vertical_lines = [line[:5] for line in all_v_lines[:max(min_lines, max_lines_per_direction)]]
     
     return horizontal_lines, vertical_lines
@@ -2711,7 +2732,7 @@ def detect_hmi_screen(image):
     enhanced_img, enhanced_clahe = enhance_image(image)
     
     # Bước 2: Phát hiện cạnh
-    canny_edges, sobel_edges, edges = adaptive_edge_detection(enhanced_img)
+    canny_edges, sobel_edges, edges = adaptive_edge_detection(enhanced_clahe)
     
     # Bước 3: Tìm contour
     contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -2724,15 +2745,17 @@ def detect_hmi_screen(image):
     contour_mask = np.zeros_like(edges)
     cv2.drawContours(contour_mask, large_contours, -1, 255, 2)
     
-    # Bước 4: Phát hiện đường thẳng
-    lines = cv2.HoughLinesP(contour_mask, 1, np.pi/180, threshold=30, minLineLength=20, maxLineGap=20)
-    
+    # Bước 4: Phát hiện đường thẳng - Điều chỉnh các tham số
+    lines = cv2.HoughLinesP(contour_mask, 1, np.pi/180, threshold=25, minLineLength=15, maxLineGap=30)  # Giảm threshold, minLineLength và tăng maxLineGap
+
     # Nếu không tìm được đường thẳng, thử điều chỉnh tham số
     if lines is None or len(lines) < 2:
-        lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=20, minLineLength=15, maxLineGap=30)
+        # Thử với các tham số dễ dàng hơn
+        lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=15, minLineLength=10, maxLineGap=40)
         
         if lines is None or len(lines) < 2:
-            lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=15, minLineLength=10, maxLineGap=40)
+            # Thử lần cuối với các tham số rất dễ dàng
+            lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=10, minLineLength=5, maxLineGap=50)
     
     if lines is None:
         print("Không tìm thấy đường thẳng trong ảnh.")
@@ -2740,7 +2763,7 @@ def detect_hmi_screen(image):
     
     # Bước 5: Phân loại đường ngang/dọc
     height, width = image.shape[:2]
-    horizontal_lines, vertical_lines = process_lines(lines, image.shape, min_length=30)
+    horizontal_lines, vertical_lines = process_lines(lines, image.shape, min_length=20)
     
     if len(horizontal_lines) < 2 or len(vertical_lines) < 2:
         print("Không tìm thấy đủ đường ngang và dọc.")
@@ -2796,13 +2819,157 @@ def detect_hmi_screen(image):
         # Vẽ hình chữ nhật lên ảnh kết quả
         cv2.rectangle(result_image, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
         
-        # Cắt vùng HMI
-        hmi_screen = image[y_min:y_max, x_min:x_max]
+        # Cắt vùng HMI thô
+        roi = image[y_min:y_max, x_min:x_max]
+        
+        # THÊM MỚI: Tinh chỉnh và trải phẳng vùng HMI
+        warped_roi, refined_coords = fine_tune_hmi_screen(image, roi_coords)
+        
+        # Sử dụng ảnh đã tinh chỉnh
+        hmi_screen = warped_roi
         
         # Lưu kết quả phát hiện
-        print(f"Đã phát hiện màn hình HMI: x={x_min}, y={y_min}, width={x_max-x_min}, height={y_max-y_min}")
+        print(f"Đã phát hiện và tinh chỉnh màn hình HMI: x={x_min}, y={y_min}, width={x_max-x_min}, height={y_max-y_min}")
     
     return hmi_screen, result_image, roi_coords
+
+def extract_content_region(img):
+    """
+    Trích xuất vùng nội dung (không phải vùng đen xung quanh màn hình sử dụng gradient và kernel theo chiều dọc
+    """
+    # Chuyển sang ảnh xám
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    
+    # Tăng độ tương phản để làm nổi bật đường viền màn hình
+    enhanced_contrast = cv2.convertScaleAbs(gray, alpha=1.3, beta=5)
+    
+    # Làm mịn ảnh để giảm nhiễu nhưng vẫn giữ được cạnh
+    blurred = cv2.GaussianBlur(enhanced_contrast, (3, 3), 0)  # Kernel nhỏ hơn để giữ được cạnh
+    
+    # Phân tích gradient để tìm các vùng có độ tương phản cao
+    sobel_x = cv2.Sobel(blurred, cv2.CV_64F, 1, 0, ksize=3)
+    sobel_y = cv2.Sobel(blurred, cv2.CV_64F, 0, 1, ksize=3)
+    gradient_mag = cv2.magnitude(sobel_x, sobel_y)
+    gradient_mag = cv2.normalize(gradient_mag, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
+    
+    # Ngưỡng gradient - sử dụng ngưỡng thấp hơn để bắt được nhiều cạnh hơn
+    _, gradient_thresh = cv2.threshold(gradient_mag, 20, 255, cv2.THRESH_BINARY)  # Giảm ngưỡng từ 30 xuống 20
+    
+    # Tạo kernel theo chiều dọc cao hơn để bắt được toàn bộ các cạnh dọc
+    vertical_kernel = np.ones((11, 3), np.uint8)  # Tăng từ (9, 3) lên (11, 3)
+    
+    # Mở rộng các cạnh theo chiều dọc
+    gradient_dilated = cv2.dilate(gradient_thresh, vertical_kernel, iterations=3)  # Tăng iterations từ 2 lên 3
+    
+    # Đảm bảo kết nối tốt theo chiều ngang
+    horizontal_kernel = np.ones((3, 9), np.uint8)  # Tăng từ (3, 7) lên (3, 9)
+    gradient_dilated = cv2.dilate(gradient_dilated, horizontal_kernel, iterations=2)  # Tăng iterations từ 1 lên 2
+    
+    # Làm mịn và loại bỏ nhiễu
+    kernel = np.ones((5, 5), np.uint8)
+    gradient_final = cv2.morphologyEx(gradient_dilated, cv2.MORPH_CLOSE, kernel, iterations=3)  # Tăng từ 2 lên 3
+    
+    # Tìm contour trực tiếp từ ảnh gradient
+    contours, _ = cv2.findContours(gradient_final, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    # Nếu không tìm thấy contour, thử với phương pháp ngưỡng
+    if not contours:
+        print("Không tìm thấy contour từ gradient, chuyển sang phương pháp ngưỡng")
+        # Áp dụng phương pháp ngưỡng tự động bằng Otsu
+        # Trước tiên, tăng độ tương phản
+        enhanced_for_threshold = cv2.convertScaleAbs(gray, alpha=1.5, beta=10)
+        _, thresh = cv2.threshold(enhanced_for_threshold, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    # Lọc ra các contour lớn (diện tích > 0.5% của ảnh)
+    min_area = img.shape[0] * img.shape[1] * 0.005  # Giảm từ 1% xuống 0.5%
+    large_contours = [cnt for cnt in contours if cv2.contourArea(cnt) > min_area]
+    
+    # Tạo mask từ contour lớn nhất
+    mask = np.zeros_like(gray)
+    if large_contours:
+        largest_contour = max(large_contours, key=cv2.contourArea)
+        cv2.drawContours(mask, [largest_contour], 0, 255, -1)  # Vẽ đầy contour
+    else:
+        print("Không tìm thấy contour lớn, trả về mask đầy")
+        mask.fill(255)  # Trả về mask đầy nếu không tìm thấy contour
+    
+    return mask, large_contours[0] if large_contours else None
+
+def fine_tune_hmi_screen(image, roi_coords):
+    """
+    Tinh chỉnh vùng màn hình HMI đã phát hiện:
+    1. Loại bỏ vùng đen xung quanh màn hình sử dụng gradient và kernel theo chiều dọc
+    2. Áp dụng Warp Perspective trực tiếp trên contour lớn nhất
+    """
+    x_min, y_min, x_max, y_max = roi_coords
+    roi = image[y_min:y_max, x_min:x_max]
+    
+    # THAY ĐỔI: Tìm vùng nội dung và lấy contour lớn nhất trực tiếp
+    content_mask, largest_contour = extract_content_region(roi)
+    
+    # Kiểm tra nếu không tìm được contour
+    if largest_contour is None:
+        print("Không tìm thấy contour lớn trong ROI")
+        return roi, roi_coords
+    
+    # Kiểm tra diện tích contour
+    contour_area = cv2.contourArea(largest_contour)
+    if contour_area < 0.1 * roi.shape[0] * roi.shape[1]:
+        print("Vùng nội dung quá nhỏ, có thể không phải là màn hình HMI")
+        return roi, roi_coords
+    
+    # Xấp xỉ contour thành đa giác
+    epsilon = 0.02 * cv2.arcLength(largest_contour, True)
+    approx = cv2.approxPolyDP(largest_contour, epsilon, True)
+    
+    # Nếu không có đúng 4 điểm, điều chỉnh để có 4 điểm
+    if len(approx) != 4:
+        # Sử dụng hình chữ nhật bao quanh tối thiểu
+        rect = cv2.minAreaRect(largest_contour)
+        box = cv2.boxPoints(rect)
+        approx = np.array(box, dtype=np.int32)
+    
+    # Chuyển đổi sang mảng điểm
+    points = approx.reshape(-1, 2)
+    
+    # Sắp xếp các điểm để chuẩn bị cho biến đổi phối cảnh
+    points = order_points(points)
+    
+    # Tính toán chiều rộng và chiều cao của màn hình đích
+    # Sử dụng khoảng cách Euclidean
+    width_a = np.sqrt(((points[2][0] - points[3][0]) ** 2) + ((points[2][1] - points[3][1]) ** 2))
+    width_b = np.sqrt(((points[1][0] - points[0][0]) ** 2) + ((points[1][1] - points[0][1]) ** 2))
+    max_width = max(int(width_a), int(width_b))
+    
+    height_a = np.sqrt(((points[1][0] - points[2][0]) ** 2) + ((points[1][1] - points[2][1]) ** 2))
+    height_b = np.sqrt(((points[0][0] - points[3][0]) ** 2) + ((points[0][1] - points[3][1]) ** 2))
+    max_height = max(int(height_a), int(height_b))
+    
+    # Đảm bảo kích thước hợp lý
+    if max_width < 10 or max_height < 10:
+        print("Kích thước màn hình HMI quá nhỏ")
+        return roi, roi_coords
+    
+    # Tạo điểm đích cho biến đổi phối cảnh
+    dst_points = np.array([
+        [0, 0],                     # top-left
+        [max_width - 1, 0],         # top-right
+        [max_width - 1, max_height - 1],  # bottom-right
+        [0, max_height - 1]         # bottom-left
+    ], dtype=np.float32)
+    
+    # Chuyển đổi points sang float32
+    src_points = points.astype(np.float32)
+    
+    # Thực hiện biến đổi phối cảnh
+    M = cv2.getPerspectiveTransform(src_points, dst_points)
+    warped = cv2.warpPerspective(roi, M, (max_width, max_height))
+    
+    # Tính toán tọa độ mới
+    new_roi_coords = (x_min, y_min, x_min + warped.shape[1], y_min + warped.shape[0])
+    
+    return warped, new_roi_coords
 
 if __name__ == '__main__':
     print("DEBUG INFO:")
