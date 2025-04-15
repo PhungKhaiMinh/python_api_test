@@ -11,6 +11,7 @@ import fnmatch
 import traceback
 import random
 from math import sqrt, atan2, degrees
+from datetime import datetime
 
 # Thêm try-except khi import EasyOCR
 try:
@@ -2971,6 +2972,98 @@ def fine_tune_hmi_screen(image, roi_coords):
     
     return warped, new_roi_coords
 
+@app.route('/api/history', methods=['GET'])
+def get_ocr_history():
+    """
+    API để truy vấn kết quả OCR trong khoảng thời gian chỉ định
+    Tham số truy vấn:
+    - ExpectedStartTime: Thời gian bắt đầu theo định dạng YYYY-MM-DD
+    - ExpectedEndTime: Thời gian kết thúc theo định dạng YYYY-MM-DD
+    """
+    # Lấy tham số truy vấn
+    start_time_str = request.args.get('ExpectedStartTime')
+    end_time_str = request.args.get('ExpectedEndTime')
+    
+    # Kiểm tra tham số
+    if not start_time_str or not end_time_str:
+        return jsonify({"error": "ExpectedStartTime và ExpectedEndTime là bắt buộc"}), 400
+    
+    try:
+        # Chuyển đổi chuỗi thời gian thành đối tượng datetime
+        start_time = datetime.strptime(start_time_str, "%Y-%m-%d")
+        end_time = datetime.strptime(end_time_str, "%Y-%m-%d")
+        
+        # Đảm bảo thời gian bắt đầu không lớn hơn thời gian kết thúc
+        if start_time > end_time:
+            return jsonify({"error": "ExpectedStartTime không thể lớn hơn ExpectedEndTime"}), 400
+    except ValueError:
+        return jsonify({"error": "Định dạng thời gian không hợp lệ. Vui lòng sử dụng định dạng YYYY-MM-DD"}), 400
+    
+    # Đọc dữ liệu thông tin máy từ machine_screens.json
+    machine_info = {}
+    try:
+        machine_screens_path = os.path.join(app.config['ROI_DATA_FOLDER'], 'machine_screens.json')
+        if os.path.exists(machine_screens_path):
+            with open(machine_screens_path, 'r', encoding='utf-8') as f:
+                machines_data = json.load(f)
+                for machine_code, machine_data in machines_data.get('machines', {}).items():
+                    machine_info[machine_code] = machine_data.get('name', f"Máy {machine_code}")
+    except Exception as e:
+        print(f"Lỗi khi đọc file machine_screens.json: {str(e)}")
+    
+    # Thư mục chứa kết quả OCR
+    ocr_results_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ocr_results')
+    
+    # Danh sách kết quả OCR
+    ocr_results = []
+    
+    # Duyệt qua tất cả các file trong thư mục ocr_results
+    for filename in os.listdir(ocr_results_dir):
+        file_path = os.path.join(ocr_results_dir, filename)
+        
+        # Kiểm tra nếu là file json
+        if os.path.isfile(file_path) and filename.endswith('.json'):
+            try:
+                # Lấy thời gian tạo file
+                file_creation_time = datetime.fromtimestamp(os.path.getctime(file_path))
+                
+                # Kiểm tra xem thời gian tạo file có nằm trong khoảng thời gian chỉ định không
+                if start_time <= file_creation_time <= end_time:
+                    # Đọc nội dung file JSON
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                        
+                    # Thêm thông tin thời gian và tên file vào dữ liệu
+                    data['timestamp'] = file_creation_time.strftime("%Y-%m-%d %H:%M:%S")
+                    data['datetime_obj'] = file_creation_time  # Thêm đối tượng datetime để sắp xếp
+                    data['filename'] = filename
+                    
+                    # Thêm machine_name từ thông tin máy đã đọc
+                    if 'machine_code' in data and data['machine_code'] in machine_info:
+                        data['machine_name'] = machine_info[data['machine_code']]
+                    
+                    # Thêm vào danh sách kết quả
+                    ocr_results.append(data)
+            except (json.JSONDecodeError, Exception) as e:
+                print(f"Lỗi khi đọc file {filename}: {str(e)}")
+    
+    # Sắp xếp kết quả theo khoảng cách đến ExpectedEndTime (gần nhất trước)
+    ocr_results.sort(key=lambda x: abs((x['datetime_obj'] - end_time).total_seconds()))
+    
+    # Tạo đối tượng kết quả mới với key là các số từ 0 trở đi
+    indexed_results = {}
+    for i, result in enumerate(ocr_results):
+        # Loại bỏ trường datetime_obj trước khi trả về kết quả
+        del result['datetime_obj']
+        indexed_results[str(i)] = result
+    
+    return jsonify({
+        "start_time": start_time_str,
+        "end_time": end_time_str,
+        "total_results": len(ocr_results),
+        **indexed_results  # Thêm các kết quả đã đánh số vào response
+    })
+
 if __name__ == '__main__':
     print("DEBUG INFO:")
     print(f"UPLOAD_FOLDER: {UPLOAD_FOLDER}")
@@ -2994,5 +3087,6 @@ if __name__ == '__main__':
     print("- /api/set_decimal_value (POST): Set decimal places value based on current machine, screen and ROI index")
     print("- /api/machine_screen_status (GET): Check machine and screen status")
     print("- /api/set_all_decimal_values (POST): Set all decimal places for a specific screen")
+    print("- /api/history (GET): Get OCR history")
     print("Starting server...")
     app.run(host='0.0.0.0', port=5000, debug=True) 

@@ -1,0 +1,233 @@
+{
+  "filename": "cropped_image_F42_Overview.png",
+  "machine_code": "F42",
+  "screen_id": "Overview",
+  "timestamp": "2025-04-15 12:23:34",
+  "template_path": "d:\\Wrembly\\python_api_test\\roi_data\\reference_images\\template_F42_Overview.jpg",
+  "results": [
+    {
+      "roi_index": "a1",
+      "text": "26.29",
+      "confidence": 0.8566783109536569,
+      "has_text": true,
+      "original_value": "26.29"
+    },
+    {
+      "roi_index": "a2",
+      "text": "250.00",
+      "confidence": 0.9996856974854585,
+      "has_text": true,
+      "original_value": "250.00"
+    },
+    {
+      "roi_index": "b1",
+      "text": "0.000",
+      "confidence": 0.996494435502575,
+      "has_text": true,
+      "original_value": "0.000"
+    },
+    {
+      "roi_index": "b2",
+      "text": "0.00",
+      "confidence": 0.9994787573814392,
+      "has_text": true,
+      "original_value": "0.00"
+    },
+    {
+      "roi_index": "b3",
+      "text": "0.00",
+      "confidence": 0.6426412226664259,
+      "has_text": true,
+      "original_value": "0.00"
+    },
+    {
+      "roi_index": "c1",
+      "text": "31.00",
+      "confidence": 0.9655444198008065,
+      "has_text": true,
+      "original_value": "31"
+    },
+    {
+      "roi_index": "c2",
+      "text": "12.00",
+      "confidence": 0.9999958696113443,
+      "has_text": true,
+      "original_value": "12"
+    },
+    {
+      "roi_index": "c3",
+      "text": "0",
+      "confidence": 0.9999940395444042,
+      "has_text": true,
+      "original_value": "0"
+    },
+    {
+      "roi_index": "d",
+      "text": "TAT",
+      "confidence": 0.9976245903538901,
+      "has_text": true
+    },
+    {
+      "roi_index": "e1",
+      "text": "2.0",
+      "confidence": 0.9999996423721633,
+      "has_text": true,
+      "original_value": "2"
+    },
+    {
+      "roi_index": "e2",
+      "text": "24.3",
+      "confidence": 0.6084222990422097,
+      "has_text": true,
+      "original_value": "24.3"
+    },
+    {
+      "roi_index": "e3",
+      "text": "24.4",
+      "confidence": 0.8432919766422017,
+      "has_text": true,
+      "original_value": "24.4"
+    },
+    {
+      "roi_index": "e4",
+      "text": "5.0",
+      "confidence": 0.9999996423721633,
+      "has_text": true,
+      "original_value": "5"
+    },
+    {
+      "roi_index": "e5",
+      "text": "23.9",
+      "confidence": 0.5165517011848152,
+      "has_text": true,
+      "original_value": "23.9"
+    },
+    {
+      "roi_index": "e6",
+      "text": "2.6",
+      "confidence": 0.9999885749731856,
+      "has_text": true,
+      "original_value": "26."
+    },
+    {
+      "roi_index": "f1",
+      "text": "230.0",
+      "confidence": 0.9912250890629858,
+      "has_text": true,
+      "original_value": "230.0"
+    },
+    {
+      "roi_index": "f2",
+      "text": "235.0",
+      "confidence": 0.9994767264105648,
+      "has_text": true,
+      "original_value": "235.0"
+    },
+    {
+      "roi_index": "f3",
+      "text": "236.0",
+      "confidence": 0.9862170604521816,
+      "has_text": true,
+      "original_value": "236.0"
+    },
+    {
+      "roi_index": "f4",
+      "text": "237.1",
+      "confidence": 0.9347680700902393,
+      "has_text": true,
+      "original_value": "237.1"
+    },
+    {
+      "roi_index": "f5",
+      "text": "210.0",
+      "confidence": 0.9901199307172439,
+      "has_text": true,
+      "original_value": "210.0"
+    },
+    {
+      "roi_index": "f6",
+      "text": "400.0",
+      "confidence": 0.924916608473783,
+      "has_text": true,
+      "original_value": "400"
+    },
+    {
+      "roi_index": "g1",
+      "text": "TAT",
+      "confidence": 0.9715577834369347,
+      "has_text": true
+    },
+    {
+      "roi_index": "g2",
+      "text": "TAT",
+      "confidence": 0.9622478532198996,
+      "has_text": true
+    },
+    {
+      "roi_index": "g3",
+      "text": "0.50",
+      "confidence": 0.9702798592054269,
+      "has_text": true,
+      "original_value": "0.50"
+    },
+    {
+      "roi_index": "g4",
+      "text": "0.50",
+      "confidence": 0.9943089469775654,
+      "has_text": true,
+      "original_value": "0.50"
+    },
+    {
+      "roi_index": "h1",
+      "text": "0",
+      "confidence": 0.9998166645164162,
+      "has_text": true,
+      "original_value": "0"
+    },
+    {
+      "roi_index": "h2",
+      "text": "0",
+      "confidence": 0.9998699468938277,
+      "has_text": true,
+      "original_value": "0"
+    },
+    {
+      "roi_index": "h3",
+      "text": "800",
+      "confidence": 0.9943274275871244,
+      "has_text": true,
+      "original_value": "800"
+    },
+    {
+      "roi_index": "h4",
+      "text": "600",
+      "confidence": 0.9953780107182276,
+      "has_text": true,
+      "original_value": "600"
+    },
+    {
+      "roi_index": "i",
+      "text": "TAT",
+      "confidence": 0.981199861356783,
+      "has_text": true
+    },
+    {
+      "roi_index": "k",
+      "text": "TDONG",
+      "confidence": 0.6838357995194947,
+      "has_text": true
+    },
+    {
+      "roi_index": "l",
+      "text": "0.454",
+      "confidence": 0.999797518547275,
+      "has_text": true,
+      "original_value": "0.454"
+    }
+  ],
+  "hmi_detection": {
+    "hmi_detected": true,
+    "hmi_image": "/api/images/hmi_detection/refined_hmi_F42_Overview.png",
+    "visualization": "/api/images/hmi_detection/hmi_visualization_F42_Overview.png"
+  }
+}
