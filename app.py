@@ -3058,9 +3058,6 @@ def get_ocr_history():
         indexed_results[str(i)] = result
     
     return jsonify({
-        "start_time": start_time_str,
-        "end_time": end_time_str,
-        "total_results": len(ocr_results),
         **indexed_results  # Thêm các kết quả đã đánh số vào response
     })
 
