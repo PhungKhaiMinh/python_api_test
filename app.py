@@ -12,6 +12,7 @@ import traceback
 import random
 from math import sqrt, atan2, degrees
 from datetime import datetime
+from PIL import Image, ImageEnhance
 
 # Thêm try-except khi import EasyOCR
 try:
@@ -449,7 +450,17 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                 # Thử OCR trên toàn bộ ROI
                 try:
                     # Specify the characters to read (digits only)
-                    ocr_results = reader.readtext(roi_processed, allowlist='0123456789.-ABCDGHIKLNOTUabcdghiklnotu', detail=1, paragraph=False, batch_size=1, text_threshold=0.4, link_threshold=0.3, low_text=0.3, mag_ratio=1.5, slope_ths=0.05)
+                    ocr_results = reader.readtext(roi_processed, allowlist='0123456789.-ABCDGHIKLNOTUabcdghiklnotu', 
+                    detail=1, 
+                    paragraph=False, 
+                    batch_size=1, 
+                    text_threshold=0.4,
+                    link_threshold=0.2, 
+                    low_text=0.3, 
+                    mag_ratio=2, 
+                    slope_ths=0.05,
+                    decoder='beamsearch'
+                    )
                     if ocr_results and len(ocr_results) > 0:
                         # Lấy kết quả có confidence cao nhất
                         best_result = max(ocr_results, key=lambda x: x[2])
@@ -459,9 +470,14 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                         has_text = True
                         print(f"Found text in full ROI: '{best_text}' with confidence {best_confidence}")
                         
-                        # Đếm số lượng chữ số và chữ cái
-                        digit_count = sum(1 for char in best_text if char.isdigit())
-                        letter_count = sum(1 for char in best_text if char.isalpha())
+                        # Kiểm tra nếu kết quả chỉ là 1 ký tự 'o' hoặc 'O' thì chuyển thành '0' luôn
+                        if len(best_text) == 1 and best_text.upper() == 'O':
+                            best_text = '0'
+                            print(f"Single 'o' character detected, converted to '0'")
+                        
+                        # Đếm số lượng chữ số và chữ cái (loại trừ số 0 và chữ O)
+                        digit_count = sum(1 for char in best_text if char.isdigit() and char != '0')
+                        letter_count = sum(1 for char in best_text if char.isalpha() and char.upper() != 'O')
                         print(f"Text contains {digit_count} digits and {letter_count} letters")
                         
                         # Kiểm tra nếu có nhiều chữ cái hơn chữ số
@@ -471,17 +487,27 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                 except Exception as ocr_error:
                     print(f"OCR error on ROI {i} ({roi_name}): {str(ocr_error)}")
                 
+                # Kiểm tra xem ROI có key "allowed_values" không rỗng hay không
+                has_allowed_values = False
+                if roi_names and i < len(roi_names) and isinstance(roi_names[i], dict) and "allowed_values" in roi_names[i]:
+                    allowed_values = roi_names[i].get("allowed_values", [])
+                    if allowed_values and len(allowed_values) > 0:
+                        has_allowed_values = True
+                        print(f"ROI {roi_name} has allowed_values: {allowed_values}")
+                        # Buộc xử lý như text nếu có allowed_values
+                        is_text_result = True
+                
                 # Xử lý kết quả OCR dựa vào loại kết quả (số hoặc chữ)
                 formatted_text = best_text
                 
-                # Nếu là kết quả chủ yếu là chữ, không cần xử lý thêm
-                if has_text and is_text_result:
+                # Nếu là kết quả chủ yếu là chữ hoặc ROI có allowed_values, xử lý như text
+                if has_text and (is_text_result or has_allowed_values):
                     best_text = best_text.replace('0', 'O').replace('1', 'I').replace('2', 'Z').replace('3', 'E').replace('4', 'A').replace('5', 'S').replace('6', 'G').replace('7', 'T').replace('8', 'B').replace('9', 'P')
                     print(f"Result for ROI {roi_name} is primarily text: '{best_text}', keeping as is")
                     best_text = best_text.upper()
                     # Thêm kết quả cho ROI này (không có original_value cho kết quả text)
                     if len(best_text) == 1:
-                        best_text = best_text.replace('O', '0').replace('I', '1')
+                        best_text = best_text.replace('O', '0').replace('I', '1').replace('C','0').replace('S','5').replace('G','6').replace('A','4').replace('H','8').replace('L','1').replace('T','7').replace('U','0').replace('E','3').replace('Z','2')
                     # Giả sử best_text là một chuỗi đầu vào
 
                     # Kiểm tra nếu ROI này có allowed_values trong roi_info.json
@@ -567,7 +593,7 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                 is_negative = best_text.startswith('-')
                 best_text = best_text.upper()
                 print(best_text)
-                best_text = best_text.replace('O', '0').replace('I', '1')
+                best_text = best_text.replace('O', '0').replace('I', '1').replace('C','0').replace('S','5').replace('G','6').replace('B','8')
                 if '-' in best_text[1:]:
                     best_text = best_text[:-1] + best_text[-1].replace('-', '')
                 if has_text and re.match(r'^-?\d+\.?\d*$', best_text):
@@ -658,7 +684,7 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                     "original_value": original_value
                 })
                 print(f"Added result for ROI {i} ({roi_name}): Original: '{best_text}', Formatted: '{formatted_text}'")
-                if best_confidence < 0.2:
+                if best_confidence < 0.1:
                     print(f"The result with highest confidence is still below 30%. Returning empty results.")
                     return []
                 # Kiểm tra độ tin cậy của OCR
@@ -705,6 +731,21 @@ def upload_image():
     # Kiểm tra xem có chọn file chưa
     if file.filename == '':
         return jsonify({"error": "No file selected"}), 400
+    
+    # Xóa tất cả các file trong thư mục processed_roi trước khi xử lý
+    processed_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'processed_roi')
+    if os.path.exists(processed_folder):
+        for filename in os.listdir(processed_folder):
+            file_path = os.path.join(processed_folder, filename)
+            try:
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+                    print(f"Deleted: {file_path}")
+            except Exception as e:
+                print(f"Error deleting {file_path}: {str(e)}")
+    else:
+        os.makedirs(processed_folder)
+        print(f"Created processed_roi folder: {processed_folder}")
     
     # Kiểm tra machine_code và screen_id từ form data
     machine_code = request.form.get('machine_code')
@@ -1962,7 +2003,6 @@ def preprocess_roi_for_ocr(roi, roi_index, original_filename, roi_name=None, ima
 
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(9, 9))
     contrast_enhanced = clahe.apply(blur)
-
     # 3. Threshold (Otsu)
     _, thresh_otsu = cv2.threshold(contrast_enhanced, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     thresh = thresh_otsu
@@ -1983,7 +2023,7 @@ def preprocess_roi_for_ocr(roi, roi_index, original_filename, roi_name=None, ima
         x, y, w, h = cv2.boundingRect(cnt)
         
         # Loại bỏ contour nếu chiều rộng <= 20 pixel hoặc chiều cao <= 30 pixel
-        if w <= 12 and h <= 20:
+        if w <= 8 and h <= 20:
             continue
         
         y_coords = [point[0][1] for point in cnt]  # Lấy tọa độ y của các điểm trong contour
@@ -2284,7 +2324,8 @@ def check_image_quality(image):
     peak_ratio = peaks / np.sum(mask)  # Tỷ lệ so với vùng được lọc
     
     # Quyết định
-    if (brightness > 200) and (contrast > 20) and (peak_ratio > 0.005):
+    if (brightness > 200) and (contrast > 20) and (0.075 >peak_ratio > 0.005):
+        print(peak_ratio)
         result['has_moire'] = True
         result['is_good_quality'] = False
         result['issues'].append('moire_pattern')
@@ -2352,11 +2393,11 @@ def enhance_image_quality(image, quality_info):
     
     if quality_info['has_moire']:
         # Áp dụng bộ lọc fastNlMeansDenoisingColored
-        denoised = cv2.bilateralFilter(enhanced, d=9, sigmaColor=75, sigmaSpace=75)
+        denoised = cv2.bilateralFilter(enhanced, d=5, sigmaColor=75, sigmaSpace=75)
 
         # Tạo hiệu ứng Unsharp Mask:
         # Công thức: sharpened = (1 + amount)*img - amount*blurred
-        amount = 0.5  # điều chỉnh mức tăng nét (có thể từ 0.3 đến 1.0)
+        amount = 0.3  # điều chỉnh mức tăng nét (có thể từ 0.3 đến 1.0)
         blurred = cv2.GaussianBlur(denoised, (9, 9), 10)
         sharpened = cv2.addWeighted(denoised, 1 + amount, blurred, -amount, 0)
         enhanced = sharpened
@@ -2377,9 +2418,15 @@ def enhance_image_quality(image, quality_info):
     # 3. Xử lý khi ảnh có độ tương phản thấp
     if 'low_contrast' in quality_info['issues']:
         # Tăng độ tương phản bằng CLAHE
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-        enhanced = clahe.apply(enhanced)
-    
+        # clahe = cv2.createCLAHE(clipLimit=1.5, tileGridSize=(18, 18))
+        # enhanced = clahe.apply(enhanced)
+        
+        # Convert numpy array to PIL Image
+        enhanced_pil = Image.fromarray(enhanced)
+        enhancer = ImageEnhance.Contrast(enhanced_pil)
+        enhanced_pil = enhancer.enhance(2.0)
+        # Convert back to numpy array
+        enhanced = np.array(enhanced_pil)
     # 4. Xử lý khi ảnh bị chói (glare)
     if quality_info['has_glare']:
         # Áp dụng ngưỡng thích ứng để giảm tác động của vùng quá sáng
