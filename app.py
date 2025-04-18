@@ -433,8 +433,59 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                 # Cắt ROI
                 roi = image[y1:y2, x1:x2]
                 image_aligned = image
-                # Tiền xử lý ROI cho OCR
-                roi_processed = preprocess_roi_for_ocr(roi, i, original_filename, roi_name, image_aligned, x1, y1, x2, y2)
+                
+                # Kiểm tra xem có phải là trường hợp đặc biệt của machine_code="F41" với allowed_values chứa "ON" và "OFF" không
+                is_special_f41_case = False
+                allowed_values = []
+                
+                # Lấy thông tin allowed_values từ roi_info.json
+                try:
+                    roi_json_path = 'roi_data/roi_info.json'
+                    if not os.path.exists(roi_json_path):
+                        roi_json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'roi_data/roi_info.json')
+                    
+                    with open(roi_json_path, 'r', encoding='utf-8') as f:
+                        roi_info = json.load(f)
+
+                    # Tìm allowed_values cho ROI hiện tại
+                    if (machine_code == "F41" and
+                        machine_code in roi_info.get("machines", {}) and 
+                        "screens" in roi_info["machines"][machine_code] and 
+                        screen_id in roi_info["machines"][machine_code]["screens"]):
+                        roi_list = roi_info["machines"][machine_code]["screens"][screen_id]
+                        for roi_item in roi_list:
+                            if isinstance(roi_item, dict) and roi_item.get("name") == roi_name and "allowed_values" in roi_item:
+                                allowed_values = roi_item["allowed_values"]
+                                # Kiểm tra nếu allowed_values chứa "ON" và "OFF"
+                                if "ON" in allowed_values and "OFF" in allowed_values:
+                                    is_special_f41_case = True
+                                break
+                except Exception as e:
+                    print(f"Error checking allowed_values for ROI {roi_name}: {str(e)}")
+                
+                # Nếu là trường hợp đặc biệt của F41, phân tích màu sắc thay vì OCR
+                if is_special_f41_case:
+                    # Tách các kênh màu BGR
+                    b, g, r = cv2.split(roi)
+                    # Tính giá trị trung bình của kênh xanh dương và đỏ
+                    avg_blue = np.mean(b)
+                    avg_red = np.mean(r)
+                    # Xác định kết quả dựa trên màu sắc chủ đạo
+                    if avg_blue > avg_red:
+                        best_text = "OFF"
+                    else:
+                        best_text = "ON"
+                    results.append({
+                        "roi_index": roi_name,
+                        "text": best_text,
+                        "confidence": 1.0,  # Đặt độ tin cậy là 100% vì dựa trên phân tích màu sắc
+                        "has_text": True
+                    })
+                    
+                    continue  # Chuyển sang ROI tiếp theo
+                
+                # Tiền xử lý ROI cho OCR (cho các trường hợp thông thường)
+                roi_processed, roi_quality_info = preprocess_roi_for_ocr(roi, i, original_filename, roi_name, image_aligned, x1, y1, x2, y2)
                 
                 # Kiểm tra xem ảnh đã tiền xử lý có thành công không
                 if roi_processed is None:
@@ -536,47 +587,53 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                             if allowed_values and len(allowed_values) > 0:
                                 print(f"Found allowed_values for ROI {roi_name}: {allowed_values}")
                                 
-                                # Bước 1: Ưu tiên khớp từ ký tự đầu tiên
-                                first_char_matches = []
-                                
-                                for value in allowed_values:
-                                    if best_text and value and best_text[0] == value[0]:
-                                        first_char_matches.append(value)
-                                
-                                if first_char_matches:
-                                    # Có ít nhất một giá trị khớp ký tự đầu tiên
-                                    best_match = first_char_matches[0]
-                                    best_match_count = 1
-                                    
-                                    # Tìm giá trị có nhiều ký tự khớp liên tiếp nhất
-                                    for value in first_char_matches:
-                                        current_count = 0
-                                        for i in range(min(len(best_text), len(value))):
-                                            if best_text[i] == value[i]:
-                                                current_count += 1
-                                            else:
-                                                break
-                                        
-                                        if current_count > best_match_count:
-                                            best_match = value
-                                            best_match_count = current_count
-                                            print(f"Better match found: '{value}' with {current_count} consecutive character(s)")
-                                    
-                                    print(f"Changed best_text from '{best_text}' to '{best_match}' based on first character match")
-                                    best_text = best_match
+                                # Tìm khớp chính xác
+                                if best_text in allowed_values:
+                                    print(f"Found exact match for '{best_text}' in allowed_values")
+                                    # Đã có trong allowed_values, không cần sửa đổi gì
                                 else:
-                                    # Không có giá trị nào khớp ký tự đầu tiên, tìm khớp ở vị trí khác
-                                    match_found = False
+                                    print(f"No exact match for '{best_text}' in allowed_values. Trying to find partial match...")
+                                    # Không tìm thấy khớp chính xác, tìm kiếm khớp một phần
+                                    first_char_matches = []
                                     for value in allowed_values:
-                                        for i in range(1, min(len(best_text), len(value))):
-                                            if best_text[i] == value[i]:
-                                                print(f"Match found at position {i}: '{best_text[i]}' with '{value}'")
-                                                best_text = value
-                                                print(f"Changed best_text to '{value}' based on match at position {i}")
-                                                match_found = True
+                                        if len(best_text) > 0 and len(value) > 0 and best_text[0] == value[0]:
+                                            first_char_matches.append(value)
+                                    
+                                    if first_char_matches:
+                                        print(f"Found values with matching first character: {first_char_matches}")
+                                        # Mặc định sử dụng giá trị đầu tiên khớp
+                                        best_match = first_char_matches[0]
+                                        best_match_count = 1
+                                        
+                                        # Tìm giá trị có nhiều ký tự khớp liên tiếp nhất
+                                        for value in first_char_matches:
+                                            current_count = 0
+                                            for i in range(min(len(best_text), len(value))):
+                                                if best_text[i] == value[i]:
+                                                    current_count += 1
+                                                else:
+                                                    break
+                                            
+                                            if current_count > best_match_count:
+                                                best_match = value
+                                                best_match_count = current_count
+                                                print(f"Better match found: '{value}' with {current_count} consecutive character(s)")
+                                        
+                                        print(f"Changed best_text from '{best_text}' to '{best_match}' based on first character match")
+                                        best_text = best_match
+                                    else:
+                                        # Không có giá trị nào khớp ký tự đầu tiên, tìm khớp ở vị trí khác
+                                        match_found = False
+                                        for value in allowed_values:
+                                            for i in range(1, min(len(best_text), len(value))):
+                                                if best_text[i] == value[i]:
+                                                    print(f"Match found at position {i}: '{best_text[i]}' with '{value}'")
+                                                    best_text = value
+                                                    print(f"Changed best_text to '{value}' based on match at position {i}")
+                                                    match_found = True
+                                                    break
+                                            if match_found:
                                                 break
-                                        if match_found:
-                                            break
                     except Exception as e:
                         print(f"Error checking allowed_values for ROI {roi_name}: {str(e)}")
                     
@@ -594,8 +651,17 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                 best_text = best_text.upper()
                 print(best_text)
                 best_text = best_text.replace('O', '0').replace('I', '1').replace('C','0').replace('S','5').replace('G','6').replace('B','8')
+                
+                # Xử lý kết quả OCR có khoảng trắng giữa các số (ví dụ: "1 3")
+                if ' ' in best_text and all(c.isdigit() or c == ' ' or c == '.' or c == '-' for c in best_text):
+                    print(f"Found spaces in numeric result: '{best_text}'. Removing spaces...")
+                    best_text = best_text.replace(' ', '')
+                    print(f"After removing spaces: '{best_text}'")
+                
                 if '-' in best_text[1:]:
                     best_text = best_text[:-1] + best_text[-1].replace('-', '')
+                
+                # Kiểm tra lại sau khi đã xóa khoảng trắng
                 if has_text and re.match(r'^-?\d+\.?\d*$', best_text):
                     try:
                         # Kiểm tra xem có cấu hình cho ROI này không
@@ -663,10 +729,18 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                                         print(decimal_places)
                                         # Thêm phần thập phân nếu cần
                                         if decimal_places > 0:
-                                            # Thêm dấu chấm và số 0 theo đúng quy định decimal_places
-                                            formatted_text = f"{num_str}.{'0' * decimal_places}"
+                                            # Đặt dấu chấm vào vị trí thích hợp: (độ dài - decimal_places)
+                                            if len(num_str) <= decimal_places:
+                                                # Nếu số chữ số ít hơn hoặc bằng decimal_places, thêm số 0 ở đầu
+                                                padded_str = num_str.zfill(decimal_places)
+                                                formatted_text = f"0.{padded_str}"
+                                            else:
+                                                # Đặt dấu chấm vào vị trí thích hợp
+                                                insert_pos = len(num_str) - decimal_places
+                                                formatted_text = f"{num_str[:insert_pos]}.{num_str[insert_pos:]}"
+                                            
                                             formatted_text = '-' + str(formatted_text) if is_negative else str(formatted_text)
-                                            print(f"Added {decimal_places} decimal zeros to {num_str} for ROI {roi_name}")
+                                            print(f"Formatted integer value {num_str} with decimal_places={decimal_places}: {formatted_text}")
                                         else:
                                             # Giữ nguyên số nguyên nếu không cần thập phân
                                             formatted_text = num_str
@@ -684,9 +758,173 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                     "original_value": original_value
                 })
                 print(f"Added result for ROI {i} ({roi_name}): Original: '{best_text}', Formatted: '{formatted_text}'")
-                if best_confidence < 0.1:
-                    print(f"The result with highest confidence is still below 30%. Returning empty results.")
-                    return []
+                if best_confidence < 0.1 or (roi_quality_info is not None and 'low_contrast' in roi_quality_info['issues'] and best_confidence < 0.5):
+                    print(f"Confidence is below threshold or image has low contrast. Trying alternative approach with connected component analysis...")
+                    
+                    # Thực hiện phân tích thành phần liên kết như trong color_detector.py
+                    # 1. Chuyển ảnh ROI sang grayscale nếu chưa phải
+                    if len(roi.shape) > 2:
+                        roi_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+                    else:
+                        roi_gray = roi.copy()
+                    
+                    # 2. Làm mờ nhẹ để giảm nhiễu bề mặt
+                    roi_blur = cv2.GaussianBlur(roi_gray, (7,7), 0)
+                    
+                    # 3. Áp dụng adaptive threshold để tách nền thay đổi độ sáng
+                    roi_th = cv2.adaptiveThreshold(
+                        roi_blur, 255,
+                        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                        cv2.THRESH_BINARY_INV,  # Đảo ngược để số là màu trắng, nền đen
+                        blockSize=11, C=2
+                    )
+                    
+                    # 4. Sử dụng connected component analysis để lọc dựa trên kích thước
+                    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(roi_th, connectivity=8)
+                    
+                    # Tạo một mask trống để giữ lại các số
+                    digit_mask = np.zeros_like(roi_th)
+                    
+                    # Lọc các thành phần dựa trên kích thước (có thể điều chỉnh các giá trị này)
+                    min_area = 50      # Diện tích tối thiểu của số
+                    max_area = 2000    # Diện tích tối đa của số
+                    min_width = 5      # Chiều rộng tối thiểu
+                    min_height = 10    # Chiều cao tối thiểu
+                    max_width = 100    # Chiều rộng tối đa
+                    max_height = 100   # Chiều cao tối đa
+                    aspect_ratio_min = 0.2  # Tỷ lệ chiều rộng/chiều cao tối thiểu
+                    aspect_ratio_max = 5.0  # Tỷ lệ chiều rộng/chiều cao tối đa
+                    
+                    # Bỏ qua label 0 vì đó là nền (background)
+                    for label in range(1, num_labels):
+                        # Lấy thông tin của component
+                        x, y, w, h, area = stats[label]
+                        
+                        # Tính toán tỷ lệ khung hình
+                        aspect_ratio = w / h if h > 0 else 0
+                        
+                        # Kiểm tra các điều kiện để xác định là số
+                        if (min_area < area < max_area and 
+                            min_width < w < max_width and 
+                            min_height < h < max_height and
+                            aspect_ratio_min < aspect_ratio < aspect_ratio_max):
+                            # Đây có khả năng là số, giữ lại trong mask
+                            digit_mask[labels == label] = 255
+                    
+                    # Lưu ảnh digit_mask để debug
+                    processed_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'processed_roi')
+                    base_filename = os.path.splitext(original_filename)[0]
+                    digit_mask_filename = f"{base_filename}_{roi_name}_digit_mask.png"
+                    digit_mask_path = os.path.join(processed_folder, digit_mask_filename)
+                    cv2.imwrite(digit_mask_path, digit_mask)
+                    print(f"Saved digit mask to: {digit_mask_path}")
+                    
+                    # 5. Thực hiện OCR trên mask đã tạo
+                    retry_results = reader.readtext(digit_mask, detail=1, 
+                                            paragraph=False, 
+                                            batch_size=1, 
+                                            text_threshold=0.4,
+                                            link_threshold=0.2, 
+                                            low_text=0.3, 
+                                            mag_ratio=2, 
+                                            slope_ths=0.05,
+                                            decoder='beamsearch')
+                    
+                    print(f"Retry OCR results: {retry_results}")
+                    
+                    # Kiểm tra nếu có kết quả mới và confidence cao hơn
+                    if retry_results and len(retry_results) > 0:
+                        # Tìm kết quả có confidence cao nhất
+                        best_retry_result = max(retry_results, key=lambda x: x[2])
+                        retry_text = best_retry_result[1]  # Text
+                        retry_confidence = best_retry_result[2]  # Confidence
+                        
+                        print(f"Best retry result: '{retry_text}' with confidence {retry_confidence}")
+                        
+                        # Xử lý khoảng trắng giữa các số (tương tự như xử lý trên best_text)
+                        retry_text = retry_text.upper()
+                        retry_text = retry_text.replace('O', '0').replace('I', '1').replace('C','0').replace('S','5').replace('G','6').replace('B','8')
+                        
+                        # Xử lý kết quả OCR có khoảng trắng giữa các số (ví dụ: "1 3")
+                        if ' ' in retry_text and all(c.isdigit() or c == ' ' or c == '.' or c == '-' for c in retry_text):
+                            print(f"Found spaces in retry numeric result: '{retry_text}'. Removing spaces...")
+                            retry_text = retry_text.replace(' ', '')
+                            print(f"After removing spaces: '{retry_text}'")
+                        
+                        # Chỉ sử dụng kết quả mới nếu có độ tin cậy cao hơn
+                        if retry_confidence > best_confidence:
+                            print(f"Using retry result instead of original result.")
+                            
+                            # Áp dụng định dạng theo decimal_places nếu kết quả là số và có cấu hình
+                            formatted_retry_text = retry_text
+                            if re.match(r'^-?\d+\.?\d*$', retry_text) and (
+                                machine_code in decimal_places_config and 
+                                screen_id in decimal_places_config[machine_code] and 
+                                roi_name in decimal_places_config[machine_code][screen_id]):
+                                
+                                try:
+                                    is_negative = retry_text.startswith('-')
+                                    clean_text = retry_text[1:] if is_negative else retry_text
+                                    decimal_places = int(decimal_places_config[machine_code][screen_id][roi_name])
+                                    print(f"Applying decimal places {decimal_places} to retry text: {retry_text}")
+                                    
+                                    # Xử lý tương tự như phần xử lý decimal_places ở trên
+                                    if decimal_places == 0:
+                                        # Nếu decimal_places là 0, bỏ dấu chấm
+                                        formatted_retry_text = clean_text.replace('.', '')
+                                    else:
+                                        # Xử lý vị trí dấu thập phân
+                                        if '.' in clean_text:
+                                            int_part, dec_part = clean_text.split('.')
+                                            all_digits = int_part + dec_part
+                                            
+                                            if decimal_places > 0:
+                                                if len(all_digits) <= decimal_places:
+                                                    padded_str = all_digits.zfill(decimal_places)
+                                                    formatted_retry_text = f"0.{padded_str}"
+                                                else:
+                                                    insert_pos = len(all_digits) - decimal_places
+                                                    formatted_retry_text = f"{all_digits[:insert_pos]}.{all_digits[insert_pos:]}"
+                                            else:
+                                                formatted_retry_text = all_digits
+                                        else:
+                                            # Không có dấu chấm (số nguyên)
+                                            if decimal_places > 0:
+                                                # Đặt dấu chấm vào vị trí thích hợp: (độ dài - decimal_places)
+                                                if len(clean_text) <= decimal_places:
+                                                    # Nếu số chữ số ít hơn hoặc bằng decimal_places, thêm số 0 ở đầu
+                                                    padded_str = clean_text.zfill(decimal_places)
+                                                    formatted_retry_text = f"0.{padded_str}"
+                                                else:
+                                                    # Đặt dấu chấm vào vị trí thích hợp
+                                                    insert_pos = len(clean_text) - decimal_places
+                                                    formatted_retry_text = f"{clean_text[:insert_pos]}.{clean_text[insert_pos:]}"
+                                                
+                                                print(f"Formatted integer retry value {clean_text} with decimal_places={decimal_places}: {formatted_retry_text}")
+                                            else:
+                                                formatted_retry_text = clean_text
+                                    
+                                    # Thêm dấu âm nếu cần
+                                    if is_negative:
+                                        formatted_retry_text = f"-{formatted_retry_text}"
+                                        
+                                    print(f"Formatted retry text: {formatted_retry_text}")
+                                except Exception as e:
+                                    print(f"Error formatting retry text: {str(e)}")
+                            
+                            # Cập nhật kết quả
+                            results[-1]["text"] = formatted_retry_text.replace('C','0')
+                            results[-1]["confidence"] = retry_confidence
+                            results[-1]["has_text"] = True
+                            results[-1]["original_value"] = retry_text
+                            best_confidence = retry_confidence
+                    else:
+                        print(f"No better results found with alternative approach.")
+                    
+                    # Nếu confidence vẫn thấp dưới 0.1, trả về mảng rỗng
+                    if best_confidence < 0.1:
+                        print(f"The result with highest confidence is still below 0.1. Returning empty results.")
+                        return []
                 # Kiểm tra độ tin cậy của OCR
                 # if best_confidence < 0.3:  # Nếu độ tin cậy < 30%
                 #     print(f"Warning: Low confidence ({best_confidence:.2f}) for ROI {roi_name}, text: '{best_text}'")
@@ -696,9 +934,6 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                 traceback.print_exc()
                 continue
         
-        # Kiểm tra nếu kết quả có độ tin cậy cao nhất < 30%, trả về mảng rỗng
-
-            
         return results
     
     except Exception as e:
@@ -1441,19 +1676,16 @@ def set_machine_screen():
     except Exception as e:
         return jsonify({"error": f"Failed to update machine and screen selection: {str(e)}"}), 500
 
-# API mới: Kiểm tra tình trạng cấu hình ROI và decimal places cho máy và màn hình
+# API mới: Kiểm tra tình trạng cấu hình của một máy và màn hình cụ thể.
+# Kiểm tra xem đã có ROI và cấu hình decimal places cho mỗi ROI hay chưa.
+# 
+# Query parameters:
+# - machine_code: Mã máy (ví dụ: "F1")
+# - screen_id: ID màn hình (số nguyên)
+# 
+# Nếu không cung cấp tham số, lấy thông tin từ máy và màn hình hiện tại.
 @app.route('/api/machine_screen_status', methods=['GET'])
 def check_machine_screen_status():
-    """
-    Kiểm tra tình trạng cấu hình của một máy và màn hình cụ thể.
-    Kiểm tra xem đã có ROI và cấu hình decimal places cho mỗi ROI hay chưa.
-    
-    Query parameters:
-    - machine_code: Mã máy (ví dụ: "F1")
-    - screen_id: ID màn hình (số nguyên)
-    
-    Nếu không cung cấp tham số, lấy thông tin từ máy và màn hình hiện tại.
-    """
     try:
         # Lấy machine_code và screen_id từ query parameters
         machine_code = request.args.get('machine_code')
@@ -1737,7 +1969,7 @@ def preprocess_hmi_image(image, roi_coordinates, original_filename):
         # 3. Ngưỡng (threshold) để tách chữ số
         # -------------------------------
         # Sử dụng Otsu's threshold
-        _, thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        _, thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
 
         # -------------------------------
         # 4. (Tuỳ chọn) Invert nếu chữ số tối trên nền sáng
@@ -1957,7 +2189,7 @@ def preprocess_roi_for_ocr(roi, roi_index, original_filename, roi_name=None, ima
         roi_name: Tên ROI (tùy chọn)
         
     Returns:
-        Ảnh ROI đã được tiền xử lý
+        Tuple: (Ảnh ROI đã được tiền xử lý, thông tin chất lượng ảnh)
     """
     # Sử dụng tên ROI nếu có, nếu không sử dụng chỉ số
     x1, y1, x2, y2 = x1, y1, x2, y2
@@ -1966,7 +2198,7 @@ def preprocess_roi_for_ocr(roi, roi_index, original_filename, roi_name=None, ima
     # Kiểm tra nếu ảnh rỗng
     if roi is None or roi.size == 0 or roi.shape[0] <= 5 or roi.shape[1] <= 5:
         print(f"ROI {identifier} quá nhỏ hoặc rỗng, bỏ qua")
-        return None
+        return None, None
     
     # Tạo thư mục để lưu ảnh ROI đã xử lý (nếu chưa tồn tại)
     processed_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'processed_roi')
@@ -2087,7 +2319,7 @@ def preprocess_roi_for_ocr(roi, roi_index, original_filename, roi_name=None, ima
         cv2.imwrite(processed_path, closing)
         
         print(f"Saved processed ROI to: {processed_path}")
-        return closing  # Trả về ảnh grayscale
+        return closing, quality_info  # Trả về ảnh grayscale và thông tin chất lượng
     else:
         print(f"Không tìm thấy contour hợp lệ để cắt cho ROI {identifier}.")
         closing = cv2.blur(closing, (4, 4))
@@ -2095,7 +2327,7 @@ def preprocess_roi_for_ocr(roi, roi_index, original_filename, roi_name=None, ima
         processed_filename = f"{base_filename}_{identifier}_processed.png"
         processed_path = os.path.join(processed_folder, processed_filename)
         cv2.imwrite(processed_path, closing)
-        return closing  # Hoặc closing
+        return closing, quality_info  # Trả về ảnh grayscale và thông tin chất lượng
 
 
 def is_named_roi_format(roi_list):
@@ -2324,7 +2556,7 @@ def check_image_quality(image):
     peak_ratio = peaks / np.sum(mask)  # Tỷ lệ so với vùng được lọc
     
     # Quyết định
-    if (brightness > 200) and (contrast > 20) and (0.075 >peak_ratio > 0.005):
+    if (brightness > 200) and (contrast > 20) and (0.077 >peak_ratio > 0.005):
         print(peak_ratio)
         result['has_moire'] = True
         result['is_good_quality'] = False
@@ -2433,7 +2665,7 @@ def enhance_image_quality(image, quality_info):
         enhanced = cv2.adaptiveThreshold(
             enhanced, 
             255, 
-            cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
             cv2.THRESH_BINARY, 
             blockSize=11, 
             C=2
@@ -2446,9 +2678,20 @@ def enhance_image_quality(image, quality_info):
 # Thêm các hàm phát hiện màn hình HMI từ hmi_image_detector.py
 def enhance_image(image):
     """Cải thiện chất lượng ảnh trước khi phát hiện cạnh"""
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    pil_image = Image.fromarray(image_rgb)
+    
+    # Tăng độ tương phản với PIL
+    enhancer = ImageEnhance.Contrast(pil_image)
+    enhanced_pil = enhancer.enhance(2.0)  # Tăng độ tương phản lên 100%
+    
+    # Chuyển lại về định dạng OpenCV
+    enhanced_image = cv2.cvtColor(np.array(enhanced_pil), cv2.COLOR_RGB2BGR)
+    
+    # Tiếp tục quy trình xử lý ảnh như trước
+    gray = cv2.cvtColor(enhanced_image, cv2.COLOR_BGR2GRAY)
     # Tăng clip limit để cải thiện độ tương phản
-    clahe = cv2.createCLAHE(clipLimit=4.0, tileGridSize=(11, 11))  # Tăng từ 2.0 lên 4.0
+    clahe = cv2.createCLAHE(clipLimit=4.0, tileGridSize=(11, 11))  # Tăng từ 3.0 lên 4.0
     enhanced = clahe.apply(gray)
     
     # Tăng độ tương phản
@@ -2471,7 +2714,7 @@ def adaptive_edge_detection(image):
     sobel_edges = cv2.magnitude(sobelx, sobely)
     sobel_edges = cv2.normalize(sobel_edges, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
     # Giảm ngưỡng sobel để bắt được nhiều cạnh hơn
-    _, sobel_edges = cv2.threshold(sobel_edges, 40, 255, cv2.THRESH_BINARY)  # Giảm từ 50 xuống 40
+    _, sobel_edges = cv2.threshold(sobel_edges, 80, 255, cv2.THRESH_BINARY)  # Giảm từ 50 xuống 40
     
     combined_edges = cv2.bitwise_or(canny_edges, sobel_edges)
     
