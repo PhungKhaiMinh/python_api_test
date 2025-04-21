@@ -19,8 +19,8 @@ try:
     import easyocr
     HAS_EASYOCR = True
     # Khởi tạo đối tượng reader ở cấp độ global
-    reader = easyocr.Reader(['en'], gpu=False)
-    print("EasyOCR initialized successfully")
+    reader = easyocr.Reader(['en'], gpu=True)
+    print("EasyOCR initialized successfully with GPU")
 except ImportError:
     print("EasyOCR not installed. OCR functionality will be limited.")
     HAS_EASYOCR = False
@@ -501,7 +501,7 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                 # Thử OCR trên toàn bộ ROI
                 try:
                     # Specify the characters to read (digits only)
-                    ocr_results = reader.readtext(roi_processed, allowlist='0123456789.-ABCDGHIKLNOTUabcdghiklnotu', 
+                    ocr_results = reader.readtext(roi_processed, allowlist='0123456789.-ABCDEFGHIKLNORTUabcdefghiklnortu', 
                     detail=1, 
                     paragraph=False, 
                     batch_size=1, 
@@ -558,7 +558,7 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                     best_text = best_text.upper()
                     # Thêm kết quả cho ROI này (không có original_value cho kết quả text)
                     if len(best_text) == 1:
-                        best_text = best_text.replace('O', '0').replace('I', '1').replace('C','0').replace('S','5').replace('G','6').replace('A','4').replace('H','8').replace('L','1').replace('T','7').replace('U','0').replace('E','3').replace('Z','2')
+                        best_text = best_text.replace('O', '0').replace('I', '1').replace('C','0').replace('S','5').replace('G','6').replace('A','4').replace('H','8').replace('L','1').replace('T','7').replace('U','0').replace('E','3').replace('Z','2').replace('Q','0')
                     # Giả sử best_text là một chuỗi đầu vào
 
                     # Kiểm tra nếu ROI này có allowed_values trong roi_info.json
@@ -650,7 +650,7 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                 is_negative = best_text.startswith('-')
                 best_text = best_text.upper()
                 print(best_text)
-                best_text = best_text.replace('O', '0').replace('I', '1').replace('C','0').replace('S','5').replace('G','6').replace('B','8')
+                best_text = best_text.replace('O', '0').replace('I', '1').replace('C','0').replace('S','5').replace('G','6').replace('B','8').replace('T','7').replace('L','1').replace('H','8').replace('A','4').replace('E','3').replace('Z','2').replace('U','0')
                 
                 # Xử lý kết quả OCR có khoảng trắng giữa các số (ví dụ: "1 3")
                 if ' ' in best_text and all(c.isdigit() or c == ' ' or c == '.' or c == '-' for c in best_text):
@@ -749,10 +749,16 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                     except Exception as e:
                         print(f"Error applying decimal places format for ROI {roi_name}: {str(e)}")
                 
+                # Kiểm tra nếu ROI có chứa "working hours" trong tên 
+                # và kết quả đọc được là định dạng kiểu số.số.số
+                if "working hours" in roi_name.lower() and re.match(r'^\d+\.\d+\.\d+$', formatted_text):
+                    # Chuyển đổi từ định dạng số.số.số sang số:số:số
+                    formatted_text = formatted_text.replace('.', ':').replace(' ', ':').replace('-', ':')
+                
                 # Thêm kết quả cho ROI này
                 results.append({
                     "roi_index": roi_name,
-                    "text": formatted_text.replace('C','0'),  # Trả về text đã định dạng theo quy định số chữ số thập phân
+                    "text": formatted_text,  # Trả về text đã định dạng theo quy định số chữ số thập phân
                     "confidence": best_confidence,
                     "has_text": has_text,
                     "original_value": original_value

@@ -1,0 +1,169 @@
+{
+  "filename": "F1_main_test1_F1_Main Machine Parameters.jpg",
+  "machine_code": "F1",
+  "screen_id": "Main Machine Parameters",
+  "timestamp": "2025-04-19 04:40:19",
+  "template_path": "d:\\Wrembly\\python_api_test\\roi_data\\reference_images\\template_F1_Main Machine Parameters.jpg",
+  "results": [
+    {
+      "roi_index": "Enable",
+      "text": "ON",
+      "confidence": 0.9921973647521131,
+      "has_text": true
+    },
+    {
+      "roi_index": "Brake",
+      "text": "OFF",
+      "confidence": 0.9976389015142592,
+      "has_text": true
+    },
+    {
+      "roi_index": "EN.Home",
+      "text": "OFF",
+      "confidence": 0.9907448033388276,
+      "has_text": true
+    },
+    {
+      "roi_index": "JOG.Mode",
+      "text": "OFF",
+      "confidence": 0.998755256740775,
+      "has_text": true
+    },
+    {
+      "roi_index": "Stop dec",
+      "text": "10000",
+      "confidence": 0.6568739308180274,
+      "has_text": true,
+      "original_value": "100OO"
+    },
+    {
+      "roi_index": "Position_1",
+      "text": "3.75",
+      "confidence": 0.9998043179512024,
+      "has_text": true,
+      "original_value": "3.75"
+    },
+    {
+      "roi_index": "Speed_1",
+      "text": "700.0",
+      "confidence": 0.9999055838953246,
+      "has_text": true,
+      "original_value": "700.0"
+    },
+    {
+      "roi_index": "Acc_1",
+      "text": "150000",
+      "confidence": 0.8812977725010992,
+      "has_text": true,
+      "original_value": "150000"
+    },
+    {
+      "roi_index": "Dec_1",
+      "text": "150000",
+      "confidence": 0.8008208457068015,
+      "has_text": true,
+      "original_value": "150000"
+    },
+    {
+      "roi_index": "Jerk_1",
+      "text": "1500000",
+      "confidence": 0.16508762141158487,
+      "has_text": true,
+      "original_value": "150O000"
+    },
+    {
+      "roi_index": "Start_1",
+      "text": "03",
+      "confidence": 0.5002083013027115,
+      "has_text": true,
+      "original_value": "03"
+    },
+    {
+      "roi_index": "Position_2",
+      "text": "120.00",
+      "confidence": 0.831666806558173,
+      "has_text": true,
+      "original_value": "120.00"
+    },
+    {
+      "roi_index": "Speed_2",
+      "text": "130.0",
+      "confidence": 0.8874398771135457,
+      "has_text": true,
+      "original_value": "130.0"
+    },
+    {
+      "roi_index": "Acc_2",
+      "text": "150000",
+      "confidence": 0.8147848350693685,
+      "has_text": true,
+      "original_value": "150000"
+    },
+    {
+      "roi_index": "Dec_2",
+      "text": "150000",
+      "confidence": 0.47946206958915966,
+      "has_text": true,
+      "original_value": "150000"
+    },
+    {
+      "roi_index": "Jerk_2",
+      "text": "ISOOUOO",
+      "confidence": 0.10536427554753315,
+      "has_text": true
+    },
+    {
+      "roi_index": "Start_2",
+      "text": ".04",
+      "confidence": 0.1749833366476932,
+      "has_text": true,
+      "original_value": ".04"
+    },
+    {
+      "roi_index": "Position_3",
+      "text": "172.04",
+      "confidence": 0.9992245641829051,
+      "has_text": true,
+      "original_value": "172.04"
+    },
+    {
+      "roi_index": "Speed_3",
+      "text": "990.0",
+      "confidence": 0.771512072740371,
+      "has_text": true,
+      "original_value": "990.0"
+    },
+    {
+      "roi_index": "Acc_3",
+      "text": "ISCUUU",
+      "confidence": 0.10394262261100475,
+      "has_text": true
+    },
+    {
+      "roi_index": "Dec_3",
+      "text": "150000",
+      "confidence": 0.12751240184425636,
+      "has_text": true,
+      "original_value": "150oou"
+    },
+    {
+      "roi_index": "Jerk_3",
+      "text": "1500000",
+      "confidence": 0.7028715923474214,
+      "has_text": true,
+      "original_value": "1500000"
+    },
+    {
+      "roi_index": "Start_3",
+      "text": "0",
+      "confidence": 0.9998419347287069,
+      "has_text": true,
+      "original_value": "0"
+    }
+  ],
+  "hmi_detection": {
+    "hmi_detected": true,
+    "hmi_image": "/api/images/hmi_detection/refined_hmi_F1_Main Machine Parameters.png",
+    "visualization": "/api/images/hmi_detection/hmi_visualization_F1_Main Machine Parameters.png"
+  }
+}

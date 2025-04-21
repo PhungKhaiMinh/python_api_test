@@ -6,27 +6,27 @@
                 {
                     "id": 1,
                     "screen_id": "Faults",
-                    "description": "Màn hình hiển thị lỗi"
+                    "description": "bell 2.png"
                 },
                 {
                     "id": 2,
                     "screen_id": "Production Data",
-                    "description": "Màn hình dữ liệu sản xuất"
+                    "description": "bell 2.png"
                 },
                 {
                     "id": 3,
                     "screen_id": "Feeders and Conveyors",
-                    "description": "Màn hình băng tải và cấp liệu"
+                    "description": "bell 2.png"
                 },
                 {
                     "id": 4,
                     "screen_id": "Main Machine Parameters",
-                    "description": "Màn hình thông số chính của máy"
+                    "description": "bell 2.png"
                 },
                 {
                     "id": 5,
                     "screen_id": "Selectors and Maintenance",
-                    "description": "Màn hình chọn và bảo trì"
+                    "description": "bell 2.png"
                 }
             ]
         },
@@ -36,32 +36,32 @@
                 {
                     "id": 1,
                     "screen_id": "Clamp",
-                    "description": "Màn hình kẹp"
+                    "description": "bell 2.png"
                 },
                 {
                     "id": 2,
                     "screen_id": "Ejector",
-                    "description": "Màn hình đẩy"
+                    "description": "bell 2.png"
                 },
                 {
                     "id": 3,
                     "screen_id": "Injection",
-                    "description": "Màn hình phun"
+                    "description": "Mbell 2.png"
                 },
                 {
                     "id": 4,
                     "screen_id": "Temp",
-                    "description": "Màn hình nhiệt độ"
+                    "description": "bell 2.png"
                 },
                 {
                     "id": 5,
                     "screen_id": "Production",
-                    "description": "Màn hình sản xuất"
+                    "description": "bell 2.png"
                 },
                 {
                     "id": 6,
                     "screen_id": "Alarm",
-                    "description": "Màn hình báo động"
+                    "description": "bell 2.png"
                 }
             ]
         },
@@ -71,27 +71,27 @@
                 {
                     "id": 1,
                     "screen_id": "Setting",
-                    "description": "Màn hình cài đặt"
+                    "description": "bell 2.png"
                 },
                 {
                     "id": 2,
                     "screen_id": "Temp",
-                    "description": "Màn hình nhiệt độ"
+                    "description": "bell 2.png"
                 },
                 {
                     "id": 3,
                     "screen_id": "Plasticizer",
-                    "description": "Màn hình nhựa hóa"
+                    "description": "bell 2.png"
                 },
                 {
                     "id": 4,
                     "screen_id": "Overview",
-                    "description": "Màn hình tổng quan"
+                    "description": "bell 2.png"
                 },
                 {
                     "id": 5,
                     "screen_id": "Tracking",
-                    "description": "Màn hình theo dõi"
+                    "description": "bell 2.png"
                 }
             ]
         }

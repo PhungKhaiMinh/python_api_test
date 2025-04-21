@@ -1,0 +1,696 @@
+{
+  "filename": "F42_overview_test1_F42_Overview.jpg",
+  "machine_code": "F42",
+  "screen_id": "Overview",
+  "timestamp": "2025-04-19 05:04:53",
+  "template_path": "d:\\Wrembly\\python_api_test\\roi_data\\reference_images\\template_F42_Overview.jpg",
+  "results": [
+    {
+      "roi_index": "Tgian chu ki",
+      "text": "27.27",
+      "confidence": 0.6005267700329718,
+      "has_text": true,
+      "original_value": "27.27"
+    },
+    {
+      "roi_index": "Vtri khuon",
+      "text": "0.00",
+      "confidence": 0.7696635127067566,
+      "has_text": true,
+      "original_value": "0.00"
+    },
+    {
+      "roi_index": "T gian dien",
+      "text": "1.565",
+      "confidence": 0.9705691940478454,
+      "has_text": true,
+      "original_value": "1.565"
+    },
+    {
+      "roi_index": "V tri EJ",
+      "text": "0.30",
+      "confidence": 0.9970962362398167,
+      "has_text": true,
+      "original_value": "0.30"
+    },
+    {
+      "roi_index": "Dem toi thieu",
+      "text": "21.76",
+      "confidence": 0.999997707583045,
+      "has_text": true,
+      "original_value": "21.76"
+    },
+    {
+      "roi_index": "T g d luong",
+      "text": "11.31",
+      "confidence": 0.6180842788175651,
+      "has_text": true,
+      "original_value": "11.31"
+    },
+    {
+      "roi_index": "V tri t vit",
+      "text": "130.00",
+      "confidence": 0.9560430493084797,
+      "has_text": true,
+      "original_value": "130.00"
+    },
+    {
+      "roi_index": "Ap suat dinh dien",
+      "text": "858",
+      "confidence": 0.8765004873275757,
+      "has_text": true,
+      "original_value": "858"
+    },
+    {
+      "roi_index": "Temp_che_do",
+      "text": "DAGIANHIET",
+      "confidence": 0.4092773619681868,
+      "has_text": true
+    },
+    {
+      "roi_index": "Vung5 temp_current",
+      "text": "225.1",
+      "confidence": 0.9999009990096966,
+      "has_text": true,
+      "original_value": "225.1"
+    },
+    {
+      "roi_index": "Vung5 temp_setup",
+      "text": "225.0",
+      "confidence": 0.9027747507434796,
+      "has_text": true,
+      "original_value": "225.0"
+    },
+    {
+      "roi_index": "Vung4 temp_current",
+      "text": "230.0",
+      "confidence": 0.7737849845771405,
+      "has_text": true,
+      "original_value": "230.0"
+    },
+    {
+      "roi_index": "Vung4 temp_setup",
+      "text": "230.0",
+      "confidence": 0.9999528720476615,
+      "has_text": true,
+      "original_value": "230.0"
+    },
+    {
+      "roi_index": "Vung3 temp_current",
+      "text": "229.8",
+      "confidence": 0.6349925645311907,
+      "has_text": true,
+      "original_value": "229.8"
+    },
+    {
+      "roi_index": "Vung3 temp_setup",
+      "text": "230.0",
+      "confidence": 0.9999039312042796,
+      "has_text": true,
+      "original_value": "230.0"
+    },
+    {
+      "roi_index": "Vung2 temp_current",
+      "text": "229.6",
+      "confidence": 0.7874010978078221,
+      "has_text": true,
+      "original_value": "229.6"
+    },
+    {
+      "roi_index": "Vung2 temp_setup",
+      "text": "230.0",
+      "confidence": 0.999881539874474,
+      "has_text": true,
+      "original_value": "230.0"
+    },
+    {
+      "roi_index": "Vung1 temp_current",
+      "text": "223.2",
+      "confidence": 0.994808855702317,
+      "has_text": true,
+      "original_value": "223.2"
+    },
+    {
+      "roi_index": "Vung1 temp_setup",
+      "text": "225.0",
+      "confidence": 0.9999912035129589,
+      "has_text": true,
+      "original_value": "225.0"
+    },
+    {
+      "roi_index": "CoFd temp_current",
+      "text": "43.1",
+      "confidence": 0.9065202720596163,
+      "has_text": true,
+      "original_value": "43.1"
+    },
+    {
+      "roi_index": "CoFd temp_setup",
+      "text": "45.0",
+      "confidence": 0.999274730682373,
+      "has_text": true,
+      "original_value": "45.0"
+    },
+    {
+      "roi_index": "G h t do giu",
+      "text": "20.0",
+      "confidence": 0.7972406939921833,
+      "has_text": true,
+      "original_value": "20.0"
+    },
+    {
+      "roi_index": "Thu4 Tgian",
+      "text": "TAT",
+      "confidence": 0.9369191096850835,
+      "has_text": true
+    },
+    {
+      "roi_index": "Thu4 Ap suat",
+      "text": "0",
+      "confidence": 0.9999601844936166,
+      "has_text": true,
+      "original_value": "0"
+    },
+    {
+      "roi_index": "Thu3 Tgian",
+      "text": "TAT",
+      "confidence": 0.7481743097305298,
+      "has_text": true
+    },
+    {
+      "roi_index": "Thu3 Ap suat",
+      "text": "0",
+      "confidence": 0.999941111477952,
+      "has_text": true,
+      "original_value": "0"
+    },
+    {
+      "roi_index": "Thu2 Tgian",
+      "text": "0.00",
+      "confidence": 0.98945152759552,
+      "has_text": true,
+      "original_value": "0.00"
+    },
+    {
+      "roi_index": "Thu2 Ap suat",
+      "text": "300",
+      "confidence": 0.9980142352741874,
+      "has_text": true,
+      "original_value": "300"
+    },
+    {
+      "roi_index": "Thu1 Tgian",
+      "text": "0.20",
+      "confidence": 0.9999628067016602,
+      "has_text": true,
+      "original_value": "0.20"
+    },
+    {
+      "roi_index": "Thu1 Ap suat",
+      "text": "300",
+      "confidence": 0.973640659818453,
+      "has_text": true,
+      "original_value": "300"
+    },
+    {
+      "roi_index": "Toc do lui",
+      "text": "TAT",
+      "confidence": 0.9044993388529008,
+      "has_text": true
+    },
+    {
+      "roi_index": "Cai dat Dien day Zero",
+      "text": "CHDO",
+      "confidence": 0.5530049204826355,
+      "has_text": true
+    },
+    {
+      "roi_index": "Flash",
+      "text": "0.033",
+      "confidence": 0.5672397390366206,
+      "has_text": true,
+      "original_value": "0.033"
+    },
+    {
+      "roi_index": "Kiem tra dong",
+      "text": "TAT",
+      "confidence": 0.9789495617123477,
+      "has_text": true
+    },
+    {
+      "roi_index": "G han tgian dien",
+      "text": "3.000",
+      "confidence": 0.9080775425938777,
+      "has_text": true,
+      "original_value": "3.000"
+    },
+    {
+      "roi_index": "V-P Vtri",
+      "text": "22.00",
+      "confidence": 0.9995625103077922,
+      "has_text": true,
+      "original_value": "22.00"
+    },
+    {
+      "roi_index": "V-P T do",
+      "text": "40.0",
+      "confidence": 0.9981264618325938,
+      "has_text": true,
+      "original_value": "40.0"
+    },
+    {
+      "roi_index": "Thu4 Vtri",
+      "text": "45.00",
+      "confidence": 0.9934693685797291,
+      "has_text": true,
+      "original_value": "45.00"
+    },
+    {
+      "roi_index": "Thu4 T do",
+      "text": "90.0",
+      "confidence": 0.9999821782112122,
+      "has_text": true,
+      "original_value": "90.0"
+    },
+    {
+      "roi_index": "Thu3 Vtri",
+      "text": "120.00",
+      "confidence": 0.9995452810869891,
+      "has_text": true,
+      "original_value": "120.00"
+    },
+    {
+      "roi_index": "Thu3 T do",
+      "text": "65.0",
+      "confidence": 0.9998985528945923,
+      "has_text": true,
+      "original_value": "65.0"
+    },
+    {
+      "roi_index": "Thu2 Vtri",
+      "text": "TAT",
+      "confidence": 0.9858099021218765,
+      "has_text": true
+    },
+    {
+      "roi_index": "Thu2 T do",
+      "text": "60.0",
+      "confidence": 0.9999839663505554,
+      "has_text": true,
+      "original_value": "60.0"
+    },
+    {
+      "roi_index": "Thu1 Vtri",
+      "text": "TAT",
+      "confidence": 0.9191678363494222,
+      "has_text": true
+    },
+    {
+      "roi_index": "Thu1 T do",
+      "text": "0.0",
+      "confidence": 0.9999943563098699,
+      "has_text": true,
+      "original_value": "0.0"
+    },
+    {
+      "roi_index": "Ap suat",
+      "text": "1000",
+      "confidence": 0.4747724235057831,
+      "has_text": true,
+      "original_value": "1000"
+    },
+    {
+      "roi_index": "Luc kep",
+      "text": "130",
+      "confidence": 0.9997197477630702,
+      "has_text": true,
+      "original_value": "130"
+    },
+    {
+      "roi_index": "Do luc kep toi thieu MIN",
+      "text": "5",
+      "confidence": 0.9997154676683842,
+      "has_text": true,
+      "original_value": "5"
+    },
+    {
+      "roi_index": "Do luc kep toi thieu MAX",
+      "text": "9",
+      "confidence": 0.9943659017351401,
+      "has_text": true,
+      "original_value": "9"
+    },
+    {
+      "roi_index": "Thoan ph dl",
+      "text": "0.0",
+      "confidence": 0.9999956639937885,
+      "has_text": true,
+      "original_value": "0.0"
+    },
+    {
+      "roi_index": "L mat",
+      "text": "17.0",
+      "confidence": 0.9997026203607432,
+      "has_text": true,
+      "original_value": "17.0"
+    },
+    {
+      "roi_index": "Quang",
+      "text": "5.0",
+      "confidence": 0.9770281851747906,
+      "has_text": true,
+      "original_value": "5.0"
+    },
+    {
+      "roi_index": "Keo ve Vtri",
+      "text": "5.00",
+      "confidence": 0.9875648021697998,
+      "has_text": true,
+      "original_value": "5.00"
+    },
+    {
+      "roi_index": "Keo ve Tdo",
+      "text": "10.0",
+      "confidence": 0.9969938397407532,
+      "has_text": true,
+      "original_value": "10.0"
+    },
+    {
+      "roi_index": "Thu1_1 Vtri",
+      "text": "TAT",
+      "confidence": 0.9375817487000139,
+      "has_text": true
+    },
+    {
+      "roi_index": "Thu1_1 Apsau",
+      "text": "60",
+      "confidence": 0.9998177618910195,
+      "has_text": true,
+      "original_value": "60"
+    },
+    {
+      "roi_index": "Thu1_1 Xoay",
+      "text": "70",
+      "confidence": 0.9952212854518439,
+      "has_text": true,
+      "original_value": "70"
+    },
+    {
+      "roi_index": "Thu2_1 Vtri",
+      "text": "50.00",
+      "confidence": 0.5293894126543509,
+      "has_text": true,
+      "original_value": "50.00"
+    },
+    {
+      "roi_index": "Thu2_1 Apsau",
+      "text": "35",
+      "confidence": 0.9999325657083509,
+      "has_text": true,
+      "original_value": "35"
+    },
+    {
+      "roi_index": "Thu2_1 Xoay",
+      "text": "150",
+      "confidence": 0.9830896477920726,
+      "has_text": true,
+      "original_value": "150"
+    },
+    {
+      "roi_index": "Het Vtri",
+      "text": "120.00",
+      "confidence": 0.868085640903552,
+      "has_text": true,
+      "original_value": "120.00"
+    },
+    {
+      "roi_index": "Het Apsau",
+      "text": "20",
+      "confidence": 0.9999921606951768,
+      "has_text": true,
+      "original_value": "20"
+    },
+    {
+      "roi_index": "Het Xoay",
+      "text": "100",
+      "confidence": 0.9947301736720219,
+      "has_text": true,
+      "original_value": "100"
+    },
+    {
+      "roi_index": "Keo ve_1 Vtri",
+      "text": "10.00",
+      "confidence": 0.5694462751987283,
+      "has_text": true,
+      "original_value": "10.00"
+    },
+    {
+      "roi_index": "Keo ve_1 Tdo",
+      "text": "25.0",
+      "confidence": 0.6859442705614845,
+      "has_text": true,
+      "original_value": "25.0"
+    },
+    {
+      "roi_index": "Thoan",
+      "text": "TAT",
+      "confidence": 0.9712123865593238,
+      "has_text": true
+    },
+    {
+      "roi_index": "G han Vtri",
+      "text": "400.0",
+      "confidence": 0.9991647727924236,
+      "has_text": true,
+      "original_value": "400.0"
+    },
+    {
+      "roi_index": "G han Tdo",
+      "text": "35.0",
+      "confidence": 0.9981527328491211,
+      "has_text": true,
+      "original_value": "35.0"
+    },
+    {
+      "roi_index": "Thu4_2 Vtri",
+      "text": "250.0",
+      "confidence": 0.9985747031682037,
+      "has_text": true,
+      "original_value": "250.0"
+    },
+    {
+      "roi_index": "Thu4_2 Tdo",
+      "text": "35.0",
+      "confidence": 0.9020400827733477,
+      "has_text": true,
+      "original_value": "35.0"
+    },
+    {
+      "roi_index": "Thu3_2 Vtri",
+      "text": "100.0",
+      "confidence": 0.9971721249400821,
+      "has_text": true,
+      "original_value": "100.0"
+    },
+    {
+      "roi_index": "Thu3_2 Tdo",
+      "text": "35.0",
+      "confidence": 0.7427127978681365,
+      "has_text": true,
+      "original_value": "35.0"
+    },
+    {
+      "roi_index": "Thu2_2 Vtri",
+      "text": "10.0",
+      "confidence": 0.9959739446640015,
+      "has_text": true,
+      "original_value": "10.0"
+    },
+    {
+      "roi_index": "Thu2_2 Tdo",
+      "text": "30.0",
+      "confidence": 0.9123582114508972,
+      "has_text": true,
+      "original_value": "30.0"
+    },
+    {
+      "roi_index": "Thu1_2 Vtri",
+      "text": "3.0",
+      "confidence": 0.9999767370120424,
+      "has_text": true,
+      "original_value": "3.0"
+    },
+    {
+      "roi_index": "Thu1_2 Tdo",
+      "text": "10.0",
+      "confidence": 0.9999748468399048,
+      "has_text": true,
+      "original_value": "10.0"
+    },
+    {
+      "roi_index": "Thu1_3 Vtri",
+      "text": "350.0",
+      "confidence": 0.9983782531473707,
+      "has_text": true,
+      "original_value": "350.0"
+    },
+    {
+      "roi_index": "Thu1_3 Tdo",
+      "text": "40.0",
+      "confidence": 0.9811426417190493,
+      "has_text": true,
+      "original_value": "40.0"
+    },
+    {
+      "roi_index": "Thu2_3 Vtri",
+      "text": "135.0",
+      "confidence": 0.8079313937150439,
+      "has_text": true,
+      "original_value": "135.0"
+    },
+    {
+      "roi_index": "Thu2_3 Tdo",
+      "text": "35.0",
+      "confidence": 0.9988495111465454,
+      "has_text": true,
+      "original_value": "35.0"
+    },
+    {
+      "roi_index": "Thu3_3 Vtri",
+      "text": "80.0",
+      "confidence": 0.9962986436865662,
+      "has_text": true,
+      "original_value": "80.0"
+    },
+    {
+      "roi_index": "Thu3_3 Tdo",
+      "text": "20.0",
+      "confidence": 0.9999927282333374,
+      "has_text": true,
+      "original_value": "20.0"
+    },
+    {
+      "roi_index": "Thu4_3 Vtri",
+      "text": "13.0",
+      "confidence": 0.7136146641773323,
+      "has_text": true,
+      "original_value": "13.0-"
+    },
+    {
+      "roi_index": "Thu4_3 Tdo",
+      "text": "15.0",
+      "confidence": 0.9987505078315735,
+      "has_text": true,
+      "original_value": "15.0"
+    },
+    {
+      "roi_index": "Kep Vtri",
+      "text": "1.73",
+      "confidence": 0.9067892321012134,
+      "has_text": true,
+      "original_value": "1.73"
+    },
+    {
+      "roi_index": "Kep Tdo",
+      "text": "8.0",
+      "confidence": 0.9995256066322327,
+      "has_text": true,
+      "original_value": "8.0"
+    },
+    {
+      "roi_index": "Kep ap suat thap Vtri",
+      "text": "20.0",
+      "confidence": 0.9999971389770508,
+      "has_text": true,
+      "original_value": "20.0"
+    },
+    {
+      "roi_index": "Kep ap suat thap Apsuat",
+      "text": "15",
+      "confidence": 0.993377921204501,
+      "has_text": true,
+      "original_value": "15"
+    },
+    {
+      "roi_index": "Bp day che_do",
+      "text": "BTHUONG",
+      "confidence": 0.9962260634167706,
+      "has_text": true
+    },
+    {
+      "roi_index": "Bp day Dem",
+      "text": "1",
+      "confidence": 0.9031187617023448,
+      "has_text": true,
+      "original_value": "1"
+    },
+    {
+      "roi_index": "Bp day Thoan",
+      "text": "0.00",
+      "confidence": 0.99444580078125,
+      "has_text": true,
+      "original_value": "0.00"
+    },
+    {
+      "roi_index": "Ra1",
+      "text": "0.30",
+      "confidence": 0.9999008178710938,
+      "has_text": true,
+      "original_value": "0.30"
+    },
+    {
+      "roi_index": "Ra2",
+      "text": "30.0",
+      "confidence": 0.9999881982803345,
+      "has_text": true,
+      "original_value": "30.0"
+    },
+    {
+      "roi_index": "Ra3",
+      "text": "60.0",
+      "confidence": 0.9998748898506165,
+      "has_text": true,
+      "original_value": "60.0"
+    },
+    {
+      "roi_index": "Thu1_4 Vtri",
+      "text": "20.00",
+      "confidence": 0.9009729292007863,
+      "has_text": true,
+      "original_value": "20.00"
+    },
+    {
+      "roi_index": "Thu1_4 Tdo",
+      "text": "30.0",
+      "confidence": 0.9991061091423035,
+      "has_text": true,
+      "original_value": "30.0"
+    },
+    {
+      "roi_index": "Day Vtri",
+      "text": "80.00",
+      "confidence": 0.9999478073765491,
+      "has_text": true,
+      "original_value": "80.00"
+    },
+    {
+      "roi_index": "Day Tdo",
+      "text": "70.0",
+      "confidence": 0.8513960838317871,
+      "has_text": true,
+      "original_value": "70.0"
+    },
+    {
+      "roi_index": "Bp day Apsuat",
+      "text": "60.0",
+      "confidence": 0.9999880194664001,
+      "has_text": true,
+      "original_value": "60.0"
+    }
+  ],
+  "hmi_detection": {
+    "hmi_detected": true,
+    "hmi_image": "/api/images/hmi_detection/refined_hmi_F42_Overview.png",
+    "visualization": "/api/images/hmi_detection/hmi_visualization_F42_Overview.png"
+  }
+}
