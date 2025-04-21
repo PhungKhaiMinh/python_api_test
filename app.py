@@ -526,6 +526,47 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                             best_text = '0'
                             print(f"Single 'o' character detected, converted to '0'")
                         
+                        # Kiểm tra và chuyển đổi chuỗi kết quả nếu có dạng số
+                        # Xử lý đặc biệt cho trường hợp nghi ngờ là số (chuỗi có >= 2 ký tự và chứa nhiều O, U, I, l)
+                        if len(best_text) >= 2:
+                            # Đếm số lượng các ký tự dễ nhầm lẫn
+                            chars_to_check = 'OUouIilC'
+                            suspicious_chars_count = sum(1 for char in best_text if char in chars_to_check)
+                            
+                            # Nếu có ít nhất 2 ký tự đáng ngờ và chiếm >= 30% chuỗi
+                            if suspicious_chars_count >= 2 and suspicious_chars_count / len(best_text) >= 0.3:
+                                print(f"Suspicious text detected with {suspicious_chars_count} suspect characters: '{best_text}'")
+                                # Kiểm tra các mẫu đặc biệt, như chuỗi "uuuu" hoặc "iuuu" có thể là "1000"
+                                upper_text = best_text.upper()
+                                
+                                # Trường hợp đặc biệt: chuỗi chứa nhiều U liên tiếp (có thể là số 0 lặp lại)
+                                if 'UU' in upper_text or 'II' in upper_text or 'OO' in upper_text:
+                                    temp_text = upper_text.replace('U', '0').replace('I', '1')
+                                    if temp_text.isdigit():
+                                        print(f"Pattern with repeated U/I detected. Converting '{best_text}' to '{temp_text}'")
+                                        best_text = temp_text
+                                        is_text_result = False
+                                # Trường hợp đặc biệt khác
+                                else:
+                                    # Kiểm tra xem có ít nhất 60% ký tự là chữ cái đáng ngờ I, U, O
+                                    digit_like_chars_count = sum(1 for char in upper_text if char in 'OUICL')
+                                    if digit_like_chars_count / len(best_text) >= 0.7:
+                                        # Chuyển đổi tất cả ký tự dễ nhầm lẫn thành số tương ứng
+                                        cleaned_text = upper_text
+                                        cleaned_text = cleaned_text.replace('O', '0').replace('U', '0').replace('Q', '0')
+                                        cleaned_text = cleaned_text.replace('I', '1').replace('L', '1')
+                                        cleaned_text = cleaned_text.replace('C', '0').replace('D', '0')
+                                        
+                                        # Loại bỏ khoảng trắng nếu kết quả là số
+                                        cleaned_text = cleaned_text.replace(' ', '')
+                                        
+                                        # Kiểm tra nếu kết quả chỉ chứa chữ số
+                                        if cleaned_text.isdigit():
+                                            print(f"Likely numeric value detected. Converting '{best_text}' to '{cleaned_text}'")
+                                            best_text = cleaned_text
+                                            # Đánh dấu là kết quả số để không bị xử lý như text
+                                            is_text_result = False
+                        
                         # Đếm số lượng chữ số và chữ cái (loại trừ số 0 và chữ O)
                         digit_count = sum(1 for char in best_text if char.isdigit() and char != '0')
                         letter_count = sum(1 for char in best_text if char.isalpha() and char.upper() != 'O')
