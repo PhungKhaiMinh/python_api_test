@@ -1,0 +1,13 @@
+{
+  "filename": "cropped_image_F1_Feeders and Conveyors.png",
+  "machine_code": "F1",
+  "screen_id": "Feeders and Conveyors",
+  "timestamp": "2025-04-22 23:21:34",
+  "template_path": "d:\\Wrembly\\python_api_test\\roi_data\\reference_images\\template_F1_Feeders and Conveyors.jpg",
+  "results": [],
+  "hmi_detection": {
+    "hmi_detected": true,
+    "hmi_image": "/api/images/hmi_detection/refined_hmi_F1_Feeders and Conveyors.png",
+    "visualization": "/api/images/hmi_detection/hmi_visualization_F1_Feeders and Conveyors.png"
+  }
+}

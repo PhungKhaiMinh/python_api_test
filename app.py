@@ -1364,7 +1364,7 @@ def upload_image():
                 # Lưu ảnh visualization
                 visualization_filename = f"hmi_visualization_{machine_code}_{screen_id}.png"
                 visualization_path = os.path.join(app.config['UPLOAD_FOLDER'], visualization_filename)
-                cv2.imwrite(visualization_path, visualization)
+                # cv2.imwrite(visualization_path, visualization)
                 # Sử dụng HMI đã phát hiện và tinh chỉnh thay vì ảnh gốc
                 print("Màn hình HMI đã được phát hiện, tinh chỉnh và cắt!")
                 image = hmi_screen
@@ -1372,8 +1372,8 @@ def upload_image():
                 # Lưu ảnh HMI đã tinh chỉnh
                 refined_hmi_filename = f"refined_hmi_{machine_code}_{screen_id}.png"
                 refined_hmi_path = os.path.join(app.config['UPLOAD_FOLDER'], refined_hmi_filename)
-                print(f"Saving refined HMI to: {refined_hmi_path}")
-                cv2.imwrite(refined_hmi_path, hmi_screen)
+                print(f"Processing refined HMI (saving disabled)")
+                # cv2.imwrite(refined_hmi_path, hmi_screen)
                 
                 # Cập nhật thông tin phát hiện HMI
                 hmi_detection_info = {
@@ -1391,7 +1391,7 @@ def upload_image():
                 
                 visualization_filename = f"no_hmi_visualization.png"
                 visualization_path = os.path.join(app.config['UPLOAD_FOLDER'], visualization_filename)
-                cv2.imwrite(visualization_path, visualization)
+                # cv2.imwrite(visualization_path, visualization)
                 
                 hmi_detection_info = {
                     "hmi_detected": False,
@@ -1441,8 +1441,8 @@ def upload_image():
                     
                     aligned_filename = f"aligned_{filename}"
                     aligned_path = os.path.join(aligned_folder, aligned_filename)
-                    cv2.imwrite(aligned_path, aligned_image)
-                    print(f"Saved aligned image to: {aligned_path}")
+                    # cv2.imwrite(aligned_path, aligned_image)
+                    print(f"Processing aligned image (saving disabled)")
                     
                     # Thay đổi biến image thành ảnh đã căn chỉnh
                     image = aligned_image
@@ -2507,7 +2507,7 @@ def preprocess_roi_for_ocr(roi, roi_index, original_filename, roi_name=None, ima
     base_filename = os.path.splitext(original_filename)[0]
     original_roi_filename = f"{base_filename}_{identifier}_original.png"
     original_roi_path = os.path.join(processed_folder, original_roi_filename)
-    cv2.imwrite(original_roi_path, roi)
+    # cv2.imwrite(original_roi_path, roi)
     
     # 1. Chuyển sang ảnh xám
     gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
@@ -2523,7 +2523,7 @@ def preprocess_roi_for_ocr(roi, roi_index, original_filename, roi_name=None, ima
         # Lưu ảnh đã cải thiện
         enhanced_filename = f"{base_filename}_{identifier}_enhanced.png"
         enhanced_path = os.path.join(processed_folder, enhanced_filename)
-        cv2.imwrite(enhanced_path, enhanced_gray)
+        # cv2.imwrite(enhanced_path, enhanced_gray)
         
         # Sử dụng ảnh đã cải thiện cho các bước tiếp theo
         gray = enhanced_gray
@@ -2542,7 +2542,7 @@ def preprocess_roi_for_ocr(roi, roi_index, original_filename, roi_name=None, ima
     closing = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
     processed_filename = f"{base_filename}_{identifier}_processed1.png"
     processed_path = os.path.join(processed_folder, processed_filename)
-    cv2.imwrite(processed_path, closing)
+    # cv2.imwrite(processed_path, closing)
     # 5. Tìm contour
     contours, _ = cv2.findContours(closing, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
@@ -2614,9 +2614,10 @@ def preprocess_roi_for_ocr(roi, roi_index, original_filename, roi_name=None, ima
         # Lưu ảnh đã xử lý
         processed_filename = f"{base_filename}_{identifier}_processed2.png"
         processed_path = os.path.join(processed_folder, processed_filename)
-        cv2.imwrite(processed_path, closing)
+        # cv2.imwrite(processed_path, closing)
         
-        print(f"Saved processed ROI to: {processed_path}")
+        # print(f"Saved processed ROI to: {processed_path}")
+        print(f"Processing ROI {identifier} completed (saving disabled)")
         return closing, quality_info  # Trả về ảnh grayscale và thông tin chất lượng
     else:
         print(f"Không tìm thấy contour hợp lệ để cắt cho ROI {identifier}.")
@@ -2624,7 +2625,7 @@ def preprocess_roi_for_ocr(roi, roi_index, original_filename, roi_name=None, ima
         # Trả về ảnh grayscale nếu không tìm thấy contour
         processed_filename = f"{base_filename}_{identifier}_processed.png"
         processed_path = os.path.join(processed_folder, processed_filename)
-        cv2.imwrite(processed_path, closing)
+        # cv2.imwrite(processed_path, closing)
         return closing, quality_info  # Trả về ảnh grayscale và thông tin chất lượng
 
 

@@ -6,27 +6,27 @@
                 {
                     "id": 1,
                     "screen_id": "Faults",
-                    "description": "bell 2.png"
+                    "description": "monitor 1.png"
                 },
                 {
                     "id": 2,
                     "screen_id": "Production Data",
-                    "description": "bell 2.png"
+                    "description": "monitor 1.png"
                 },
                 {
                     "id": 3,
                     "screen_id": "Feeders and Conveyors",
-                    "description": "bell 2.png"
+                    "description": "monitor 1.png"
                 },
                 {
                     "id": 4,
                     "screen_id": "Main Machine Parameters",
-                    "description": "bell 2.png"
+                    "description": "monitor 1.png"
                 },
                 {
                     "id": 5,
                     "screen_id": "Selectors and Maintenance",
-                    "description": "bell 2.png"
+                    "description": "monitor 1.png"
                 }
             ]
         },
@@ -36,32 +36,32 @@
                 {
                     "id": 1,
                     "screen_id": "Clamp",
-                    "description": "bell 2.png"
+                    "description": "monitor 1.png"
                 },
                 {
                     "id": 2,
                     "screen_id": "Ejector",
-                    "description": "bell 2.png"
+                    "description": "monitor 1.png"
                 },
                 {
                     "id": 3,
                     "screen_id": "Injection",
-                    "description": "Mbell 2.png"
+                    "description": "monitor 1.png"
                 },
                 {
                     "id": 4,
                     "screen_id": "Temp",
-                    "description": "bell 2.png"
+                    "description": "monitor 1.png"
                 },
                 {
                     "id": 5,
                     "screen_id": "Production",
-                    "description": "bell 2.png"
+                    "description": "monitor 1.png"
                 },
                 {
                     "id": 6,
                     "screen_id": "Alarm",
-                    "description": "bell 2.png"
+                    "description": "monitor 1.png"
                 }
             ]
         },
@@ -71,27 +71,27 @@
                 {
                     "id": 1,
                     "screen_id": "Setting",
-                    "description": "bell 2.png"
+                    "description": "monitor 1.png"
                 },
                 {
                     "id": 2,
                     "screen_id": "Temp",
-                    "description": "bell 2.png"
+                    "description": "monitor 1.png"
                 },
                 {
                     "id": 3,
                     "screen_id": "Plasticizer",
-                    "description": "bell 2.png"
+                    "description": "monitor 1.png"
                 },
                 {
                     "id": 4,
                     "screen_id": "Overview",
-                    "description": "bell 2.png"
+                    "description": "monitor 1.png"
                 },
                 {
                     "id": 5,
                     "screen_id": "Tracking",
-                    "description": "bell 2.png"
+                    "description": "monitor 1.png"
                 }
             ]
         }
