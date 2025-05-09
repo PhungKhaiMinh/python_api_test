@@ -1,0 +1,195 @@
+{
+  "timestamp": "20250509_235921",
+  "filename": "F1_Production_test1.jpg",
+  "machine_code": "IE-F1-CWA01",
+  "machine_type": "F1",
+  "screen_id": "Production Data",
+  "roi_count": 27,
+  "results": [
+    {
+      "roi_index": 0,
+      "roi_name": "Total_time hour",
+      "value": "108",
+      "original_value": "108",
+      "confidence": 0.9999133491790778
+    },
+    {
+      "roi_index": 1,
+      "roi_name": "Total_time minute",
+      "value": "16",
+      "original_value": "16",
+      "confidence": 0.9999946052076528
+    },
+    {
+      "roi_index": 2,
+      "roi_name": "Total_time second",
+      "value": "0",
+      "original_value": "0",
+      "confidence": 0.9999821186865034
+    },
+    {
+      "roi_index": 3,
+      "roi_name": "Run_time hour",
+      "value": "",
+      "confidence": 0
+    },
+    {
+      "roi_index": 4,
+      "roi_name": "Run_time minute",
+      "value": "",
+      "confidence": 0
+    },
+    {
+      "roi_index": 5,
+      "roi_name": "Run_time second",
+      "value": "39",
+      "original_value": "39",
+      "confidence": 0.9992363845273733
+    },
+    {
+      "roi_index": 6,
+      "roi_name": "Fault_time hour",
+      "value": "100",
+      "original_value": "100",
+      "confidence": 0.9998200234471681
+    },
+    {
+      "roi_index": 7,
+      "roi_name": "Fault_time minute",
+      "value": "17",
+      "original_value": "17",
+      "confidence": 0.9999914020537298
+    },
+    {
+      "roi_index": 8,
+      "roi_name": "Fault_time second",
+      "value": "40",
+      "original_value": "40",
+      "confidence": 0.9999922449886813
+    },
+    {
+      "roi_index": 9,
+      "roi_name": "Restart_time hour",
+      "value": "0",
+      "original_value": "0",
+      "confidence": 0.9999225154628135
+    },
+    {
+      "roi_index": 10,
+      "roi_name": "Restart_time minute",
+      "value": "11",
+      "original_value": "11",
+      "confidence": 0.7361386059727985
+    },
+    {
+      "roi_index": 11,
+      "roi_name": "Restart_time second",
+      "value": "50",
+      "original_value": "50",
+      "confidence": 0.9838092572548642
+    },
+    {
+      "roi_index": 12,
+      "roi_name": "Ready_time hour",
+      "value": "6",
+      "original_value": "6",
+      "confidence": 0.9994952123774716
+    },
+    {
+      "roi_index": 13,
+      "roi_name": "Ready_time minute",
+      "value": "44",
+      "original_value": "44",
+      "confidence": 0.9999983984201323
+    },
+    {
+      "roi_index": 14,
+      "roi_name": "Ready_time second",
+      "value": "51",
+      "original_value": "51",
+      "confidence": 0.9999928350432712
+    },
+    {
+      "roi_index": 15,
+      "roi_name": "MC Speed",
+      "value": "",
+      "error": "name 'has_allowed_values' is not defined",
+      "confidence": 0
+    },
+    {
+      "roi_index": 16,
+      "roi_name": "Machine",
+      "value": "39 19",
+      "original_value": "39 19",
+      "confidence": 0.974656941497889
+    },
+    {
+      "roi_index": 17,
+      "roi_name": "Waiting_time hour",
+      "value": "",
+      "confidence": 0
+    },
+    {
+      "roi_index": 18,
+      "roi_name": "Waiting_time minute",
+      "value": "0",
+      "original_value": "0",
+      "confidence": 0.9999558930492327
+    },
+    {
+      "roi_index": 19,
+      "roi_name": "Waiting_time second",
+      "value": "",
+      "confidence": 0
+    },
+    {
+      "roi_index": 20,
+      "roi_name": "Total parts",
+      "value": "2298",
+      "original_value": "2298",
+      "confidence": 0.9320559762226297
+    },
+    {
+      "roi_index": 21,
+      "roi_name": "Good parts",
+      "value": "1229",
+      "original_value": "1229",
+      "confidence": 0.9996292591094971
+    },
+    {
+      "roi_index": 22,
+      "roi_name": "Rejected parts",
+      "value": "1069",
+      "original_value": "1069",
+      "confidence": 0.7638311647876737
+    },
+    {
+      "roi_index": 23,
+      "roi_name": "Time efficency",
+      "value": "0.95",
+      "original_value": "0.95",
+      "confidence": 0.8264415599597131
+    },
+    {
+      "roi_index": 24,
+      "roi_name": "Yield",
+      "value": "53.48",
+      "original_value": "53.48",
+      "confidence": 0.9999008923844199
+    },
+    {
+      "roi_index": 25,
+      "roi_name": "Line OEE",
+      "value": "0.47",
+      "original_value": "0.47",
+      "confidence": 0.6686133140561996
+    },
+    {
+      "roi_index": 26,
+      "roi_name": "Machine OEE",
+      "value": "47",
+      "original_value": "0 47",
+      "confidence": 0.6217638123740857
+    }
+  ]
+}

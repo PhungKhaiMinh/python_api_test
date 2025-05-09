@@ -27,6 +27,12 @@ except ImportError:
     reader = None
 
 app = Flask(__name__)
+app.config['UPLOAD_FOLDER'] = 'uploads'
+app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'bmp', 'tiff'}
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload
+app.config['ROI_DATA_FOLDER'] = 'roi_data'
+app.config['REFERENCE_IMAGES_FOLDER'] = 'roi_data/reference_images'  # Thư mục chứa ảnh tham chiếu
+app.config['OCR_RESULTS_FOLDER'] = 'ocr_results'  # Thư mục lưu kết quả OCR
 
 # Cho phép CORS
 @app.after_request
@@ -54,9 +60,9 @@ def debug_info():
     
     return jsonify({
         "server_info": {
-            "upload_folder": UPLOAD_FOLDER,
-            "roi_data_folder": ROI_DATA_FOLDER,
-            "ocr_results_folder": OCR_RESULTS_FOLDER,
+            "upload_folder": app.config['UPLOAD_FOLDER'],
+            "roi_data_folder": app.config['ROI_DATA_FOLDER'],
+            "ocr_results_folder": app.config['OCR_RESULTS_FOLDER'],
             "allowed_extensions": list(app.config['ALLOWED_EXTENSIONS']),
             "max_content_length": app.config['MAX_CONTENT_LENGTH']
         },
@@ -87,6 +93,9 @@ if not os.path.exists(OCR_RESULTS_FOLDER):
 REFERENCE_IMAGES_FOLDER = os.path.join(ROI_DATA_FOLDER, 'reference_images')
 if not os.path.exists(REFERENCE_IMAGES_FOLDER):
     os.makedirs(REFERENCE_IMAGES_FOLDER)
+    print(f"Đã tạo thư mục reference_images tại {REFERENCE_IMAGES_FOLDER}")
+    print("Lưu ý: Tên file tham chiếu nên theo định dạng: template_<machine_type>_<screen_name>.png")
+    print("Ví dụ: template_F1_Faults.png, template_F42_Production_Data.png")
 
 # Đảm bảo thư mục uploads tồn tại
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -260,7 +269,7 @@ def get_aligned_image(filename):
         abort(404)
 
 # Hàm đọc bộ khung ROI từ file roi_info.json
-def get_roi_coordinates(machine_code, screen_id=None):
+def get_roi_coordinates(machine_code, screen_id=None, machine_type=None):
     try:
         # Sử dụng đường dẫn tuyệt đối để đảm bảo tìm thấy file
         roi_json_path = 'roi_data/roi_info.json'
@@ -277,57 +286,140 @@ def get_roi_coordinates(machine_code, screen_id=None):
             is_normalized = roi_data["metadata"]["coordinate_format"].lower() == "normalized"
             print(f"Coordinate format is {'normalized' if is_normalized else 'pixel-based'}")
         
-        if screen_id is not None:
-            # Lấy tên màn hình từ screen_id
-            screen_name = None
+        # Nếu machine_type không được cung cấp, lấy từ machine_screens.json
+        if not machine_type:
+            machine_type = get_machine_type(machine_code)
+            if not machine_type:
+                print(f"Could not determine machine_type for machine_code: {machine_code}")
+                return [], []
+            print(f"Determined machine_type: {machine_type} for machine_code: {machine_code}")
+        
+        screen_name = None
+        
+        # Kiểm tra xem screen_id có phải là tên màn hình không
+        if isinstance(screen_id, str) and screen_id in ["Production Data", "Faults", "Feeders and Conveyors", 
+                                                  "Main Machine Parameters", "Selectors and Maintenance",
+                                                  "Setting", "Temp", "Plasticizer", "Overview", "Tracking", "Production", 
+                                                  "Clamp", "Ejector", "Injection"]:
+            screen_name = screen_id
+            print(f"Using screen_id as screen_name: {screen_name}")
+        elif screen_id is not None:
+            # Lấy tên màn hình từ screen_id (nếu là numeric id)
             machine_screens_path = 'roi_data/machine_screens.json'
             if not os.path.exists(machine_screens_path):
                 machine_screens_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'roi_data/machine_screens.json')
             
             with open(machine_screens_path, 'r', encoding='utf-8') as f:
                 machine_screens = json.load(f)
-                
-            if machine_code in machine_screens.get("machines", {}):
-                for screen in machine_screens["machines"][machine_code].get("screens", []):
-                    if screen.get("id") == screen_id:
-                        screen_name = screen.get("screen_id")
-                        break
             
-            print(f"Looking for ROIs in machine: {machine_code}, screen: {screen_name} (id: {screen_id})")
-            
-            if screen_name and machine_code in roi_data.get("machines", {}) and "screens" in roi_data["machines"][machine_code]:
-                if screen_name in roi_data["machines"][machine_code]["screens"]:
-                    roi_list = roi_data["machines"][machine_code]["screens"][screen_name]
-                    
-                    # Xử lý định dạng ROI mới (dictionary với name và coordinates)
-                    roi_coordinates = []
-                    roi_names = []
-                    
-                    for roi_item in roi_list:
-                        if isinstance(roi_item, dict) and "name" in roi_item and "coordinates" in roi_item:
-                            # Định dạng mới - dictionary với name và coordinates
-                            roi_coordinates.append(roi_item["coordinates"])
-                            roi_names.append(roi_item["name"])
-                            print(f"Added ROI: {roi_item['name']} with coordinates: {roi_item['coordinates']}")
-                        else:
-                            # Định dạng cũ - mảng tọa độ
-                            roi_coordinates.append(roi_item)
-                            roi_names.append(f"ROI_{len(roi_names)}")
-                            print(f"Added unnamed ROI with coordinates: {roi_item}")
-                    
-                    print(f"Found {len(roi_coordinates)} ROIs with names: {roi_names}")
-                    return roi_coordinates, roi_names
-                else:
-                    print(f"Screen '{screen_name}' not found in roi_info.json for machine {machine_code}")
-            else:
-                print(f"Machine '{machine_code}' or screen path not found in roi_info.json")
+            # Tìm trong areas
+            for area_code, area_info in machine_screens.get("areas", {}).items():
+                machines = area_info.get("machines", {})
+                if machine_code in machines:
+                    for screen in machines[machine_code].get("screens", []):
+                        if str(screen.get("id")) == str(screen_id):
+                            screen_name = screen.get("screen_id")
+                            print(f"Found screen_name: {screen_name} for screen_id: {screen_id} in machine_code: {machine_code}")
+                            break
         
-        print(f"No ROI coordinates found for machine: {machine_code}, screen_id: {screen_id}")
+        print(f"Looking for ROIs in machine_type: {machine_type}, screen: {screen_name} (id: {screen_id})")
+        
+        # Tìm trong machines
+        if machine_type in roi_data.get("machines", {}):
+            screens_data = roi_data["machines"][machine_type].get("screens", {})
+            
+            if screen_name and screen_name in screens_data:
+                roi_list = screens_data[screen_name]
+                
+                # Xử lý định dạng ROI
+                roi_coordinates = []
+                roi_names = []
+                
+                for roi_item in roi_list:
+                    if isinstance(roi_item, dict) and "name" in roi_item and "coordinates" in roi_item:
+                        roi_coordinates.append(roi_item["coordinates"])
+                        roi_names.append(roi_item["name"])
+                    else:
+                        roi_coordinates.append(roi_item)
+                        roi_names.append(f"ROI_{len(roi_names)}")
+                
+                print(f"Found {len(roi_coordinates)} ROIs for {screen_name}")
+                return roi_coordinates, roi_names
+            else:
+                print(f"Screen '{screen_name}' not found in roi_info.json for machine_type {machine_type}")
+                print(f"Available screens: {list(screens_data.keys())}")
+        else:
+            print(f"Machine type '{machine_type}' not found in roi_info.json")
+            print(f"Available machine types: {list(roi_data.get('machines', {}).keys())}")
+        
+        print(f"No ROI coordinates found for machine_code={machine_code}, screen_id={screen_id}, machine_type={machine_type}")
         return [], []
     except Exception as e:
         print(f"Error reading ROI coordinates: {str(e)}")
         traceback.print_exc()
         return [], []
+
+# Thêm hàm mới để lấy loại máy từ mã máy
+def get_machine_type(machine_code):
+    """
+    Lấy loại máy (machine_type) từ mã máy (machine_code)
+    
+    Args:
+        machine_code: Mã máy (ví dụ: IE-F1-CWA01, IE-F4-WBI01)
+        
+    Returns:
+        str: Loại máy (F1, F41, F42, ...) hoặc None nếu không tìm thấy
+    """
+    try:
+        machine_screens_path = os.path.join(app.config['ROI_DATA_FOLDER'], 'machine_screens.json')
+        if not os.path.exists(machine_screens_path):
+            return None
+        
+        with open(machine_screens_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        # Tìm kiếm trong cấu trúc areas
+        for area_code, area_info in data.get('areas', {}).items():
+            machines = area_info.get('machines', {})
+            if machine_code in machines:
+                return machines[machine_code].get('type')
+        
+        # Nếu không tìm thấy, trả về None
+        return None
+    except Exception as e:
+        print(f"Error getting machine type: {str(e)}")
+        return None
+
+# Thêm hàm mới để lấy khu vực từ mã máy
+def get_area_for_machine(machine_code):
+    """
+    Lấy khu vực (area) chứa mã máy (machine_code)
+    
+    Args:
+        machine_code: Mã máy (ví dụ: IE-F1-CWA01, IE-F4-WBI01)
+        
+    Returns:
+        str: Mã khu vực (F1, F4, ...) hoặc None nếu không tìm thấy
+    """
+    try:
+        machine_screens_path = os.path.join(app.config['ROI_DATA_FOLDER'], 'machine_screens.json')
+        if not os.path.exists(machine_screens_path):
+            return None
+        
+        with open(machine_screens_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        # Tìm kiếm trong cấu trúc areas
+        for area_code, area_info in data.get('areas', {}).items():
+            machines = area_info.get('machines', {})
+            if machine_code in machines:
+                return area_code
+        
+        # Nếu không tìm thấy, trả về None
+        return None
+    except Exception as e:
+        print(f"Error getting area for machine: {str(e)}")
+        return None
 
 # Sửa lại hàm perform_ocr_on_roi để sử dụng ảnh đã căn chỉnh
 def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=None, roi_names=None, machine_code=None, screen_id=None):
@@ -435,7 +527,7 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                 image_aligned = image
                 
                 # Kiểm tra xem có phải là trường hợp đặc biệt của machine_code="F41" với allowed_values chứa "ON" và "OFF" không
-                is_special_f41_case = False
+                is_special_on_off_case = False
                 allowed_values = []
                 
                 # Lấy thông tin allowed_values từ roi_info.json
@@ -447,9 +539,12 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                     with open(roi_json_path, 'r', encoding='utf-8') as f:
                         roi_info = json.load(f)
 
-                    # Tìm allowed_values cho ROI hiện tại
-                    if (machine_code == "F41" and
-                        machine_code in roi_info.get("machines", {}) and 
+                    # Lấy machine_type từ machine_code
+                    machine_type = get_machine_type(machine_code)
+                    print(f"Checking if ROI {roi_name} has ON/OFF values for machine_code={machine_code}, machine_type={machine_type}, screen_id={screen_id}")
+
+                    # Thử tìm allowed_values cho ROI hiện tại sử dụng machine_code
+                    if (machine_code in roi_info.get("machines", {}) and 
                         "screens" in roi_info["machines"][machine_code] and 
                         screen_id in roi_info["machines"][machine_code]["screens"]):
                         roi_list = roi_info["machines"][machine_code]["screens"][screen_id]
@@ -458,13 +553,30 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                                 allowed_values = roi_item["allowed_values"]
                                 # Kiểm tra nếu allowed_values chứa "ON" và "OFF"
                                 if "ON" in allowed_values and "OFF" in allowed_values:
-                                    is_special_f41_case = True
+                                    is_special_on_off_case = True
+                                    print(f"Found ON/OFF values for ROI {roi_name} using machine_code")
                                 break
+                    
+                    # Nếu không tìm thấy với machine_code, thử với machine_type
+                    if not is_special_on_off_case and machine_type:
+                        if (machine_type in roi_info.get("machines", {}) and 
+                            "screens" in roi_info["machines"][machine_type] and 
+                            screen_id in roi_info["machines"][machine_type]["screens"]):
+                            roi_list = roi_info["machines"][machine_type]["screens"][screen_id]
+                            for roi_item in roi_list:
+                                if isinstance(roi_item, dict) and roi_item.get("name") == roi_name and "allowed_values" in roi_item:
+                                    allowed_values = roi_item["allowed_values"]
+                                    # Kiểm tra nếu allowed_values chứa "ON" và "OFF"
+                                    if "ON" in allowed_values and "OFF" in allowed_values:
+                                        is_special_on_off_case = True
+                                        print(f"Found ON/OFF values for ROI {roi_name} using machine_type")
+                                    break
                 except Exception as e:
                     print(f"Error checking allowed_values for ROI {roi_name}: {str(e)}")
                 
-                # Nếu là trường hợp đặc biệt của F41, phân tích màu sắc thay vì OCR
-                if is_special_f41_case:
+                # Nếu là trường hợp đặc biệt ON/OFF, phân tích màu sắc thay vì OCR
+                if is_special_on_off_case:
+                    print(f"Processing ROI {roi_name} by color analysis instead of OCR")
                     # Tách các kênh màu BGR
                     b, g, r = cv2.split(roi)
                     # Tính giá trị trung bình của kênh xanh dương và đỏ
@@ -475,6 +587,7 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                         best_text = "OFF"
                     else:
                         best_text = "ON"
+                    print(f"Color analysis result for ROI {roi_name}: avg_blue={avg_blue}, avg_red={avg_red}, result={best_text}")
                     results.append({
                         "roi_index": roi_name,
                         "text": best_text,
@@ -610,8 +723,7 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                     # Thêm kết quả cho ROI này (không có original_value cho kết quả text)
                     if len(best_text) == 1:
                         best_text = best_text.replace('O', '0').replace('I', '1').replace('C','0').replace('S','5').replace('G','6').replace('A','4').replace('H','8').replace('L','1').replace('T','7').replace('U','0').replace('E','3').replace('Z','2').replace('Q','0')
-                    # Giả sử best_text là một chuỗi đầu vào
-
+                    
                     # Kiểm tra nếu ROI này có allowed_values trong roi_info.json
                     try:
                         roi_json_path = 'roi_data/roi_info.json'
@@ -621,130 +733,141 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                         with open(roi_json_path, 'r', encoding='utf-8') as f:
                             roi_info = json.load(f)
                         
+                        # Sửa: Sử dụng machine_code trực tiếp thay vì gọi get_machine_type
+                        print(f"Looking for allowed_values with machine_code={machine_code}, screen_id={screen_id}, roi_name={roi_name}")
+                        
                         # Tìm allowed_values cho ROI hiện tại
+                        allowed_values = None
+                        
                         if (machine_code in roi_info.get("machines", {}) and 
                             "screens" in roi_info["machines"][machine_code] and 
                             screen_id in roi_info["machines"][machine_code]["screens"]):
                             
                             roi_list = roi_info["machines"][machine_code]["screens"][screen_id]
-                            allowed_values = None
                             
                             for roi_item in roi_list:
                                 if isinstance(roi_item, dict) and roi_item.get("name") == roi_name and "allowed_values" in roi_item:
                                     allowed_values = roi_item["allowed_values"]
                                     break
+                        
+                        # Nếu có allowed_values và không rỗng, so sánh với best_text
+                        if allowed_values and len(allowed_values) > 0:
+                            print(f"Found allowed_values for ROI {roi_name}: {allowed_values}")
                             
-                            # Nếu có allowed_values và không rỗng, so sánh với best_text
-                            if allowed_values and len(allowed_values) > 0:
-                                print(f"Found allowed_values for ROI {roi_name}: {allowed_values}")
+                            # Tìm khớp chính xác
+                            if best_text in allowed_values:
+                                print(f"Found exact match for '{best_text}' in allowed_values")
+                                # Đã có trong allowed_values, không cần sửa đổi gì
+                            else:
+                                print(f"No exact match for '{best_text}' in allowed_values. Trying to find partial match...")
+                                # Không tìm thấy khớp chính xác, tìm kiếm khớp một phần
                                 
-                                # Tìm khớp chính xác
-                                if best_text in allowed_values:
-                                    print(f"Found exact match for '{best_text}' in allowed_values")
-                                    # Đã có trong allowed_values, không cần sửa đổi gì
-                                else:
-                                    print(f"No exact match for '{best_text}' in allowed_values. Trying to find partial match...")
-                                    # Không tìm thấy khớp chính xác, tìm kiếm khớp một phần
+                                # Chuyển đổi best_text thành chữ hoa để so sánh không phân biệt hoa thường
+                                best_text_upper = best_text.upper()
+                                
+                                # Phương pháp 1: Tìm giá trị chứa text hoặc text chứa trong giá trị
+                                best_match = None
+                                max_overlap = 0
+                                
+                                for value in allowed_values:
+                                    value_upper = value.upper()
                                     
-                                    # Chuyển đổi best_text thành chữ hoa để so sánh không phân biệt hoa thường
-                                    best_text_upper = best_text.upper()
+                                    # Kiểm tra nếu chuỗi OCR nằm hoàn toàn trong allowed_value 
+                                    if best_text_upper in value_upper:
+                                        # Tính tỷ lệ khớp: độ dài text / độ dài value
+                                        overlap_ratio = len(best_text_upper) / len(value_upper)
+                                        if overlap_ratio > max_overlap:
+                                            max_overlap = overlap_ratio
+                                            best_match = value
+                                            print(f"Found text '{best_text_upper}' in allowed value '{value}' with overlap ratio {overlap_ratio}")
                                     
-                                    # Phương pháp 1: Tìm giá trị chứa text hoặc text chứa trong giá trị
-                                    best_match = None
-                                    max_overlap = 0
+                                    # Kiểm tra nếu allowed_value nằm hoàn toàn trong chuỗi OCR
+                                    elif value_upper in best_text_upper:
+                                        # Tính tỷ lệ khớp: độ dài value / độ dài text
+                                        overlap_ratio = len(value_upper) / len(best_text_upper)
+                                        if overlap_ratio > max_overlap:
+                                            max_overlap = overlap_ratio
+                                            best_match = value
+                                            print(f"Found allowed value '{value}' in text '{best_text_upper}' with overlap ratio {overlap_ratio}")
+                                
+                                # Phương pháp 2: Đếm số từ chung
+                                if not best_match:
+                                    best_word_match = None
+                                    max_word_match = 0
+                                    
+                                    best_text_words = set(best_text_upper.split())
                                     
                                     for value in allowed_values:
-                                        value_upper = value.upper()
+                                        value_words = set(value.upper().split())
+                                        common_words = best_text_words.intersection(value_words)
                                         
-                                        # Kiểm tra nếu chuỗi OCR nằm hoàn toàn trong allowed_value 
-                                        if best_text_upper in value_upper:
-                                            # Tính tỷ lệ khớp: độ dài text / độ dài value
-                                            overlap_ratio = len(best_text_upper) / len(value_upper)
-                                            if overlap_ratio > max_overlap:
-                                                max_overlap = overlap_ratio
-                                                best_match = value
-                                                print(f"Found text '{best_text_upper}' in allowed value '{value}' with overlap ratio {overlap_ratio}")
-                                        
-                                        # Kiểm tra nếu allowed_value nằm hoàn toàn trong chuỗi OCR
-                                        elif value_upper in best_text_upper:
-                                            # Tính tỷ lệ khớp: độ dài value / độ dài text
-                                            overlap_ratio = len(value_upper) / len(best_text_upper)
-                                            if overlap_ratio > max_overlap:
-                                                max_overlap = overlap_ratio
-                                                best_match = value
-                                                print(f"Found allowed value '{value}' in text '{best_text_upper}' with overlap ratio {overlap_ratio}")
+                                        if len(common_words) > max_word_match:
+                                            max_word_match = len(common_words)
+                                            best_word_match = value
+                                            print(f"Found {len(common_words)} common words between '{best_text_upper}' and '{value}': {common_words}")
                                     
-                                    # Phương pháp 2: Đếm số từ chung
-                                    if not best_match:
-                                        best_word_match = None
-                                        max_word_match = 0
-                                        
-                                        best_text_words = set(best_text_upper.split())
-                                        
-                                        for value in allowed_values:
-                                            value_words = set(value.upper().split())
-                                            common_words = best_text_words.intersection(value_words)
-                                            
-                                            if len(common_words) > max_word_match:
-                                                max_word_match = len(common_words)
-                                                best_word_match = value
-                                                print(f"Found {len(common_words)} common words between '{best_text_upper}' and '{value}': {common_words}")
-                                        
-                                        if best_word_match:
-                                            best_match = best_word_match
+                                    if best_word_match:
+                                        best_match = best_word_match
+                                
+                                # Nếu không tìm thấy bằng hai phương pháp trên, dùng phương pháp cũ
+                                if not best_match:
+                                    first_char_matches = []
+                                    for value in allowed_values:
+                                        if len(best_text) > 0 and len(value) > 0 and best_text[0].upper() == value[0].upper():
+                                            first_char_matches.append(value)
                                     
-                                    # Nếu không tìm thấy bằng hai phương pháp trên, dùng phương pháp cũ
-                                    if not best_match:
-                                        first_char_matches = []
-                                        for value in allowed_values:
-                                            if len(best_text) > 0 and len(value) > 0 and best_text[0].upper() == value[0].upper():
-                                                first_char_matches.append(value)
+                                    if first_char_matches:
+                                        print(f"Found values with matching first character: {first_char_matches}")
+                                        # Mặc định sử dụng giá trị đầu tiên khớp
+                                        best_match = first_char_matches[0]
+                                        best_match_count = 1
                                         
-                                        if first_char_matches:
-                                            print(f"Found values with matching first character: {first_char_matches}")
-                                            # Mặc định sử dụng giá trị đầu tiên khớp
-                                            best_match = first_char_matches[0]
-                                            best_match_count = 1
-                                            
-                                            # Tìm giá trị có nhiều ký tự khớp liên tiếp nhất
-                                            for value in first_char_matches:
-                                                current_count = 0
-                                                for i in range(min(len(best_text), len(value))):
-                                                    if best_text[i].upper() == value[i].upper():
-                                                        current_count += 1
-                                                    else:
-                                                        break
-                                                
-                                                if current_count > best_match_count:
-                                                    best_match = value
-                                                    best_match_count = current_count
-                                                    print(f"Better match found: '{value}' with {current_count} consecutive character(s)")
-                                    
-                                    # Nếu đã tìm được match phù hợp, áp dụng
-                                    if best_match:
-                                        print(f"Changed best_text from '{best_text}' to '{best_match}' based on partial matching")
-                                        best_text = best_match
-                                    else:
-                                        # Không có giá trị nào khớp ký tự đầu tiên, tìm khớp ở vị trí khác
-                                        match_found = False
-                                        for value in allowed_values:
-                                            for i in range(1, min(len(best_text), len(value))):
+                                        # Tìm giá trị có nhiều ký tự khớp liên tiếp nhất
+                                        for value in first_char_matches:
+                                            current_count = 0
+                                            for i in range(min(len(best_text), len(value))):
                                                 if best_text[i].upper() == value[i].upper():
-                                                    print(f"Match found at position {i}: '{best_text[i]}' with '{value}'")
-                                                    best_text = value
-                                                    print(f"Changed best_text to '{value}' based on match at position {i}")
-                                                    match_found = True
+                                                    current_count += 1
+                                                else:
                                                     break
-                                            if match_found:
+                                            
+                                            if current_count > best_match_count:
+                                                best_match = value
+                                                best_match_count = current_count
+                                                print(f"Better match found: '{value}' with {current_count} consecutive character(s)")
+                                
+                                # Nếu đã tìm được match phù hợp, áp dụng
+                                if best_match:
+                                    print(f"Changed best_text from '{best_text}' to '{best_match}' based on partial matching")
+                                    best_text = best_match
+                                else:
+                                    # Thử tìm match ở vị trí khác nếu không có vị trí đầu tiên
+                                    match_found = False
+                                    for value in allowed_values:
+                                        for i in range(1, min(len(best_text), len(value))):
+                                            if best_text[i].upper() == value[i].upper():
+                                                print(f"Match found at position {i}: '{best_text[i]}' with '{value}'")
+                                                best_text = value
+                                                print(f"Changed best_text to '{value}' based on match at position {i}")
+                                                match_found = True
                                                 break
+                                        if match_found:
+                                            break
+                                    
+                                    # Nếu vẫn không tìm thấy match nào, sử dụng phương pháp cuối: chỉ cần chọn phần tử đầu tiên
+                                    if not match_found and allowed_values:
+                                        best_text = allowed_values[0]
+                                        print(f"No matches found at all, defaulting to first allowed value: '{best_text}'")
                     except Exception as e:
                         print(f"Error checking allowed_values for ROI {roi_name}: {str(e)}")
+                        traceback.print_exc()
                     
                     results.append({
                         "roi_index": roi_name,
                         "text": best_text,
                         "confidence": best_confidence,
-                        "has_text": has_text
+                        "has_text": has_text,
+                        "original_value": original_value
                     })
                     print(f"Added text result for ROI {i} ({roi_name}): '{best_text}'")
                     continue  # Bỏ qua phần xử lý định dạng số tiếp theo
@@ -770,42 +893,41 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                         # Kiểm tra xem có cấu hình cho ROI này không
                         best_text = best_text[1:] if is_negative else best_text
                         
-                        if (machine_code in decimal_places_config and 
-                            screen_id in decimal_places_config[machine_code] and 
-                            roi_name in decimal_places_config[machine_code][screen_id]):
+                        # Lấy machine_type từ machine_code
+                        machine_type = get_machine_type(machine_code)
+                        print(f"Getting decimal places config for machine_type={machine_type}, screen_id={screen_id}, roi_name={roi_name}")
+                        
+                        # Áp dụng decimal_places trước khi chuyển sang ROI tiếp theo
+                        if (machine_type in decimal_places_config and 
+                            screen_id in decimal_places_config[machine_type] and 
+                            roi_name in decimal_places_config[machine_type][screen_id]):
                             
-                            decimal_places = int(decimal_places_config[machine_code][screen_id][roi_name])
+                            decimal_places = int(decimal_places_config[machine_type][screen_id][roi_name])
                             print(f"Found decimal places config for ROI {roi_name}: {decimal_places}")
-                            
-                            # Chuyển đổi thành số float
-                            num_value = best_text
-                            original_str = str(num_value)
                             
                             # Xử lý các trường hợp khác nhau dựa trên decimal_places
                             if decimal_places == 0:
                                 # Nếu decimal_places là 0, giữ lại tất cả các chữ số nhưng bỏ dấu chấm
-                                formatted_text = str(num_value).replace('.', '')
+                                formatted_text = str(best_text).replace('.', '')
                                 formatted_text = '-' + str(formatted_text) if is_negative else str(formatted_text)
                                 print(f"Removed decimal point for ROI {roi_name}: {formatted_text}")
                             else:
                                 # Đếm số chữ số thập phân hiện tại
                                 current_decimal_places = 0
-                                if '.' in original_str:
-                                    dec_part = original_str.split('.')[1]
-                                    # Đếm số thập phân có ý nghĩa (bỏ các số 0 không có ý nghĩa ở cuối)
-                                    # Lưu ý: tất cả số 0 đều có ý nghĩa nếu phù hợp với decimal_places
+                                if '.' in best_text:
+                                    dec_part = best_text.split('.')[1]
                                     current_decimal_places = len(dec_part)
                                 
                                 # Nếu số chữ số thập phân hiện tại bằng đúng số chữ số thập phân cần có
                                 if current_decimal_places == decimal_places:
                                     # Giữ nguyên số
-                                    formatted_text = original_str
+                                    formatted_text = best_text
                                     formatted_text = '-' + str(formatted_text) if is_negative else str(formatted_text)
-                                    print(f"Already correct format for ROI {roi_name}: {original_str}")
+                                    print(f"Already correct format for ROI {roi_name}: {best_text}")
                                 else:
-                                    # Phần số nguyên và phần thập phân riêng biệt
-                                    if '.' in original_str:
-                                        int_part, dec_part = original_str.split('.')
+                                    # Xử lý khi có dấu thập phân
+                                    if '.' in best_text:
+                                        int_part, dec_part = best_text.split('.')
                                         
                                         # Kết hợp phần nguyên và phần thập phân thành một chuỗi không có dấu chấm
                                         all_digits = int_part + dec_part
@@ -828,8 +950,8 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                                             formatted_text = '-' + str(formatted_text) if is_negative else str(formatted_text)
                                     else:
                                         # Không có dấu chấm (số nguyên)
-                                        num_str = str(int(best_text))
-                                        print(decimal_places)
+                                        num_str = str(best_text)
+                                        
                                         # Thêm phần thập phân nếu cần
                                         if decimal_places > 0:
                                             # Đặt dấu chấm vào vị trí thích hợp: (độ dài - decimal_places)
@@ -848,15 +970,57 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                                             # Giữ nguyên số nguyên nếu không cần thập phân
                                             formatted_text = num_str
                                             formatted_text = '-' + str(formatted_text) if is_negative else str(formatted_text)
-                                    print(f"Formatted value for ROI {roi_name}: Original: {num_value}, Formatted: {formatted_text}")
+                                    print(f"Formatted value for ROI {roi_name}: Original: {best_text}, Formatted: {formatted_text}")
+                                
+                                # Cập nhật best_text cho các bước xử lý tiếp theo
+                                best_text = formatted_text
+                        else:
+                            # Thêm xử lý đặc biệt cho "Machine OEE" nếu không tìm thấy trong cấu hình
+                            if roi_name == "Machine OEE":
+                                decimal_places = 2  # Áp dụng 2 chữ số thập phân cho Machine OEE theo yêu cầu
+                                print(f"Special case: Applying {decimal_places} decimal places for Machine OEE")
+                                
+                                # Xử lý định dạng số như các trường hợp khác
+                                num_str = str(best_text)
+                                if len(num_str) <= decimal_places:
+                                    padded_str = num_str.zfill(decimal_places)
+                                    formatted_text = f"0.{padded_str}"
+                                else:
+                                    insert_pos = len(num_str) - decimal_places
+                                    formatted_text = f"{num_str[:insert_pos]}.{num_str[insert_pos:]}"
+                                
+                                formatted_text = '-' + str(formatted_text) if is_negative else str(formatted_text)
+                                print(f"Special handling for Machine OEE: Formatted value: {formatted_text}")
+                                best_text = formatted_text
+                            else:
+                                # Nếu không có cấu hình decimal_places, giữ nguyên giá trị
+                                formatted_text = best_text
+                                formatted_text = '-' + str(formatted_text) if is_negative else str(formatted_text)
+                                print(f"No decimal places config found for {machine_type}/{screen_id}/{roi_name}. Keeping original value.")
                     except Exception as e:
                         print(f"Error applying decimal places format for ROI {roi_name}: {str(e)}")
+                        formatted_text = best_text
+                        formatted_text = '-' + str(formatted_text) if is_negative else str(formatted_text)
+                else:
+                    # Nếu không phải là số, giữ nguyên text
+                    formatted_text = best_text
                 
                 # Kiểm tra nếu ROI có chứa "working hours" trong tên 
-                # và kết quả đọc được là định dạng kiểu số.số.số
-                if "working hours" in roi_name.lower() and re.match(r'^\d+\.\d+\.\d+$', formatted_text):
-                    # Chuyển đổi từ định dạng số.số.số sang số:số:số
-                    formatted_text = formatted_text.replace('.', ':').replace(' ', ':').replace('-', ':').replace(' ',':')
+                if "working hours" in roi_name.lower():
+                    # Loại bỏ tất cả các ký tự không phải số
+                    digits_only = re.sub(r'[^0-9]', '', formatted_text)
+                    
+                    # Kiểm tra xem chuỗi có đủ số để định dạng không
+                    if len(digits_only) >= 2:
+                        # Thêm dấu ":" sau mỗi 2 ký tự từ phải sang trái
+                        result = ""
+                        for i in range(len(digits_only) - 1, -1, -1):
+                            result = digits_only[i] + result
+                            if i > 0 and (len(digits_only) - i) % 2 == 0:
+                                result = ":" + result
+                        
+                        formatted_text = result
+                        print(f"Reformatted working hours from original '{original_value}' to '{formatted_text}'")
                 
                 # Xử lý dấu "-" không ở vị trí đầu tiên
                 if "-" in formatted_text[1:]:
@@ -995,24 +1159,40 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                         
                         # Xử lý định dạng working hours trước khi loại bỏ khoảng trắng
                         if "working hours" in roi_name.lower():
-                            # Kiểm tra định dạng có dấu chấm hoặc có khoảng trắng giữa các số
-                            if re.match(r'^\d+\.\d+\.\d+$', retry_text) or re.match(r'^\d+\s+\d+\s+\d+$', retry_text):
-                                # Chuyển đổi từ định dạng số.số.số hoặc số số số sang số:số:số
-                                retry_text = retry_text.replace('.', ':').replace(' ', ':').replace('-', ':')
+                            # Loại bỏ tất cả các ký tự không phải số
+                            digits_only = re.sub(r'[^0-9]', '', retry_text)
+                            
+                            # Kiểm tra xem chuỗi có đủ số để định dạng không
+                            if len(digits_only) >= 2:
+                                # Thêm dấu ":" sau mỗi 2 ký tự từ phải sang trái
+                                result = ""
+                                for i in range(len(digits_only) - 1, -1, -1):
+                                    result = digits_only[i] + result
+                                    if i > 0 and (len(digits_only) - i) % 2 == 0:
+                                        result = ":" + result
+                                
+                                retry_text = result
+                                print(f"Reformatted retry working hours from original to '{retry_text}'")
                         
-                        # Xử lý kết quả OCR có khoảng trắng giữa các số (ví dụ: "1 3")
-                        if ' ' in retry_text and all(c.isdigit() or c == ' ' or c == '.' or c == '-' for c in retry_text):
-                            print(f"Found spaces in retry numeric result: '{retry_text}'. Removing spaces...")
-                            retry_text = retry_text.replace(' ', '')
-                            print(f"After removing spaces: '{retry_text}'")
+                        # Xử lý dấu "-" không ở vị trí đầu tiên
+                        if "-" in retry_text[1:]:
+                            retry_text = retry_text[0] + retry_text[1:].replace('-', '.')
+                            print(f"Replaced dash in middle with dot in retry_text: {retry_text}")
                         
                         # Kiểm tra allowed_values cho retry_text, tương tự như đã làm với best_text
                         try:
                             # Kiểm tra xem file ROIs JSON có tồn tại
-                            roi_json_path = 'python_api_test\\roi_data\\roi_info.json'
+                            roi_json_path = 'roi_data/roi_info.json'
+                            if not os.path.exists(roi_json_path):
+                                roi_json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'roi_data/roi_info.json')
+                            
                             if os.path.exists(roi_json_path):
                                 with open(roi_json_path, 'r', encoding='utf-8') as f:
                                     roi_info = json.load(f)
+                                
+                                # Lấy machine_type từ machine_code
+                                machine_type_for_roi = get_machine_type(machine_code)
+                                print(f"Using machine_code={machine_code}, machine_type={machine_type_for_roi} to find allowed_values")
                                 
                                 # Tìm allowed_values cho ROI hiện tại
                                 if (machine_code in roi_info.get("machines", {}) and 
@@ -1144,58 +1324,75 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                             
                             # Áp dụng định dạng theo decimal_places nếu kết quả là số và có cấu hình
                             formatted_retry_text = retry_text
-                            if re.match(r'^-?\d+\.?\d*$', retry_text) and (
-                                machine_code in decimal_places_config and 
-                                screen_id in decimal_places_config[machine_code] and 
-                                roi_name in decimal_places_config[machine_code][screen_id]):
+                            
+                            # Xử lý trường hợp retry_text chỉ có các ký tự số nhưng không có dấu chấm thập phân
+                            is_numeric = re.match(r'^-?\d+$', retry_text) is not None
+                            has_decimal_point = '.' in retry_text
+                            
+                            if (is_numeric or re.match(r'^-?\d+\.?\d*$', retry_text)) and (
+                                machine_type in decimal_places_config and 
+                                screen_id in decimal_places_config[machine_type] and 
+                                roi_name in decimal_places_config[machine_type][screen_id]):
                                 
                                 try:
                                     is_negative = retry_text.startswith('-')
                                     clean_text = retry_text[1:] if is_negative else retry_text
-                                    decimal_places = int(decimal_places_config[machine_code][screen_id][roi_name])
-                                    print(f"Applying decimal places {decimal_places} to retry text: {retry_text}")
+                                    decimal_places = int(decimal_places_config[machine_type][screen_id][roi_name])
+                                    print(f"Getting decimal places config for machine_type={machine_type}, screen_id={screen_id}, roi_name={roi_name}")
+                                    print(f"Found decimal places config for ROI {roi_name}: {decimal_places}")
                                     
                                     # Xử lý tương tự như phần xử lý decimal_places ở trên
                                     if decimal_places == 0:
                                         # Nếu decimal_places là 0, bỏ dấu chấm
                                         formatted_retry_text = clean_text.replace('.', '')
+                                        print(f"Removed decimal point for ROI {roi_name}: {formatted_retry_text}")
                                     else:
                                         # Xử lý vị trí dấu thập phân
                                         if '.' in clean_text:
                                             int_part, dec_part = clean_text.split('.')
+                                            
+                                            # Kết hợp phần nguyên và phần thập phân thành một chuỗi không có dấu chấm
                                             all_digits = int_part + dec_part
                                             
+                                            # Đặt dấu chấm vào vị trí thích hợp theo decimal_places
                                             if decimal_places > 0:
                                                 if len(all_digits) <= decimal_places:
+                                                    # Thêm số 0 phía trước và đặt dấu chấm sau số 0 đầu tiên
                                                     padded_str = all_digits.zfill(decimal_places)
                                                     formatted_retry_text = f"0.{padded_str}"
                                                 else:
+                                                    # Đặt dấu chấm vào vị trí thích hợp: (độ dài - decimal_places)
                                                     insert_pos = len(all_digits) - decimal_places
                                                     formatted_retry_text = f"{all_digits[:insert_pos]}.{all_digits[insert_pos:]}"
                                             else:
+                                                # Nếu decimal_places = 0, bỏ dấu chấm
                                                 formatted_retry_text = all_digits
                                         else:
                                             # Không có dấu chấm (số nguyên)
+                                            num_str = clean_text
+                                            
+                                            # Thêm phần thập phân nếu cần
                                             if decimal_places > 0:
                                                 # Đặt dấu chấm vào vị trí thích hợp: (độ dài - decimal_places)
-                                                if len(clean_text) <= decimal_places:
+                                                if len(num_str) <= decimal_places:
                                                     # Nếu số chữ số ít hơn hoặc bằng decimal_places, thêm số 0 ở đầu
-                                                    padded_str = clean_text.zfill(decimal_places)
+                                                    padded_str = num_str.zfill(decimal_places)
                                                     formatted_retry_text = f"0.{padded_str}"
                                                 else:
                                                     # Đặt dấu chấm vào vị trí thích hợp
-                                                    insert_pos = len(clean_text) - decimal_places
-                                                    formatted_retry_text = f"{clean_text[:insert_pos]}.{clean_text[insert_pos:]}"
+                                                    insert_pos = len(num_str) - decimal_places
+                                                    formatted_retry_text = f"{num_str[:insert_pos]}.{num_str[insert_pos:]}"
                                                 
-                                                print(f"Formatted integer retry value {clean_text} with decimal_places={decimal_places}: {formatted_retry_text}")
+                                                print(f"Formatted integer retry value {num_str} with decimal_places={decimal_places}: {formatted_retry_text}")
                                             else:
-                                                formatted_retry_text = clean_text
+                                                # Giữ nguyên số nguyên nếu không cần thập phân
+                                                formatted_retry_text = num_str
                                     
                                     # Thêm dấu âm nếu cần
                                     if is_negative:
                                         formatted_retry_text = f"-{formatted_retry_text}"
                                         
-                                    print(f"Formatted retry text: {formatted_retry_text}")
+                                    print(f"Formatted retry text: Original: '{retry_text}', Formatted: '{formatted_retry_text}'")
                                 except Exception as e:
                                     print(f"Error formatting retry text: {str(e)}")
                             
@@ -1272,227 +1469,214 @@ def upload_image():
             file_path = os.path.join(processed_folder, filename)
             try:
                 if os.path.isfile(file_path):
-                    os.remove(file_path)
-                    print(f"Deleted: {file_path}")
+                    os.unlink(file_path)
             except Exception as e:
-                print(f"Error deleting {file_path}: {str(e)}")
+                print(f"Error when deleting file {file_path}: {e}")
     else:
-        os.makedirs(processed_folder)
-        print(f"Created processed_roi folder: {processed_folder}")
+        os.makedirs(processed_folder, exist_ok=True)
     
-    # Kiểm tra machine_code và screen_id từ form data
-    machine_code = request.form.get('machine_code')
-    screen_id = request.form.get('screen_id')
+    # Kiểm tra các tham số bắt buộc
+    if 'area' not in request.form:
+        return jsonify({"error": "Missing required parameter: area"}), 400
     
-    # Lấy template_image path từ form data nếu có
-    template_image = request.form.get('template_image')
+    if 'machine_code' not in request.form:
+        return jsonify({"error": "Missing required parameter: machine_code"}), 400
     
-    # Nếu không có trong form data, thử lấy từ thông tin máy hiện tại
-    if not machine_code or not screen_id:
-        machine_info = get_current_machine_info()
-        if machine_info:
-            machine_code = machine_info['machine_code']
-            screen_id = machine_info['screen_id']
-        else:
+    area = request.form['area'].strip().upper()
+    machine_code = request.form['machine_code'].strip().upper()
+    
+    # Kiểm tra xem area và machine_code có tồn tại không
+    try:
+        # Đọc file cấu hình
+        machine_screens_path = os.path.join(app.config['ROI_DATA_FOLDER'], 'machine_screens.json')
+        if not os.path.exists(machine_screens_path):
+            return jsonify({"error": "Machine screens configuration not found"}), 404
+        
+        with open(machine_screens_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        # Kiểm tra xem area có tồn tại không
+        if area not in data["areas"]:
+            return jsonify({"error": f"Area '{area}' not found"}), 404
+        
+        # Kiểm tra xem machine_code có tồn tại trong area này không
+        if machine_code not in data["areas"][area]["machines"]:
+            return jsonify({"error": f"Machine '{machine_code}' not found in area '{area}'"}), 404
+        
+        # Lấy machine_type từ cấu hình
+        machine_type = data["areas"][area]["machines"][machine_code]["type"]
+    except Exception as e:
+        return jsonify({"error": f"Error loading machine configuration: {str(e)}"}), 500
+    
+    # Lưu file tạm thời
+    filename = secure_filename(file.filename)
+    temp_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    file.save(temp_path)
+    
+    try:
+        # Đọc ảnh đã upload
+        uploaded_image = cv2.imread(temp_path)
+        if uploaded_image is None:
+            return jsonify({"error": "Could not read uploaded image"}), 400
+        
+        # Tự động nhận diện loại màn hình bằng template matching
+        print(f"Nhận diện loại màn hình cho machine_type={machine_type}...")
+        screen_id, screen_numeric_id, best_template = detect_screen_by_template_matching(uploaded_image, machine_type)
+        
+        if screen_id is None:
             return jsonify({
-                "error": "Missing machine_code and screen_id. Please provide them in form data or set them using /api/set_machine_screen first."
+                "error": "Could not automatically detect screen type from image. Please specify a screen_id.",
+                "machine_type": machine_type
             }), 400
-    
-    print(f"Processing image for machine: {machine_code}, screen: {screen_id}")
-    
-    # Xác định đường dẫn template image
-    template_path = None
-    if template_image:
-        # Sử dụng template được chỉ định trong form data
-        template_path = os.path.join(app.config['REFERENCE_IMAGES_FOLDER'], template_image)
-        if not os.path.exists(template_path):
-            template_path = os.path.join(app.config['UPLOAD_FOLDER'], template_image)
-    else:
-        # Tìm template trong thư mục reference_images dựa trên machine_code và screen_id
-        template_path = get_reference_template_path(machine_code, screen_id)
-    
-    # Kiểm tra template_path tồn tại
-    if template_path and not os.path.exists(template_path):
-        print(f"Template path {template_path} does not exist")
-        template_path = None
-    
-    if template_path:
-        print(f"Using template image: {template_path}")
-    else:
-        print("No template image found, will not perform alignment")
-    
-    # Kiểm tra file có phải là hình ảnh không
-    if file and allowed_file(file.filename):
-        filename = secure_filename(file.filename)
         
-        # Tạo tên file cho ảnh (thêm machine_code và screen_id vào tên file)
-        base_name, extension = os.path.splitext(filename)
-        filename = f"{base_name}_{machine_code}_{screen_id}{extension}"
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        print(f"Đã nhận diện màn hình: {screen_id} (numeric_id: {screen_numeric_id})")
         
-        # Kiểm tra xem file đã tồn tại chưa và xóa nếu có
-        if os.path.exists(file_path):
-            os.remove(file_path)
-        
-        # Lưu file
-        file.save(file_path)
-        print(f"Saved image to: {file_path}")
-        
-        # Xử lý ảnh và thực hiện OCR
-        try:
-            # Đọc ảnh bằng OpenCV
-            image = cv2.imread(file_path)
-            if image is None:
-                return jsonify({"error": "Failed to read image with OpenCV"}), 500
+        # Lấy template path cho màn hình đã phát hiện
+        template_path = get_reference_template_path(machine_type, screen_id)
+        if template_path:
+            print(f"Using template image: {template_path}")
+        else:
+            print("No template image found, will not perform alignment")
             
-            print(f"Image loaded successfully, shape: {image.shape}")
+        # Thêm mới: Phát hiện màn hình HMI
+        hmi_detected = False
+        visualization_path = None
+        hmi_screen, visualization, roi_coords = detect_hmi_screen(uploaded_image)
+        
+        # Lưu trữ thông tin phát hiện HMI
+        hmi_detection_info = {
+            "hmi_detected": False,
+            "hmi_image": None,
+            "visualization": None
+        }
+        
+        if hmi_screen is not None:
+            hmi_detected = True
+            # Lưu ảnh visualization
+            visualization_filename = f"hmi_visualization_{machine_code}_{screen_id}.png"
+            visualization_path = os.path.join(app.config['UPLOAD_FOLDER'], visualization_filename)
+            # Sử dụng HMI đã phát hiện và tinh chỉnh thay vì ảnh gốc
+            print("Màn hình HMI đã được phát hiện, tinh chỉnh và cắt!")
+            uploaded_image = hmi_screen
             
-            # Thêm mới: Phát hiện màn hình HMI
-            hmi_detected = False
-            visualization_path = None
-            hmi_screen, visualization, roi_coords = detect_hmi_screen(image)
+            # Lưu ảnh HMI đã tinh chỉnh
+            refined_hmi_filename = f"refined_hmi_{machine_code}_{screen_id}.png"
+            refined_hmi_path = os.path.join(app.config['UPLOAD_FOLDER'], refined_hmi_filename)
+            print(f"Processing refined HMI")
             
-            # Lưu trữ thông tin phát hiện HMI
+            # Cập nhật thông tin phát hiện HMI
+            hmi_detection_info = {
+                "hmi_detected": True,
+                "hmi_image": f"/api/images/hmi_detection/{refined_hmi_filename}",
+                "visualization": f"/api/images/hmi_detection/{visualization_filename}"
+            }
+        else:
+            print("Không phát hiện màn hình HMI trong ảnh")
+            # Tạo ảnh visualization với thông báo không tìm thấy HMI
+            height, width = uploaded_image.shape[:2]
+            visualization = uploaded_image.copy()
+            cv2.putText(visualization, "No HMI Screen Detected", (int(width/2)-150, int(height/2)), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+            
+            visualization_filename = f"no_hmi_visualization.png"
+            visualization_path = os.path.join(app.config['UPLOAD_FOLDER'], visualization_filename)
+            
             hmi_detection_info = {
                 "hmi_detected": False,
                 "hmi_image": None,
-                "visualization": None
+                "visualization": f"/api/images/hmi_detection/{visualization_filename}"
             }
-            
-            if hmi_screen is not None:
-                hmi_detected = True
-                # Lưu ảnh visualization
-                visualization_filename = f"hmi_visualization_{machine_code}_{screen_id}.png"
-                visualization_path = os.path.join(app.config['UPLOAD_FOLDER'], visualization_filename)
-                # cv2.imwrite(visualization_path, visualization)
-                # Sử dụng HMI đã phát hiện và tinh chỉnh thay vì ảnh gốc
-                print("Màn hình HMI đã được phát hiện, tinh chỉnh và cắt!")
-                image = hmi_screen
-                
-                # Lưu ảnh HMI đã tinh chỉnh
-                refined_hmi_filename = f"refined_hmi_{machine_code}_{screen_id}.png"
-                refined_hmi_path = os.path.join(app.config['UPLOAD_FOLDER'], refined_hmi_filename)
-                print(f"Processing refined HMI (saving disabled)")
-                # cv2.imwrite(refined_hmi_path, hmi_screen)
-                
-                # Cập nhật thông tin phát hiện HMI
-                hmi_detection_info = {
-                    "hmi_detected": True,
-                    "hmi_image": f"/api/images/hmi_detection/{refined_hmi_filename}",
-                    "visualization": f"/api/images/hmi_detection/{visualization_filename}"
-                }
+        
+        # Lấy ROI coordinates và tên ROI dựa trên machine_type và screen_id đã phát hiện
+        roi_coordinates, roi_names = get_roi_coordinates(machine_code, screen_id, machine_type)
+        
+        if not roi_coordinates or len(roi_coordinates) == 0:
+            return jsonify({
+                "error": f"No ROI coordinates found for machine_code={machine_code}, screen_id={screen_id}, machine_type={machine_type}"
+            }), 404
+        
+        print(f"Found {len(roi_coordinates)} ROI coordinates and {len(roi_names)} ROI names")
+        
+        # Tiền xử lý ảnh với căn chỉnh nếu có template
+        image = uploaded_image  # Sử dụng ảnh gốc hoặc ảnh HMI đã phát hiện
+        if template_path:
+            print("Processing image with alignment...")
+            # Đọc ảnh template
+            template_img = cv2.imread(template_path)
+            if template_img is None:
+                print(f"Failed to read template image: {template_path}")
             else:
-                print("Không phát hiện màn hình HMI trong ảnh")
-                # Tạo ảnh visualization với thông báo không tìm thấy HMI
-                height, width = image.shape[:2]
-                visualization = image.copy()
-                cv2.putText(visualization, "No HMI Screen Detected", (int(width/2)-150, int(height/2)), 
-                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                # Căn chỉnh ảnh
+                aligner = ImageAligner(template_img, image)
+                aligned_image = aligner.align_images()
                 
-                visualization_filename = f"no_hmi_visualization.png"
-                visualization_path = os.path.join(app.config['UPLOAD_FOLDER'], visualization_filename)
-                # cv2.imwrite(visualization_path, visualization)
+                # Lưu ảnh đã căn chỉnh
+                aligned_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'aligned')
+                if not os.path.exists(aligned_folder):
+                    os.makedirs(aligned_folder)
                 
-                hmi_detection_info = {
-                    "hmi_detected": False,
-                    "hmi_image": None,
-                    "visualization": f"/api/images/hmi_detection/{visualization_filename}"
-                }
-            
-            # Tìm id màn hình dựa trên screen_id (tên màn hình)
-            screen_numeric_id = get_screen_numeric_id(machine_code, screen_id)
-            print(f"Found numeric screen ID: {screen_numeric_id} for screen name: {screen_id}")
-            
-            # Lấy tọa độ ROI và tên ROI dựa trên máy và màn hình
-            roi_coordinates, roi_names = get_roi_coordinates(machine_code, screen_numeric_id)
-            
-            if not roi_coordinates:
-                return jsonify({"error": f"Không tìm thấy tọa độ ROI cho máy {machine_code}, màn hình {screen_id}"}), 400
-            
-            print(f"Found {len(roi_coordinates)} ROI coordinates and {len(roi_names)} ROI names")
-            
-            # Cập nhật thông tin màn hình hiện tại
-            try:
-                # Cập nhật parameter_order_value.txt
-                parameter_order_file_path = os.path.join(app.config['ROI_DATA_FOLDER'], 'parameter_order_value.txt')
-                with open(parameter_order_file_path, 'w', encoding='utf-8') as f:
-                    f.write(str(screen_numeric_id))
-                print(f"Updated parameter_order_value.txt with screen ID: {screen_numeric_id}")
-            except Exception as e:
-                print(f"Warning: Failed to update parameter_order_value.txt: {str(e)}")
-            
-            # Tiền xử lý ảnh với căn chỉnh nếu có template
-            processed_results = []
-            if template_path:
-                print("Processing image with alignment...")
-                # Đọc ảnh template
-                template_img = cv2.imread(template_path)
-                if template_img is None:
-                    print(f"Failed to read template image: {template_path}")
-                else:
-                    # Căn chỉnh ảnh
-                    aligner = ImageAligner(template_img, image)
-                    aligned_image = aligner.align_images()
-                    
-                    # Lưu ảnh đã căn chỉnh
-                    aligned_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'aligned')
-                    if not os.path.exists(aligned_folder):
-                        os.makedirs(aligned_folder)
-                    
-                    aligned_filename = f"aligned_{filename}"
-                    aligned_path = os.path.join(aligned_folder, aligned_filename)
-                    # cv2.imwrite(aligned_path, aligned_image)
-                    print(f"Processing aligned image (saving disabled)")
-                    
-                    # Thay đổi biến image thành ảnh đã căn chỉnh
-                    image = aligned_image
-            
-            # Thực hiện OCR trên các vùng ROI
-            print(f"Performing OCR on {len(roi_coordinates)} ROIs")
-            ocr_results = perform_ocr_on_roi(
-                image, 
-                roi_coordinates, 
-                filename, 
-                template_path,
-                roi_names,
-                machine_code,  # Truyền machine_code từ request
-                screen_id      # Truyền screen_id từ request
-            )
-            
-            # Lưu kết quả OCR vào file JSON
-            timestamp = time.strftime("%Y%m%d_%H%M%S")
-            ocr_result_filename = f"ocr_result_{timestamp}_{base_name}_{machine_code}_{screen_id}.json"
-            ocr_result_path = os.path.join(app.config['OCR_RESULTS_FOLDER'], ocr_result_filename)
-            
-            # Đảm bảo thư mục tồn tại
-            os.makedirs(os.path.dirname(ocr_result_path), exist_ok=True)
-            
-            # Tạo cấu trúc dữ liệu giống với file OCR result
-            result_data = {
-                    "filename": filename,
-                    "machine_code": machine_code,
-                    "screen_id": screen_id,
-                    "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-                    "template_path": template_path if template_path else None,
-                    "results": ocr_results,
-                    "hmi_detection": hmi_detection_info  # Thêm thông tin phát hiện HMI
+                aligned_filename = f"aligned_{filename}"
+                aligned_path = os.path.join(aligned_folder, aligned_filename)
+                # Thay đổi biến image thành ảnh đã căn chỉnh
+                image = aligned_image
+        
+        # Thực hiện OCR trên các vùng ROI
+        print(f"Performing OCR on {len(roi_coordinates)} ROIs")
+        ocr_results = perform_ocr_on_roi(
+            image, 
+            roi_coordinates, 
+            filename, 
+            template_path,
+            roi_names,
+            machine_code,
+            screen_id
+        )
+        
+        # Lưu kết quả OCR vào file JSON
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        base_name = os.path.splitext(filename)[0]
+        ocr_result_filename = f"ocr_result_{timestamp}_{base_name}_{machine_code}_{screen_id}.json"
+        ocr_result_path = os.path.join(app.config['OCR_RESULTS_FOLDER'], ocr_result_filename)
+        
+        # Đảm bảo thư mục tồn tại
+        os.makedirs(os.path.dirname(ocr_result_path), exist_ok=True)
+        
+        # Tạo cấu trúc dữ liệu giống với file OCR result
+        result_data = {
+            "filename": filename,
+            "machine_code": machine_code,
+            "screen_id": screen_id,
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "template_path": template_path if template_path else None,
+            "results": ocr_results,
+            "hmi_detection": hmi_detection_info,
+            "detected_screen": {
+                "screen_id": screen_id,
+                "screen_numeric_id": screen_numeric_id,
+                "similarity_score": best_template and os.path.basename(best_template),
+                "machine_type": machine_type
             }
+        }
+        
+        # Lưu kết quả OCR vào file JSON
+        with open(ocr_result_path, 'w', encoding='utf-8') as f:
+            json.dump(result_data, f, ensure_ascii=False, indent=2)
+        
+        print(f"Saved OCR results to: {ocr_result_path}")
+        
+        # Trả về kết quả
+        return jsonify(result_data), 201
             
-            # Lưu kết quả OCR vào file JSON
-            with open(ocr_result_path, 'w', encoding='utf-8') as f:
-                json.dump(result_data, f, ensure_ascii=False, indent=2)
-            
-            print(f"Saved OCR results to: {ocr_result_path}")
-            
-            # Trả về kết quả với cấu trúc giống file OCR
-            return jsonify(result_data), 201
-            
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": f"Error processing image: {str(e)}"}), 500
+    finally:
+        # Dọn dẹp file tạm thời
+        try:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
         except Exception as e:
-            print(f"Error in image processing: {str(e)}")
-            traceback.print_exc()
-            return jsonify({"error": f"Lỗi khi xử lý ảnh: {str(e)}"}), 500
-    
-    return jsonify({"error": "File type not allowed"}), 400
+            print(f"Error removing temporary file: {e}")
 
 # API 2: Lấy danh sách hình ảnh
 @app.route('/api/images', methods=['GET'])
@@ -1758,7 +1942,9 @@ def get_current_machine_screen():
         if not machine_info:
             return jsonify({"error": "Current machine and screen information not found"}), 404
         
+        area = machine_info['area']
         machine_code = machine_info['machine_code']
+        machine_type = machine_info['machine_type']
         screen_id = machine_info['screen_id']
         
         # Đọc thông tin máy và màn hình
@@ -1769,16 +1955,35 @@ def get_current_machine_screen():
         with open(machine_screens_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
-        if machine_code not in data['machines']:
-            return jsonify({"error": f"Machine {machine_code} not found"}), 404
+        # Kiểm tra area, machine_code và machine_type
+        if area not in data.get('areas', {}):
+            return jsonify({"error": f"Area {area} not found"}), 404
+        
+        if machine_code not in data['areas'][area].get('machines', {}):
+            return jsonify({"error": f"Machine {machine_code} not found in area {area}"}), 404
+        
+        if machine_type not in data.get('machine_types', {}):
+            return jsonify({"error": f"Machine type {machine_type} not found"}), 404
         
         # Lấy thông tin màn hình đã chọn
-        selected_screen = next(screen for screen in data['machines'][machine_code]['screens'] if screen['id'] == screen_id)
+        selected_screen = None
+        for screen in data['machine_types'][machine_type]['screens']:
+            if screen.get('screen_id') == screen_id:
+                selected_screen = screen
+                break
+        
+        if not selected_screen:
+            return jsonify({"error": f"Screen {screen_id} not found for machine type {machine_type}"}), 404
         
         return jsonify({
+            "area": {
+                "area_code": area,
+                "name": data['areas'][area]['name']
+            },
             "machine": {
                 "machine_code": machine_code,
-                "name": data['machines'][machine_code]['name']
+                "name": data['areas'][area]['machines'][machine_code]['name'],
+                "type": machine_type
             },
             "screen": selected_screen
         }), 200
@@ -1807,15 +2012,25 @@ def get_current_machine_info():
             data = json.load(f)
         
         # Tìm máy và màn hình dựa trên screen_numeric_id
-        for machine_code, machine_info in data['machines'].items():
-            for screen in machine_info['screens']:
-                if screen['id'] == screen_numeric_id:
-                    return {
-                        'machine_code': machine_code,
-                        'screen_id': screen['screen_id'],  # Trả về tên màn hình
-                        'screen_numeric_id': screen_numeric_id,
-                        'description': screen.get('description', '')
-                    }
+        # Cần tìm trong cấu trúc mới: areas -> machines -> type -> machine_types -> screens
+        for area_code, area_info in data.get('areas', {}).items():
+            for machine_code, machine_info in area_info.get('machines', {}).items():
+                machine_type = machine_info.get('type')
+                if not machine_type:
+                    continue
+                
+                # Kiểm tra trong machine_types
+                if machine_type in data.get('machine_types', {}):
+                    for screen in data['machine_types'][machine_type].get('screens', []):
+                        if screen['id'] == screen_numeric_id:
+                            return {
+                                'area': area_code,
+                                'machine_code': machine_code,
+                                'machine_type': machine_type,
+                                'screen_id': screen['screen_id'],  # Trả về tên màn hình
+                                'screen_numeric_id': screen_numeric_id,
+                                'description': screen.get('description', '')
+                            }
         
         return None
     except Exception as e:
@@ -1825,87 +2040,102 @@ def get_current_machine_info():
 # API mới: Lấy thông tin máy theo ID
 @app.route('/api/machines', methods=['GET'])
 def get_machine_info():
-    """Lấy thông tin chi tiết về một máy cụ thể và các màn hình HMI của nó"""
+    """Lấy thông tin chi tiết về các máy và khu vực"""
     try:
         machine_code = request.args.get('machine_code', '').strip().upper()
-        if not machine_code:
-            # Nếu không có machine_code, trả về danh sách tất cả các máy
-            machine_screens_path = os.path.join(app.config['ROI_DATA_FOLDER'], 'machine_screens.json')
-            if not os.path.exists(machine_screens_path):
-                return jsonify({"error": "Machine screens configuration not found"}), 404
-            
-            with open(machine_screens_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            
-            # Trả về danh sách các mã máy
-            machine_list = []
-            for machine_code, machine_info in data['machines'].items():
-                machine_list.append({
-                    "machine_code": machine_code,
-                    "name": machine_info['name']
-                })
-            
-            return jsonify({"machines": machine_list}), 200
+        area = request.args.get('area', '').strip().upper()
         
-        # Lấy thông tin máy cụ thể
+        # Đọc file cấu hình
         machine_screens_path = os.path.join(app.config['ROI_DATA_FOLDER'], 'machine_screens.json')
         if not os.path.exists(machine_screens_path):
             return jsonify({"error": "Machine screens configuration not found"}), 404
         
         with open(machine_screens_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
-        
-        if machine_code not in data['machines']:
-            return jsonify({"error": f"Machine {machine_code} not found"}), 404
-        
-        # Trả về thông tin chi tiết của máy
-        machine_info = data['machines'][machine_code]
-        
-        # Lấy thông tin tất cả các màn hình của máy này
-        screens = []
-        for screen in machine_info['screens']:
-            screen_id = screen['id']
-            roi_coordinates = get_roi_coordinates(machine_code, screen_id)
-            if roi_coordinates:
-                screen['roi_count'] = len(roi_coordinates)
+            
+        # Nếu có cả area và machine_code, trả về thông tin chi tiết của một máy cụ thể
+        if area and machine_code:
+            if area not in data.get('areas', {}):
+                return jsonify({"error": f"Area {area} not found"}), 404
+                
+            if machine_code not in data['areas'][area].get('machines', {}):
+                return jsonify({"error": f"Machine {machine_code} not found in area {area}"}), 404
+                
+            machine_info = data['areas'][area]['machines'][machine_code]
+            machine_type = machine_info.get('type')
+            
+            if not machine_type or machine_type not in data.get('machine_types', {}):
+                return jsonify({"error": f"Machine type {machine_type} not found for machine {machine_code}"}), 404
+                
+            # Lấy thông tin màn hình từ machine_types
+            screens = []
+            for screen in data['machine_types'][machine_type].get('screens', []):
+                screen_id = screen['id']
+                screen_name = screen.get('screen_id', '')
+                
+                # Lấy thông tin ROI
+                roi_coordinates, roi_names = get_roi_coordinates(machine_code, screen_id, machine_type)
+                
+                screen_info = {
+                    "id": screen_id,
+                    "screen_id": screen_name,
+                    "description": screen.get('description', ''),
+                    "roi_count": len(roi_coordinates) if roi_coordinates else 0
+                }
                 
                 # Kiểm tra cấu hình decimal places
                 decimal_config = get_decimal_places_config()
                 has_decimal_config = (machine_code in decimal_config and 
-                                     screen_id in decimal_config[machine_code])
+                                     screen_name in decimal_config[machine_code])
                 
-                screen['has_decimal_config'] = has_decimal_config
+                screen_info['has_decimal_config'] = has_decimal_config
                 
-                # Kiểm tra từng ROI có cấu hình decimal places không
-                roi_info = []
-                for i in range(len(roi_coordinates)):
-                    roi_item = {
-                        "index": i,
-                        "name": roi_names[i] if i < len(roi_names) else f"ROI_{i}",
-                        "coordinates": roi_coordinates[i]
-                    }
-                    
-                    # Thêm thông tin decimal_places nếu có
-                    if (machine_code in decimal_config and 
-                        screen_id in decimal_config[machine_code]):
-                        # Tìm decimal_places cho ROI này dựa trên tên
-                        if roi_item["name"] in decimal_config[machine_code][screen_id]:
-                            roi_item["decimal_places"] = decimal_config[machine_code][screen_id][roi_item["name"]]
-                        # Hỗ trợ tương thích ngược với cấu trúc cũ (sử dụng chỉ số)
-                        elif str(i) in decimal_config[machine_code][screen_id]:
-                            roi_item["decimal_places"] = decimal_config[machine_code][screen_id][str(i)]
-                    
-                    roi_info.append(roi_item)
+                screens.append(screen_info)
+                
+            # Trả về thông tin chi tiết máy
+            return jsonify({
+                "area": area,
+                "area_name": data['areas'][area]['name'],
+                "machine_code": machine_code,
+                "machine_name": machine_info['name'],
+                "machine_type": machine_type,
+                "screens": screens
+            }), 200
             
-            screens.append(screen)
+        # Nếu chỉ có area, trả về danh sách máy trong khu vực đó
+        elif area:
+            if area not in data.get('areas', {}):
+                return jsonify({"error": f"Area {area} not found"}), 404
+                
+            machines = []
+            for m_code, m_info in data['areas'][area]['machines'].items():
+                machines.append({
+                    "machine_code": m_code,
+                    "name": m_info['name'],
+                    "type": m_info['type']
+                })
+                
+            return jsonify({
+                "area": area,
+                "area_name": data['areas'][area]['name'],
+                "machines": machines,
+                "machines_count": len(machines)
+            }), 200
         
-        response = {
-            "machine_code": machine_code,
-            "name": machine_info['name'],
-            "screens": screens
-        }
-        
-        return jsonify(response), 200
+        # Nếu không có tham số, trả về danh sách tất cả các khu vực
+        areas = []
+        for area_code, area_info in data.get('areas', {}).items():
+            machine_count = len(area_info.get('machines', {}))
+            areas.append({
+                "area": area_code,
+                "name": area_info['name'],
+                "machine_count": machine_count
+            })
+            
+        return jsonify({
+            "areas": areas,
+            "areas_count": len(areas)
+        }), 200
     
     except Exception as e:
         return jsonify({"error": f"Failed to get machine information: {str(e)}"}), 500
@@ -1978,7 +2208,7 @@ def set_machine_screen():
 # Kiểm tra xem đã có ROI và cấu hình decimal places cho mỗi ROI hay chưa.
 # 
 # Query parameters:
-# - machine_code: Mã máy (ví dụ: "F1")
+# - machine_code: Mã máy (ví dụ: "IE-F1-CWA01")
 # - screen_id: ID màn hình (số nguyên)
 # 
 # Nếu không cung cấp tham số, lấy thông tin từ máy và màn hình hiện tại.
@@ -2014,16 +2244,30 @@ def check_machine_screen_status():
         with open(machine_screens_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
-        if machine_code not in data['machines']:
-            return jsonify({"error": f"Machine {machine_code} not found"}), 404
+        # Tìm area và machine_type từ machine_code
+        area = get_area_for_machine(machine_code)
+        if not area:
+            return jsonify({"error": f"Area not found for machine {machine_code}"}), 404
+            
+        if machine_code not in data['areas'][area]['machines']:
+            return jsonify({"error": f"Machine {machine_code} not found in area {area}"}), 404
+        
+        machine_type = data['areas'][area]['machines'][machine_code]['type']
         
         # Kiểm tra screen_id có tồn tại không
-        screen_exists = any(screen['id'] == screen_id for screen in data['machines'][machine_code]['screens'])
+        screen_exists = False
+        screen_name = None
+        for screen in data['machine_types'][machine_type]['screens']:
+            if screen['id'] == screen_id:
+                screen_exists = True
+                screen_name = screen['screen_id']
+                break
+                
         if not screen_exists:
-            return jsonify({"error": f"Screen ID {screen_id} not found for machine {machine_code}"}), 404
+            return jsonify({"error": f"Screen ID {screen_id} not found for machine type {machine_type}"}), 404
         
         # Kiểm tra ROI
-        roi_coordinates, roi_names = get_roi_coordinates(machine_code, screen_id)
+        roi_coordinates, roi_names = get_roi_coordinates(machine_code, screen_id, machine_type)
         has_roi = roi_coordinates is not None and len(roi_coordinates) > 0
         roi_count = len(roi_coordinates) if has_roi else 0
         
@@ -2057,17 +2301,13 @@ def check_machine_screen_status():
                     "decimal_places": decimal_value
                 })
         
-        # Lấy thông tin screen name
-        screen_name = ""
-        for screen in data['machines'][machine_code]['screens']:
-            if screen['id'] == screen_id:
-                screen_name = screen['name']
-                break
-        
         # Trả về kết quả tình trạng
         status = {
+            "area": area,
+            "area_name": data['areas'][area]['name'],
             "machine_code": machine_code,
-            "machine_name": data['machines'][machine_code]['name'],
+            "machine_name": data['areas'][area]['machines'][machine_code]['name'],
+            "machine_type": machine_type,
             "screen_id": screen_id,
             "screen_name": screen_name,
             "has_roi": has_roi,
@@ -2178,12 +2418,12 @@ def set_all_decimal_values():
         return jsonify({"error": f"Failed to update decimal places values: {str(e)}"}), 500
 
 # Thêm hàm mới để lấy ID số của màn hình từ tên màn hình
-def get_screen_numeric_id(machine_code, screen_name):
+def get_screen_numeric_id(machine_type, screen_name):
     """
     Lấy ID số của một màn hình dựa trên tên màn hình
     
     Args:
-        machine_code: Mã máy (ví dụ: F1)
+        machine_type: Loại máy (ví dụ: F1, F41, F42)
         screen_name: Tên màn hình (ví dụ: Plasticizer)
         
     Returns:
@@ -2200,21 +2440,22 @@ def get_screen_numeric_id(machine_code, screen_name):
         with open(machine_screens_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
-        print(f"Looking for screen '{screen_name}' in machine '{machine_code}'")
+        print(f"Looking for screen '{screen_name}' in machine_type '{machine_type}'")
         
-        if machine_code not in data['machines']:
-            print(f"Machine code '{machine_code}' not found in machine_screens.json")
+        # Kiểm tra trong machine_types
+        if machine_type in data.get('machine_types', {}):
+            # Tìm màn hình có screen_id (tên màn hình) trùng khớp
+            for screen in data['machine_types'][machine_type].get('screens', []):
+                print(f"Checking screen: ID={screen['id']}, screen_id={screen['screen_id']}")
+                if screen['screen_id'] == screen_name:
+                    print(f"Found matching screen! ID={screen['id']}, screen_id={screen['screen_id']}")
+                    return screen['id']
+            
+            print(f"No matching screen found for '{screen_name}' in machine_type '{machine_type}'")
             return None
-        
-        # Tìm màn hình có screen_id (tên màn hình) trùng khớp
-        for screen in data['machines'][machine_code]['screens']:
-            print(f"Checking screen: ID={screen['id']}, screen_id={screen['screen_id']}")
-            if screen['screen_id'] == screen_name:
-                print(f"Found matching screen! ID={screen['id']}, screen_id={screen['screen_id']}")
-                return screen['id']
-        
-        print(f"No matching screen found for '{screen_name}' in machine '{machine_code}'")
-        return None
+        else:
+            print(f"Machine type '{machine_type}' not found in machine_screens.json")
+            return None
     except Exception as e:
         print(f"Error getting screen numeric ID: {str(e)}")
         traceback.print_exc()
@@ -2305,7 +2546,7 @@ def upload_reference_image():
     
     Form data parameters:
     - file: File ảnh template mẫu
-    - machine_code: Mã máy (ví dụ: F1)
+    - machine_type: Loại máy (ví dụ: F1, F41, F42)
     - screen_id: Mã màn hình (ví dụ: Faults)
     """
     # Kiểm tra xem có file trong request không
@@ -2318,20 +2559,20 @@ def upload_reference_image():
     if file.filename == '':
         return jsonify({"error": "No file selected"}), 400
     
-    # Kiểm tra machine_code và screen_id từ form data
-    machine_code = request.form.get('machine_code')
+    # Kiểm tra machine_type và screen_id từ form data
+    machine_type = request.form.get('machine_type')
     screen_id = request.form.get('screen_id')
     
-    if not machine_code or not screen_id:
+    if not machine_type or not screen_id:
         return jsonify({
-            "error": "Missing machine_code or screen_id. Both are required."
+            "error": "Missing machine_type or screen_id. Both are required."
         }), 400
     
     # Kiểm tra file có phải là hình ảnh không
     if file and allowed_file(file.filename):
-        # Tạo tên file cho ảnh template (format: template_{machine_code}_{screen_id}.jpg)
+        # Tạo tên file cho ảnh template (format: template_{machine_type}_{screen_id}.jpg)
         extension = os.path.splitext(file.filename)[1].lower()
-        reference_filename = f"template_{machine_code}_{screen_id}{extension}"
+        reference_filename = f"template_{machine_type}_{screen_id}{extension}"
         reference_path = os.path.join(app.config['REFERENCE_IMAGES_FOLDER'], reference_filename)
         
         # Kiểm tra xem file đã tồn tại chưa và xóa nếu có
@@ -2359,7 +2600,7 @@ def upload_reference_image():
             "template": {
                 "filename": reference_filename,
                 "path": f"/api/reference_images/{reference_filename}",
-                "machine_code": machine_code,
+                "machine_type": machine_type,
                 "screen_id": screen_id,
                 "size": os.path.getsize(reference_path),
                 "dimensions": f"{image_width}x{image_height}"
@@ -2374,8 +2615,8 @@ def get_reference_images():
     """Lấy danh sách các ảnh template mẫu đã tải lên"""
     reference_images = []
     
-    # Filter theo machine_code và screen_id nếu được cung cấp
-    machine_code = request.args.get('machine_code')
+    # Filter theo machine_type và screen_id nếu được cung cấp
+    machine_type = request.args.get('machine_type')
     screen_id = request.args.get('screen_id')
     
     for filename in os.listdir(app.config['REFERENCE_IMAGES_FOLDER']):
@@ -2385,12 +2626,12 @@ def get_reference_images():
             # Trích xuất thông tin từ tên file
             file_info = filename.split('_')
             if len(file_info) >= 3 and file_info[0] == 'template':
-                file_machine_code = file_info[1]
+                file_machine_type = file_info[1]
                 # Trích xuất screen_id (có thể chứa dấu '_')
                 file_screen_id = '_'.join(file_info[2:]).split('.')[0]
                 
-                # Lọc theo machine_code nếu được cung cấp
-                if machine_code and file_machine_code != machine_code:
+                # Lọc theo machine_type nếu được cung cấp
+                if machine_type and file_machine_type != machine_type:
                     continue
                 
                 # Lọc theo screen_id nếu được cung cấp
@@ -2411,7 +2652,7 @@ def get_reference_images():
                 reference_images.append({
                     "filename": filename,
                     "path": f"/api/reference_images/{filename}",
-                    "machine_code": file_machine_code,
+                    "machine_type": file_machine_type,
                     "screen_id": file_screen_id,
                     "size": os.path.getsize(file_path),
                     "dimensions": dimensions,
@@ -2457,9 +2698,9 @@ def get_hmi_detection_image(filename):
         abort(404)
 
 # Hàm mới: Lấy đường dẫn đến ảnh template mẫu dựa trên machine_code và screen_id
-def get_reference_template_path(machine_code, screen_id):
+def get_reference_template_path(machine_type, screen_id):
     """
-    Tìm kiếm ảnh template mẫu dựa trên machine_code và screen_id
+    Tìm kiếm ảnh template mẫu dựa trên machine_type và screen_id
     
     Returns:
         str: Đường dẫn đến file template nếu tìm thấy, None nếu không tìm thấy
@@ -2467,7 +2708,7 @@ def get_reference_template_path(machine_code, screen_id):
     reference_folder = app.config['REFERENCE_IMAGES_FOLDER']
     
     # Tạo pattern tên file
-    file_pattern = f"template_{machine_code}_{screen_id}.*"
+    file_pattern = f"template_{machine_type}_{screen_id}.*"
     
     # Tìm kiếm file theo pattern
     for filename in os.listdir(reference_folder):
@@ -2485,6 +2726,8 @@ def preprocess_roi_for_ocr(roi, roi_index, original_filename, roi_name=None, ima
         roi_index: Chỉ số ROI
         original_filename: Tên file gốc
         roi_name: Tên ROI (tùy chọn)
+        image_aligned: Ảnh đã được căn chỉnh
+        x1, y1, x2, y2: Tọa độ của ROI trong ảnh gốc
         
     Returns:
         Tuple: (Ảnh ROI đã được tiền xử lý, thông tin chất lượng ảnh)
@@ -2628,7 +2871,6 @@ def preprocess_roi_for_ocr(roi, roi_index, original_filename, roi_name=None, ima
         # cv2.imwrite(processed_path, closing)
         return closing, quality_info  # Trả về ảnh grayscale và thông tin chất lượng
 
-
 def is_named_roi_format(roi_list):
     """Kiểm tra xem danh sách ROI có phải là định dạng mới (có name và coordinates) hay không"""
     if not roi_list:
@@ -2638,13 +2880,13 @@ def is_named_roi_format(roi_list):
     return isinstance(first_item, dict) and "name" in first_item and "coordinates" in first_item
 
 # Thêm route mới cho /api/machines/<machine_code>
-@app.route('/api/machines/<machine_code>', methods=['GET'])
+@app.route('/api/machine_screens/<machine_code>', methods=['GET'])
 def get_machine_screens(machine_code):
     """
     Lấy danh sách các màn hình (screens) cho một máy cụ thể
     
     Path Parameters:
-    - machine_code: Mã máy (bắt buộc, ví dụ: F1, F41)
+    - machine_code: Mã máy (bắt buộc, ví dụ: IE-F1-CWA01)
     """
     try:
         # Đọc file JSON chứa thông tin về máy và màn hình
@@ -2655,46 +2897,103 @@ def get_machine_screens(machine_code):
         with open(machine_screens_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
-        # Kiểm tra xem machine_code có tồn tại trong dữ liệu không
-        if machine_code not in data['machines']:
-            return jsonify({"error": f"Machine {machine_code} not found"}), 404
+        # Tìm khu vực chứa máy này
+        area = get_area_for_machine(machine_code)
+        if not area:
+            return jsonify({"error": f"Area not found for machine {machine_code}"}), 404
         
-        # Lấy thông tin về các màn hình của máy này
-        machine_info = data['machines'][machine_code]
-        screens = machine_info['screens']
+        # Kiểm tra xem machine_code có tồn tại trong khu vực đó không
+        if machine_code not in data['areas'][area]['machines']:
+            return jsonify({"error": f"Machine {machine_code} not found in area {area}"}), 404
         
-        # Đọc cấu hình decimal places
-        decimal_config = get_decimal_places_config()
+        # Lấy thông tin cơ bản về máy
+        machine_info = data['areas'][area]['machines'][machine_code]
+        machine_type = machine_info.get('type')
         
-        # Thêm thông tin ROI cho mỗi màn hình (nếu có)
-        for screen in screens:
+        if not machine_type or machine_type not in data.get('machine_types', {}):
+            return jsonify({"error": f"Machine type {machine_type} not found for machine {machine_code}"}), 404
+        
+        # Lấy thông tin các màn hình của loại máy này
+        screens = []
+        for screen in data['machine_types'][machine_type].get('screens', []):
             screen_id = screen['id']
             screen_name = screen.get('screen_id', '')
-            roi_coordinates, roi_names = get_roi_coordinates(machine_code, screen_id)
             
-            if roi_coordinates:
-                screen['roi_count'] = len(roi_coordinates)
-                
-                # Kiểm tra cấu hình decimal places theo cấu trúc mới
-                # Trong decimal_places.json, cấu trúc là:
-                # "F1": { "Faults": { "Tgian_chu_ki": 5, "Vtri_khuon": 2 } }
-                has_decimal_config = (machine_code in decimal_config and 
-                                     screen_name in decimal_config[machine_code])
-                
-                screen['has_decimal_config'] = has_decimal_config
-            else:
-                screen['roi_count'] = 0
-                screen['has_decimal_config'] = False
+            # Lấy thông tin ROI
+            roi_coordinates, roi_names = get_roi_coordinates(machine_code, screen_id, machine_type)
+            
+            screen_info = {
+                "id": screen_id,
+                "screen_id": screen_name,
+                "description": screen.get('description', ''),
+                "roi_count": len(roi_coordinates) if roi_coordinates else 0
+            }
+            
+            # Kiểm tra cấu hình decimal places
+            decimal_config = get_decimal_places_config()
+            has_decimal_config = (machine_code in decimal_config and 
+                                screen_name in decimal_config[machine_code])
+            
+            screen_info['has_decimal_config'] = has_decimal_config
+            
+            screens.append(screen_info)
         
         return jsonify({
+            "area": area,
+            "area_name": data['areas'][area]['name'],
             "machine_code": machine_code,
             "machine_name": machine_info['name'],
+            "machine_type": machine_type,
             "screens_count": len(screens),
             "screens": screens
         }), 200
     
     except Exception as e:
         return jsonify({"error": f"Failed to get screens: {str(e)}"}), 500
+
+# Thêm API mới để lấy danh sách máy trong một khu vực
+@app.route('/api/machines/<area_code>', methods=['GET'])
+def get_machines_by_area(area_code):
+    """
+    Lấy danh sách các máy trong một khu vực cụ thể
+    
+    Path Parameters:
+    - area_code: Mã khu vực (bắt buộc, ví dụ: F1)
+    """
+    try:
+        area_code = area_code.strip().upper()
+        
+        # Đọc file cấu hình
+        machine_screens_path = os.path.join(app.config['ROI_DATA_FOLDER'], 'machine_screens.json')
+        if not os.path.exists(machine_screens_path):
+            return jsonify({"error": "Machine screens configuration not found"}), 404
+        
+        with open(machine_screens_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        # Kiểm tra xem area_code có tồn tại không
+        if area_code not in data.get('areas', {}):
+            return jsonify({"error": f"Area {area_code} not found"}), 404
+        
+        # Lấy danh sách máy trong khu vực
+        machines = []
+        for machine_code, machine_info in data['areas'][area_code]['machines'].items():
+            machines.append({
+                "machine_code": machine_code,
+                "name": machine_info['name'],
+                "type": machine_info['type'],
+                "description": machine_info.get('description', 'monitor 1.png')
+            })
+        
+        return jsonify({
+            "area": area_code,
+            "area_name": data['areas'][area_code]['name'],
+            "machines": machines,
+            "machines_count": len(machines)
+        }), 200
+    
+    except Exception as e:
+        return jsonify({"error": f"Failed to get machines for area {area_code}: {str(e)}"}), 500
 
 # API mới: Cập nhật cấu hình số chữ số thập phân cho một màn hình cụ thể
 @app.route('/api/decimal_places/<machine_code>/<screen_name>', methods=['POST'])
@@ -3652,6 +3951,349 @@ def get_ocr_history():
         **indexed_results  # Thêm các kết quả đã đánh số vào response
     })
 
+# API mới: Cập nhật máy và màn hình
+@app.route('/api/update_machine_screen', methods=['POST'])
+def update_machine_screen():
+    """
+    Cập nhật machine_order và parameter_order dựa trên mã máy và tên màn hình
+    
+    Cấu trúc dữ liệu đầu vào:
+    Form data với các key:
+    - machine_code: Mã máy (ví dụ: "F1")
+    - screen_id: Tên của màn hình (chuỗi, ví dụ: "Production")
+    """
+    try:
+        # Kiểm tra đầu vào
+        if 'machine_code' not in request.form or 'screen_id' not in request.form:
+            return jsonify({
+                "error": "Missing required fields. Please provide machine_code and screen_id in form-data"
+            }), 400
+        
+        machine_code = request.form['machine_code'].strip().upper()
+        screen_name = request.form['screen_id'].strip()  # screen_id giờ là tên màn hình
+        area = request.form.get('area', '').strip().upper()
+        
+        # Nếu không có area, thử lấy từ machine_code
+        if not area:
+            area = get_area_for_machine(machine_code)
+            if not area:
+                return jsonify({
+                    "error": "Could not determine area for this machine_code. Please provide area parameter."
+                }), 400
+        
+        # Kiểm tra tính hợp lệ của khu vực, mã máy và tên màn hình
+        machine_screens_path = os.path.join(app.config['ROI_DATA_FOLDER'], 'machine_screens.json')
+        if not os.path.exists(machine_screens_path):
+            return jsonify({"error": "Machine screens configuration not found"}), 404
+        
+        with open(machine_screens_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        if area not in data.get('areas', {}):
+            return jsonify({"error": f"Area {area} not found"}), 404
+            
+        if machine_code not in data['areas'][area].get('machines', {}):
+            return jsonify({"error": f"Machine {machine_code} not found in area {area}"}), 404
+        
+        # Lấy loại máy
+        machine_type = data['areas'][area]['machines'][machine_code].get('type')
+        if not machine_type or machine_type not in data.get('machine_types', {}):
+            return jsonify({"error": f"Machine type not found for machine {machine_code}"}), 404
+        
+        # Tìm màn hình có tên trùng khớp và lấy ID số
+        screen_numeric_id = None
+        selected_screen = None
+        for screen in data['machine_types'][machine_type].get('screens', []):
+            if screen['screen_id'] == screen_name:
+                screen_numeric_id = screen['id']
+                selected_screen = screen
+                break
+        
+        if not screen_numeric_id:
+            return jsonify({"error": f"Screen '{screen_name}' not found for machine {machine_code} (type: {machine_type})"}), 404
+        
+        # Cập nhật parameter_order_value.txt với ID số của màn hình
+        parameter_order_file_path = os.path.join(app.config['ROI_DATA_FOLDER'], 'parameter_order_value.txt')
+        with open(parameter_order_file_path, 'w', encoding='utf-8') as f:
+            f.write(str(screen_numeric_id))
+        
+        return jsonify({
+            "message": "Machine and screen selection updated successfully",
+            "area": {
+                "area_code": area,
+                "name": data['areas'][area]['name']
+            },
+            "machine": {
+                "machine_code": machine_code,
+                "name": data['areas'][area]['machines'][machine_code]['name'],
+                "type": machine_type
+            },
+            "screen": {
+                "id": screen_numeric_id,
+                "screen_id": selected_screen['screen_id'],
+                "description": selected_screen.get('description', '')
+            }
+        }), 200
+    
+    except Exception as e:
+        return jsonify({"error": f"Failed to update machine and screen selection: {str(e)}"}), 500
+
+# Thêm các hàm compare_images từ hmi_image_detector.py
+def compare_histograms(img1, img2):
+    """So sánh histogram giữa hai ảnh"""
+    # Chuyển sang không gian màu HSV để giảm ảnh hưởng của độ sáng
+    img1_hsv = cv2.cvtColor(img1, cv2.COLOR_BGR2HSV)
+    img2_hsv = cv2.cvtColor(img2, cv2.COLOR_BGR2HSV)
+    
+    # Tính histogram cho hai ảnh
+    hist1 = cv2.calcHist([img1_hsv], [0, 1], None, [180, 256], [0, 180, 0, 256])
+    hist2 = cv2.calcHist([img2_hsv], [0, 1], None, [180, 256], [0, 180, 0, 256])
+    
+    # Chuẩn hóa histogram
+    cv2.normalize(hist1, hist1, 0, 1, cv2.NORM_MINMAX)
+    cv2.normalize(hist2, hist2, 0, 1, cv2.NORM_MINMAX)
+    
+    # So sánh histogram
+    correlation = cv2.compareHist(hist1, hist2, cv2.HISTCMP_CORREL)  # Correlation (1 = hoàn hảo)
+    
+    return correlation
+
+def compare_features_orb(img1, img2, max_features=500):
+    """So sánh hai ảnh dựa trên đặc trưng ORB (Oriented FAST và Rotated BRIEF)"""
+    # Chuyển sang grayscale để phát hiện đặc trưng
+    img1_gray = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
+    img2_gray = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
+    
+    # Khởi tạo ORB detector
+    orb = cv2.ORB_create(max_features)
+    
+    # Tìm keypoints và descriptors
+    kp1, des1 = orb.detectAndCompute(img1_gray, None)
+    kp2, des2 = orb.detectAndCompute(img2_gray, None)
+    
+    # Kiểm tra nếu không tìm thấy đặc trưng
+    if des1 is None or des2 is None or len(des1) < 2 or len(des2) < 2:
+        return 0
+    
+    # Khởi tạo BFMatcher
+    bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+    
+    # Tìm các matches
+    matches = bf.match(des1, des2)
+    
+    # Sắp xếp các matches theo khoảng cách (thấp hơn = tốt hơn)
+    matches = sorted(matches, key=lambda x: x.distance)
+    
+    # Tính điểm: số lượng matches tốt và chất lượng của chúng
+    good_matches = [m for m in matches if m.distance < 50]  # Chỉ lấy matches có khoảng cách < 50
+    
+    # Tỷ lệ matches tốt so với tổng số đặc trưng
+    match_ratio = len(good_matches) / min(len(kp1), len(kp2)) if min(len(kp1), len(kp2)) > 0 else 0
+    
+    # Điểm chất lượng (0-1): tỷ lệ matches tốt
+    return match_ratio
+
+def compare_phash(img1, img2, hash_size=16):
+    """So sánh hai ảnh dựa trên perceptual hash"""
+    from PIL import Image
+    import numpy as np
+    from scipy.fftpack import dct
+    
+    # Hàm tính perceptual hash
+    def calculate_phash(image, hash_size=16):
+        # Chuyển sang grayscale
+        if len(image.shape) == 3:
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        
+        # Resize ảnh
+        resized = cv2.resize(image, (hash_size, hash_size))
+        
+        # Chuyển sang float và tính DCT
+        dct_data = dct(dct(resized, axis=0), axis=1)
+        
+        # Lấy vùng tần số thấp (góc trên bên trái)
+        dct_low_freq = dct_data[:8, :8]
+        
+        # Tính trung bình của vùng tần số thấp (bỏ qua DC coefficient)
+        med = np.median(dct_low_freq)
+        
+        # Tạo hash từ so sánh với giá trị trung bình
+        hash_bits = (dct_low_freq > med).flatten()
+        
+        # Chuyển sang số nguyên 64-bit
+        hash_value = 0
+        for bit in hash_bits:
+            hash_value = (hash_value << 1) | int(bit)
+            
+        return hash_bits
+    
+    # Tính hash cho hai ảnh
+    hash1 = calculate_phash(img1, hash_size)
+    hash2 = calculate_phash(img2, hash_size)
+    
+    # Tính khoảng cách Hamming
+    hamming_distance = np.sum(hash1 != hash2)
+    
+    # Chuyển đổi khoảng cách thành độ tương đồng (0-1)
+    similarity = 1 - (hamming_distance / (hash_size * hash_size))
+    
+    return similarity
+
+def find_best_matching_template(hmi_image, reference_dir, machine_type=None):
+    """
+    Tìm template phù hợp nhất với ảnh HMI đã upload
+    
+    Args:
+        hmi_image: Ảnh cần so sánh
+        reference_dir: Đường dẫn thư mục chứa ảnh tham chiếu
+        machine_type: Loại máy để lọc ảnh tham chiếu
+        
+    Returns:
+        Tuple (best_match_path, best_match_screen_id, similarity_score)
+    """
+    if not os.path.exists(reference_dir):
+        print(f"Thư mục reference không tồn tại: {reference_dir}")
+        return None, None, 0
+    
+    # Lọc các file theo loại máy (nếu có)
+    template_files = []
+    for filename in os.listdir(reference_dir):
+        # Chỉ xử lý file ảnh
+        if not filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+            continue
+            
+        # Nếu có chỉ định machine_type, chỉ lấy các template tương ứng
+        if machine_type and f"template_{machine_type}_" not in filename:
+            continue
+            
+        template_files.append(filename)
+    
+    if not template_files:
+        print(f"Không tìm thấy template phù hợp với loại máy {machine_type}")
+        return None, None, 0
+    
+    best_match = None
+    best_score = -1
+    best_screen_id = None
+    
+    print(f"Bắt đầu so sánh với {len(template_files)} template...")
+    
+    for template_file in template_files:
+        template_path = os.path.join(reference_dir, template_file)
+        
+        # Đọc ảnh template
+        template_img = cv2.imread(template_path)
+        if template_img is None:
+            print(f"Không thể đọc file template: {template_path}")
+            continue
+        
+        # So sánh kích thước của ảnh
+        img_height, img_width = hmi_image.shape[:2]
+        templ_height, templ_width = template_img.shape[:2]
+        
+        # Nếu kích thước quá khác nhau, điều chỉnh template
+        if abs(img_height/img_width - templ_height/templ_width) > 0.3:
+            print(f"Tỷ lệ khung hình quá khác biệt cho {template_file}, điều chỉnh...")
+            template_img = cv2.resize(template_img, (img_width, img_height))
+        
+        # Kết hợp các phương pháp so sánh
+        hist_score = compare_histograms(hmi_image, template_img)
+        feature_score = compare_features_orb(hmi_image, template_img)
+        phash_score = compare_phash(hmi_image, template_img)
+        
+        # Tính điểm tổng hợp (có thể điều chỉnh trọng số)
+        combined_score = 0.3 * hist_score + 0.4 * feature_score + 0.3 * phash_score
+        
+        print(f"Template {template_file}: hist={hist_score:.2f}, feature={feature_score:.2f}, phash={phash_score:.2f}, combined={combined_score:.2f}")
+        
+        # Cập nhật best match
+        if combined_score > best_score:
+            best_score = combined_score
+            best_match = template_path
+            
+            # Trích xuất screen_id từ tên file template
+            # Format: template_{machine_type}_{screen_name}.png
+            parts = template_file.split('_')
+            if len(parts) >= 3:
+                # Lấy tất cả phần từ index 2 trở đi và bỏ phần mở rộng
+                screen_name = '_'.join(parts[2:]).rsplit('.', 1)[0]
+                best_screen_id = screen_name
+    
+    print(f"Best match: {os.path.basename(best_match) if best_match else 'None'} với điểm {best_score:.2f}, screen_id: {best_screen_id}")
+    return best_match, best_screen_id, best_score
+
+def detect_screen_by_template_matching(image, machine_type):
+    """
+    Phát hiện loại màn hình dựa trên so sánh với ảnh template
+    
+    Args:
+        image: Ảnh cần phân tích
+        machine_type: Loại máy (ví dụ: F1, F41, F42)
+        
+    Returns:
+        Tuple (screen_id, screen_numeric_id, template_path)
+    """
+    # Đường dẫn thư mục chứa ảnh template mẫu
+    reference_dir = app.config['REFERENCE_IMAGES_FOLDER']
+    
+    # Tìm template phù hợp nhất
+    best_template, best_screen_id, similarity = find_best_matching_template(image, reference_dir, machine_type)
+    
+    if best_template is None or similarity < 0.4:  # Ngưỡng tương đồng tối thiểu
+        print(f"Không tìm thấy template phù hợp với mức tương đồng đủ cao (similarity={similarity})")
+        return None, None, None
+    
+    # Tìm screen_numeric_id từ screen_id
+    screen_numeric_id = get_screen_numeric_id(machine_type, best_screen_id)
+    if screen_numeric_id is None:
+        print(f"Không tìm thấy screen_numeric_id cho screen_id={best_screen_id}")
+    
+    return best_screen_id, screen_numeric_id, best_template
+
+# Thêm hàm get_decimal_places để lấy thông tin số thập phân theo machine_type và screen_id
+def get_decimal_places(machine_type, screen_id):
+    """
+    Lấy thông tin số chữ số thập phân cho các ROI của một màn hình cụ thể
+    
+    Args:
+        machine_type: Loại máy (ví dụ: F1, F41, F42)
+        screen_id: Tên màn hình (ví dụ: "Faults", "Production Data")
+        
+    Returns:
+        Dict chứa thông tin số chữ số thập phân cho các ROI, hoặc {} nếu không tìm thấy
+    """
+    try:
+        # Đọc file cấu hình decimal places
+        decimal_config_path = os.path.join(app.config['ROI_DATA_FOLDER'], 'decimal_places.json')
+        if not os.path.exists(decimal_config_path):
+            print(f"Decimal places configuration file not found at {decimal_config_path}")
+            return {}
+        
+        with open(decimal_config_path, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        
+        # Kiểm tra xem machine_type có trong cấu hình không
+        if machine_type not in config:
+            print(f"Machine type {machine_type} not found in decimal places config")
+            return {}
+        
+        # Kiểm tra xem screen_id có trong cấu hình của machine_type không
+        if screen_id not in config[machine_type]:
+            print(f"Screen ID {screen_id} not found in decimal places config for machine type {machine_type}")
+            return {}
+        
+        # Trả về cấu hình decimal places cho screen_id
+        return config[machine_type][screen_id]
+    
+    except Exception as e:
+        print(f"Error getting decimal places: {str(e)}")
+        traceback.print_exc()
+        return {}
+
+    
+    except Exception as e:
+        return jsonify({"error": f"Failed to update machine and screen selection: {str(e)}"}), 500
+
 if __name__ == '__main__':
     print("DEBUG INFO:")
     print(f"UPLOAD_FOLDER: {UPLOAD_FOLDER}")
@@ -3659,7 +4301,7 @@ if __name__ == '__main__':
     print("- / (GET): Test endpoint")
     print("- /debug (GET): Debug information")
     print("- /api/images (GET): List all images")
-    print("- /api/images (POST): Upload image")
+    print("- /api/images (POST): Upload image với area, machine_code và file")
     print("- /api/images/<filename> (GET): Get image")
     print("- /api/images/<filename> (DELETE): Delete image")
     print("- /api/machines (GET): Get machine information (with optional machineid parameter)")
@@ -3676,5 +4318,7 @@ if __name__ == '__main__':
     print("- /api/machine_screen_status (GET): Check machine and screen status")
     print("- /api/set_all_decimal_values (POST): Set all decimal places for a specific screen")
     print("- /api/history (GET): Get OCR history")
+    print("- /api/reference_images (POST): Upload ảnh tham chiếu với machine_type và screen_id")
+    print("- /api/reference_images (GET): Lấy danh sách ảnh tham chiếu, có thể lọc theo machine_type và screen_id")
     print("Starting server...")
     app.run(host='0.0.0.0', port=5000, debug=True) 

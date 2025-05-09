@@ -1,0 +1,314 @@
+{
+  "filename": "F42_temp_test2.jpg",
+  "machine_code": "IE-F4-WBI01",
+  "screen_id": "Temp",
+  "timestamp": "2025-05-10 02:00:42",
+  "template_path": "d:\\Wrembly\\python_api_test\\roi_data\\reference_images\\template_F42_Temp.jpg",
+  "results": [
+    {
+      "roi_index": "Vung_5 gia tri thuc C",
+      "text": "225.1",
+      "confidence": 0.9178587550904947,
+      "has_text": true,
+      "original_value": "225.1"
+    },
+    {
+      "roi_index": "Vung_4 gia tri thuc C",
+      "text": "230.1",
+      "confidence": 0.9988062598545522,
+      "has_text": true,
+      "original_value": "230.1"
+    },
+    {
+      "roi_index": "Vung_3 gia tri thuc C",
+      "text": "229.9",
+      "confidence": 0.9897322348084776,
+      "has_text": true,
+      "original_value": "229.9"
+    },
+    {
+      "roi_index": "Vung_2 gia tri thuc C",
+      "text": "229.9",
+      "confidence": 0.5722892952550568,
+      "has_text": true,
+      "original_value": "229.9"
+    },
+    {
+      "roi_index": "Vung_1 gia tri thuc C",
+      "text": "224.7",
+      "confidence": 0.7882451286691478,
+      "has_text": true,
+      "original_value": "224.7"
+    },
+    {
+      "roi_index": "Vung gia tri thuc C",
+      "text": "42.8",
+      "confidence": 0.7482518857285806,
+      "has_text": true,
+      "original_value": "42.8"
+    },
+    {
+      "roi_index": "Z5 cai dat chinh",
+      "text": "225.0",
+      "confidence": 0.957979142665863,
+      "has_text": true,
+      "original_value": "2250"
+    },
+    {
+      "roi_index": "Z5 xa nhua",
+      "text": "180.0",
+      "confidence": 0.999975476437608,
+      "has_text": true,
+      "original_value": "180.0"
+    },
+    {
+      "roi_index": "Z5-2",
+      "text": "150.0",
+      "confidence": 0.9974421829234347,
+      "has_text": true,
+      "original_value": "150.0"
+    },
+    {
+      "roi_index": "Z5 khoang theo doi",
+      "text": "40.0",
+      "confidence": 0.9999677897282875,
+      "has_text": true,
+      "original_value": "400"
+    },
+    {
+      "roi_index": "Z5 heater ON/OFF",
+      "text": "BAT",
+      "confidence": 0.5417307516142487,
+      "has_text": true
+    },
+    {
+      "roi_index": "Z4 cai dat chinh",
+      "text": "230.0",
+      "confidence": 0.9946439653863701,
+      "has_text": true,
+      "original_value": "230.0"
+    },
+    {
+      "roi_index": "Z4 xa nhua",
+      "text": "180.0",
+      "confidence": 0.9999893307685852,
+      "has_text": true,
+      "original_value": "1800"
+    },
+    {
+      "roi_index": "Z4 khoang theo doi",
+      "text": "40.0",
+      "confidence": 0.9999494822426453,
+      "has_text": true,
+      "original_value": "400"
+    },
+    {
+      "roi_index": "Z4 heater ON/OFF",
+      "text": "BAT",
+      "confidence": 0.8633141452321231,
+      "has_text": true
+    },
+    {
+      "roi_index": "Z3 cai dat chinh",
+      "text": "230.0",
+      "confidence": 0.9997534816558548,
+      "has_text": true,
+      "original_value": "230.0"
+    },
+    {
+      "roi_index": "Z3 xa nhua",
+      "text": "180.0",
+      "confidence": 0.9999828338623047,
+      "has_text": true,
+      "original_value": "1800"
+    },
+    {
+      "roi_index": "Z3 khoang theo doi",
+      "text": "40.0",
+      "confidence": 0.9999139006582701,
+      "has_text": true,
+      "original_value": "40.0"
+    },
+    {
+      "roi_index": "Z3 heater ON/OFF",
+      "text": "BAT",
+      "confidence": 0.9680350693808338,
+      "has_text": true
+    },
+    {
+      "roi_index": "Z2 cai dat chinh",
+      "text": "230.0",
+      "confidence": 0.9997019805940797,
+      "has_text": true,
+      "original_value": "230.0"
+    },
+    {
+      "roi_index": "Z2 xa nhua",
+      "text": "170.0",
+      "confidence": 0.9951566457748413,
+      "has_text": true,
+      "original_value": "1700"
+    },
+    {
+      "roi_index": "Z2 khoang theo doi",
+      "text": "40.0",
+      "confidence": 0.9972538170422105,
+      "has_text": true,
+      "original_value": "400"
+    },
+    {
+      "roi_index": "Z2 heater ON/OFF",
+      "text": "BAT",
+      "confidence": 0.6161922677757581,
+      "has_text": true
+    },
+    {
+      "roi_index": "Z1 cai dat chinh",
+      "text": "225.0",
+      "confidence": 0.9998577927865373,
+      "has_text": true,
+      "original_value": "225.0"
+    },
+    {
+      "roi_index": "Z1 xa nhua",
+      "text": "27.0",
+      "confidence": 0.9992192983627319,
+      "has_text": true,
+      "original_value": "27.0"
+    },
+    {
+      "roi_index": "Z1",
+      "text": "130.0",
+      "confidence": 0.9999991655349731,
+      "has_text": true,
+      "original_value": "1300"
+    },
+    {
+      "roi_index": "Z1 khoang theo doi",
+      "text": "20.0",
+      "confidence": 0.9998915791511536,
+      "has_text": true,
+      "original_value": "20.0"
+    },
+    {
+      "roi_index": "Z1 heater ON/OFF",
+      "text": "BAT",
+      "confidence": 0.853443769999483,
+      "has_text": true
+    },
+    {
+      "roi_index": "Nuoc cai dat chinh",
+      "text": "45.0",
+      "confidence": 0.9998013973236084,
+      "has_text": true,
+      "original_value": "45.0"
+    },
+    {
+      "roi_index": "Nuoc khoang theo doi",
+      "text": "20.0",
+      "confidence": 0.9999974370002747,
+      "has_text": true,
+      "original_value": "20.0"
+    },
+    {
+      "roi_index": "Nuoc heater ON/OFF",
+      "text": "BAT",
+      "confidence": 0.9591694837180609,
+      "has_text": true
+    },
+    {
+      "roi_index": "Z5 gia tri thuc A",
+      "text": "5.9",
+      "confidence": 0.9648207426071167,
+      "has_text": true,
+      "original_value": "5.9"
+    },
+    {
+      "roi_index": "Z4 gia tri thuc A",
+      "text": "0.0",
+      "confidence": 0.9998411524007915,
+      "has_text": true,
+      "original_value": "0.0"
+    },
+    {
+      "roi_index": "Z3 gia tri thuc A",
+      "text": "11.9",
+      "confidence": 0.9598030950311255,
+      "has_text": true,
+      "original_value": "11.9"
+    },
+    {
+      "roi_index": "Z2 gia tri thuc A",
+      "text": "5.8",
+      "confidence": 0.9998759774516471,
+      "has_text": true,
+      "original_value": "5.8"
+    },
+    {
+      "roi_index": "Z1 gia tri thuc A",
+      "text": "5.7",
+      "confidence": 0.9872635328734229,
+      "has_text": true,
+      "original_value": "5.7"
+    },
+    {
+      "roi_index": "Z5 cai dat ngat",
+      "text": "2.0",
+      "confidence": 0.9996151924133301,
+      "has_text": true,
+      "original_value": "2.0"
+    },
+    {
+      "roi_index": "Z4 cai dat ngat",
+      "text": "2.0",
+      "confidence": 0.9973471516552682,
+      "has_text": true,
+      "original_value": "2.0"
+    },
+    {
+      "roi_index": "Z3 cai dat ngat",
+      "text": "8.0",
+      "confidence": 0.9999610448599316,
+      "has_text": true,
+      "original_value": "8.0"
+    },
+    {
+      "roi_index": "Z2 cai dat ngat",
+      "text": "2.0",
+      "confidence": 0.9971147179603577,
+      "has_text": true,
+      "original_value": "2.0"
+    },
+    {
+      "roi_index": "Z1 cai dat ngat",
+      "text": "2.0",
+      "confidence": 0.8682560324668884,
+      "has_text": true,
+      "original_value": "2.0"
+    },
+    {
+      "roi_index": "Ngan khoi dong nguoi",
+      "text": "0",
+      "confidence": 0.9990104501922623,
+      "has_text": true,
+      "original_value": "0"
+    },
+    {
+      "roi_index": "Chdo g nhiet",
+      "text": "TAT",
+      "confidence": 0.9937567017415879,
+      "has_text": true
+    }
+  ],
+  "hmi_detection": {
+    "hmi_detected": true,
+    "hmi_image": "/api/images/hmi_detection/refined_hmi_IE-F4-WBI01_Temp.png",
+    "visualization": "/api/images/hmi_detection/hmi_visualization_IE-F4-WBI01_Temp.png"
+  },
+  "detected_screen": {
+    "screen_id": "Temp",
+    "screen_numeric_id": 2,
+    "similarity_score": "template_F42_Temp.jpg",
+    "machine_type": "F42"
+  }
+}
