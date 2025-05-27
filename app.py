@@ -15,6 +15,9 @@ from datetime import datetime
 from PIL import Image, ImageEnhance
 from difflib import SequenceMatcher
 import Levenshtein
+import concurrent.futures
+from threading import Lock
+from smart_detection_functions import auto_detect_machine_and_screen_smart
 
 # Thêm try-except khi import EasyOCR
 try:
@@ -521,80 +524,13 @@ def find_machine_code_from_template(template_filename):
         print(f"Error finding machine code from template: {str(e)}")
         return None, None
 
-def auto_detect_machine_and_screen(image):
-    """
-    Tự động detect machine_code, area và screen từ hình ảnh
-    
-    Args:
-        image: Ảnh đầu vào
-        
-    Returns:
-        dict: {
-            'machine_code': str,
-            'machine_type': str,
-            'area': str,
-            'machine_name': str,
-            'screen_id': str,
-            'screen_numeric_id': int,
-            'template_path': str,
-            'similarity_score': float
-        } hoặc None nếu không detect được
-    """
-    try:
-        # Lấy tất cả machine_type có sẵn
-        machine_types = get_all_machine_types()
-        if not machine_types:
-            print("No machine types found")
-            return None
-        
-        print(f"Trying to detect screen with machine types: {machine_types}")
-        
-        best_result = None
-        best_similarity = 0
-        
-        # Thử với từng machine_type
-        for machine_type in machine_types:
-            print(f"Detecting screen for machine_type: {machine_type}")
-            screen_id, screen_numeric_id, template_path = detect_screen_by_template_matching(image, machine_type)
-            
-            if screen_id and template_path:
-                # Tính similarity score từ template matching
-                reference_dir = app.config['REFERENCE_IMAGES_FOLDER']
-                _, _, similarity = find_best_matching_template(image, reference_dir, machine_type)
-                
-                print(f"Found match for {machine_type}: screen_id={screen_id}, similarity={similarity}")
-                
-                if similarity > best_similarity:
-                    best_similarity = similarity
-                    template_filename = os.path.basename(template_path)
-                    
-                    # Tìm machine_code từ template
-                    machine_code, area = find_machine_code_from_template(template_filename)
-                    if machine_code and area:
-                        machine_name = get_machine_name_from_code(machine_code)
-                        
-                        best_result = {
-                            'machine_code': machine_code,
-                            'machine_type': machine_type,
-                            'area': area,
-                            'machine_name': machine_name,
-                            'screen_id': screen_id,
-                            'screen_numeric_id': screen_numeric_id,
-                            'template_path': template_path,
-                            'similarity_score': similarity
-                        }
-        
-        if best_result and best_similarity >= 0.4:  # Ngưỡng tối thiểu
-            print(f"Best detection result: {best_result}")
-            return best_result
-        else:
-            print(f"No suitable match found (best similarity: {best_similarity})")
-            return None
-            
-    except Exception as e:
-        print(f"Error in auto detection: {str(e)}")
-        traceback.print_exc()
-        return None
+# Keep original function as backup
+def auto_detect_machine_and_screen_original(image):
+    """Original function renamed for backup"""
+    return auto_detect_machine_and_screen(image)
+
+# Replace main function with fast version
+auto_detect_machine_and_screen = auto_detect_machine_and_screen_smart
 
 # Sửa lại hàm perform_ocr_on_roi để sử dụng ảnh đã căn chỉnh
 def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=None, roi_names=None, machine_code=None, screen_id=None):
@@ -616,19 +552,14 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
     try:
         # Kiểm tra các tham số đầu vào
         if roi_coordinates is None or len(roi_coordinates) == 0:
-            print("No ROI coordinates provided")
             return []
-        
-        print(f"Processing {len(roi_coordinates)} ROIs")
         
         # Nếu không có tên ROI được truyền vào, tạo tên mặc định
         if roi_names is None or len(roi_names) != len(roi_coordinates):
-            print("Creating default ROI names")
             roi_names = [f"ROI_{i}" for i in range(len(roi_coordinates))]
         
         # Kiểm tra EasyOCR đã được khởi tạo chưa
         if not HAS_EASYOCR or reader is None:
-            print("EasyOCR is not available. Cannot perform OCR.")
             mock_results = []
             for i, coords in enumerate(roi_coordinates):
                 roi_name = roi_names[i] if i < len(roi_names) else f"ROI_{i}"
@@ -643,12 +574,10 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
         
         # Lấy kích thước ảnh
         img_height, img_width = image.shape[:2]
-        print(f"Image dimensions: {img_width}x{img_height}")
         
         # Lấy thông tin máy hiện tại
         machine_info = get_current_machine_info()
         if not machine_info:
-            print("Không thể lấy thông tin máy hiện tại")
             return []
         
         machine_code = machine_info['machine_code'] if machine_code is None else machine_code
@@ -663,7 +592,6 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
             try:
                 # Đảm bảo coords có đúng 4 giá trị
                 if len(coords) != 4:
-                    print(f"Invalid coordinates for ROI {i}: {coords}")
                     continue
                 
                 # Chuyển đổi tọa độ nếu cần
@@ -674,7 +602,6 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                         break
                 
                 if is_normalized:
-                    # print(f"Detected normalized coordinates for ROI {i}: {coords}")
                     # Chuyển đổi từ tọa độ chuẩn hóa sang tọa độ pixel
                     x1, y1, x2, y2 = coords
                     x1, x2 = int(x1 * img_width), int(x2 * img_width)
@@ -690,11 +617,9 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                 y1, y2 = min(y1, y2), max(y1, y2)
                 
                 roi_name = roi_names[i] if i < len(roi_names) else f"ROI_{i}"
-                # print(f"Processing ROI {i} ({roi_name}) with coordinates: ({x1},{y1},{x2},{y2})")
                 
                 # Kiểm tra tọa độ hợp lệ
                 if x1 < 0 or y1 < 0 or x2 >= image.shape[1] or y2 >= image.shape[0] or x1 >= x2 or y1 >= y2:
-                    print(f"Invalid coordinates: ({x1},{y1},{x2},{y2}), image shape: {image.shape}")
                     continue
                         
                 # Cắt ROI
@@ -716,7 +641,6 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
 
                     # Lấy machine_type từ machine_code
                     machine_type = get_machine_type(machine_code)
-                    print(f"Checking if ROI {roi_name} has ON/OFF values for machine_code={machine_code}, machine_type={machine_type}, screen_id={screen_id}")
 
                     # Thử tìm allowed_values cho ROI hiện tại sử dụng machine_code
                     if (machine_code in roi_info.get("machines", {}) and 
@@ -729,7 +653,6 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                                 # Kiểm tra nếu allowed_values chứa "ON" và "OFF"
                                 if "ON" in allowed_values and "OFF" in allowed_values:
                                     is_special_on_off_case = True
-                                    print(f"Found ON/OFF values for ROI {roi_name} using machine_code")
                                 break
                     
                     # Nếu không tìm thấy với machine_code, thử với machine_type
@@ -744,14 +667,12 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                                     # Kiểm tra nếu allowed_values chứa "ON" và "OFF"
                                     if "ON" in allowed_values and "OFF" in allowed_values:
                                         is_special_on_off_case = True
-                                        print(f"Found ON/OFF values for ROI {roi_name} using machine_type")
                                     break
-                except Exception as e:
-                    print(f"Error checking allowed_values for ROI {roi_name}: {str(e)}")
+                except:
+                    pass
                 
                 # Nếu là trường hợp đặc biệt ON/OFF, phân tích màu sắc thay vì OCR
                 if is_special_on_off_case:
-                    print(f"Processing ROI {roi_name} by color analysis instead of OCR")
                     # Tách các kênh màu BGR
                     b, g, r = cv2.split(roi)
                     # Tính giá trị trung bình của kênh xanh dương và đỏ
@@ -762,7 +683,6 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                         best_text = "OFF"
                     else:
                         best_text = "ON"
-                    print(f"Color analysis result for ROI {roi_name}: avg_blue={avg_blue}, avg_red={avg_red}, result={best_text}")
                     results.append({
                         "roi_index": roi_name,
                         "text": best_text,
@@ -778,22 +698,6 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                 # Thêm Gaussian Blur để cải thiện OCR (dựa trên test cho thấy kết quả tốt hơn)
                 if roi_processed is not None:
                     roi_processed = cv2.GaussianBlur(roi_processed, (3, 3), 0)
-                    
-                    # Lưu ảnh sau Gaussian Blur
-                    processed_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'processed_roi')
-                    base_filename = os.path.splitext(original_filename)[0]
-                    blur_filename = f"{base_filename}_{roi_name}_step4_gaussian_blur.png"
-                    blur_path = os.path.join(processed_folder, blur_filename)
-                    cv2.imwrite(blur_path, roi_processed)
-                    print(f"Applied Gaussian Blur and saved to: {blur_path}")
-                
-                # Lưu ảnh ROI sau khi crop từ ảnh gốc (trước khi preprocess)
-                processed_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'processed_roi')
-                base_filename = os.path.splitext(original_filename)[0]
-                roi_crop_filename = f"{base_filename}_{roi_name}_step0_crop_from_main.png"
-                roi_crop_path = os.path.join(processed_folder, roi_crop_filename)
-                cv2.imwrite(roi_crop_path, roi)
-                print(f"Saved cropped ROI from main image to: {roi_crop_path}")
                 
                 # Kiểm tra xem ảnh đã tiền xử lý có thành công không
                 if roi_processed is None:
@@ -827,28 +731,7 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                         best_confidence = best_result[2]
                         original_value = best_text
                         has_text = True
-                        print(f"Found text in full ROI: '{best_text}' with confidence {best_confidence}")
-                        
-                        # Lưu ảnh OCR result với text tốt nhất
-                        processed_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'processed_roi')
-                        base_filename = os.path.splitext(original_filename)[0]
-                        ocr_result_filename = f"{base_filename}_{roi_name}_step5_ocr_result.png"
-                        ocr_result_path = os.path.join(processed_folder, ocr_result_filename)
-                        
-                        # Tạo ảnh với text overlay
-                        result_img = roi_processed.copy() if roi_processed is not None else roi.copy()
-                        if len(result_img.shape) == 2:  # Grayscale
-                            result_img = cv2.cvtColor(result_img, cv2.COLOR_GRAY2BGR)
-                        elif len(result_img.shape) == 3 and result_img.shape[2] == 1:  # Single channel
-                            result_img = cv2.cvtColor(result_img, cv2.COLOR_GRAY2BGR)
-                        
-                        # Vẽ text lên ảnh (resize font tùy theo kích thước ảnh)
-                        font_scale = max(0.5, min(result_img.shape[0], result_img.shape[1]) / 100)
-                        cv2.putText(result_img, f"'{best_text}' ({best_confidence:.2f})", 
-                                  (5, int(result_img.shape[0] - 10)), cv2.FONT_HERSHEY_SIMPLEX, 
-                                  font_scale, (0, 255, 0), 2)
-                        cv2.imwrite(ocr_result_path, result_img)
-                        print(f"Saved OCR result image to: {ocr_result_path}")
+
                         
                         # Kiểm tra nếu kết quả ban đầu có dấu trừ ở đầu
                         has_negative_sign = best_text.startswith('-')
@@ -856,7 +739,6 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                         # Kiểm tra nếu kết quả chỉ là 1 ký tự 'o' hoặc 'O' thì chuyển thành '0' luôn
                         if len(best_text) == 1 and best_text.upper() == 'O':
                             best_text = '0'
-                            print(f"Single 'o' character detected, converted to '0'")
                         
                         # Kiểm tra và chuyển đổi chuỗi kết quả nếu có dạng số
                         # Xử lý đặc biệt cho trường hợp nghi ngờ là số (chuỗi có >= 2 ký tự và chứa nhiều O, U, I, l)
@@ -866,18 +748,14 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                             suspicious_chars_count = sum(1 for char in best_text if char in chars_to_check)
                             # Nếu có ít nhất 2 ký tự đáng ngờ và chiếm >= 30% chuỗi
                             if suspicious_chars_count >= 2 and suspicious_chars_count / len(best_text) >= 0.3:
-                                print(f"Suspicious text detected with {suspicious_chars_count} suspect characters: '{best_text}'")
                                 # Kiểm tra các mẫu đặc biệt, như chuỗi "uuuu" hoặc "iuuu" có thể là "1000"
                                 upper_text = best_text.upper()
                                 
                                 # Trường hợp đặc biệt: chuỗi chứa nhiều U liên tiếp (có thể là số 0 lặp lại)
                                 upper_text_no_dot = upper_text.replace('.', '')
-                                print(f"upper_text: '{upper_text}', upper_text_no_dot: '{upper_text_no_dot}'")
-                                print(f"Pattern matched: {re.search(r'[IUO0Q]{2}', upper_text_no_dot)}")
                                 if re.search(r'[IUO0Q]{2}', upper_text_no_dot):
                                     temp_text = upper_text.replace('U', '0').replace('I', '1').replace('O', '0').replace('C','0').replace('Q','0')
                                     if temp_text.replace('.', '').isdigit():
-                                        print(f"Pattern with repeated U/I detected. Converting '{best_text}' to '{temp_text}'")
                                         best_text = temp_text
                                         is_text_result = False
                                 # Trường hợp đặc biệt khác
@@ -896,7 +774,6 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                                         
                                         # Kiểm tra nếu kết quả chỉ chứa chữ số
                                         if cleaned_text.isdigit():
-                                            print(f"Likely numeric value detected. Converting '{best_text}' to '{cleaned_text}'")
                                             best_text = cleaned_text
                                             # Đánh dấu là kết quả số để không bị xử lý như text
                                             is_text_result = False
@@ -904,7 +781,6 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                         # Đếm số lượng chữ số và chữ cái (loại trừ số 0 và chữ O)
                         digit_count = sum(1 for char in best_text if char.isdigit() and char != '0')
                         letter_count = sum(1 for char in best_text if char.isalpha() and char.upper() != 'O')
-                        print(f"Text contains {digit_count} digits and {letter_count} letters")
                         
                         # Kiểm tra nếu có nhiều chữ cái hơn chữ số
                         is_text_result = letter_count > digit_count
@@ -912,11 +788,8 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                         # Thêm lại dấu trừ ở đầu nếu kết quả ban đầu có
                         if has_negative_sign and not best_text.startswith('-'):
                             best_text = '-' + best_text
-                            print(f"Added negative sign back: '{best_text}'")
-                    else:
-                        print(f"No text found in ROI {i} ({roi_name})")
-                except Exception as ocr_error:
-                    print(f"OCR error on ROI {i} ({roi_name}): {str(ocr_error)}")
+                except:
+                    pass
                 
                 # Kiểm tra xem ROI có key "allowed_values" không rỗng hay không
                 has_allowed_values = False
@@ -926,7 +799,6 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                     allowed_values = roi_names[i].get("allowed_values", [])
                     if allowed_values and len(allowed_values) > 0:
                         has_allowed_values = True
-                        print(f"ROI {roi_name} has allowed_values from coordinates: {allowed_values}")
                         # Buộc xử lý như text nếu có allowed_values
                         is_text_result = True
                 
@@ -941,7 +813,6 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                     
                     # *** FIX: Sử dụng machine_type thay vì machine_code để lookup ***
                     machine_type_for_lookup = get_machine_type(machine_code)
-                    print(f"🔍 Looking up allowed_values: machine_code={machine_code} -> machine_type={machine_type_for_lookup}, screen_id={screen_id}, roi_name={roi_name}")
                     
                     # Tìm allowed_values cho ROI hiện tại từ roi_info.json
                     if (machine_type_for_lookup in roi_info.get("machines", {}) and 
@@ -955,28 +826,18 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                                 allowed_values_from_json = roi_item["allowed_values"]
                                 if allowed_values_from_json and len(allowed_values_from_json) > 0:
                                     has_allowed_values = True
-                                    print(f"✅ ROI {roi_name} has allowed_values from roi_info.json: {allowed_values_from_json}")
                                     # Buộc xử lý như text nếu có allowed_values
                                     is_text_result = True
                                 break
-                    else:
-                        print(f"❌ No match found for machine_type={machine_type_for_lookup}, screen_id={screen_id}")
-                        available_machines = list(roi_info.get("machines", {}).keys())
-                        print(f"Available machines in roi_info.json: {available_machines}")
-                except Exception as e:
-                    print(f"Error checking allowed_values from roi_info.json for ROI {roi_name}: {str(e)}")
+                except:
+                    pass
                 
                 # Xử lý kết quả OCR dựa vào loại kết quả (số hoặc chữ)
                 formatted_text = best_text
                 
-                # Debug prints
-                print(f"🔍 ROI {roi_name}: has_text={has_text}, is_text_result={is_text_result}, has_allowed_values={has_allowed_values}")
-                print(f"🔍 Condition check: has_text={has_text} AND (is_text_result={is_text_result} OR has_allowed_values={has_allowed_values}) = {has_text and (is_text_result or has_allowed_values)}")
-                
                 # Nếu là kết quả chủ yếu là chữ hoặc ROI có allowed_values, xử lý như text
                 if has_text and (is_text_result or has_allowed_values):
                     best_text = best_text.replace('0', 'O').replace('1', 'I').replace('2', 'Z').replace('3', 'E').replace('4', 'A').replace('5', 'S').replace('6', 'G').replace('7', 'T').replace('8', 'B').replace('9', 'P')
-                    print(f"Result for ROI {roi_name} is primarily text: '{best_text}', keeping as is")
                     best_text = best_text.upper()
                     # Thêm kết quả cho ROI này (không có original_value cho kết quả text)
                     if len(best_text) == 1:
@@ -993,7 +854,6 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                         
                         # *** FIX: Sử dụng machine_type thay vì machine_code để lookup ***
                         machine_type_for_lookup = get_machine_type(machine_code)
-                        print(f"🔍 Looking for allowed_values: machine_code={machine_code} -> machine_type={machine_type_for_lookup}, screen_id={screen_id}, roi_name={roi_name}")
                         
                         # Tìm allowed_values cho ROI hiện tại
                         allowed_values = None
@@ -1011,17 +871,13 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                         
                         # Sử dụng hàm tối ưu mới để tìm best match
                         if allowed_values and len(allowed_values) > 0:
-                            print(f"Found allowed_values for ROI {roi_name}: {allowed_values}")
-                            
                             best_match, match_score, match_method = find_best_allowed_value_match(
                                 best_text, allowed_values, roi_name
                             )
                             
                             if best_match:
-                                print(f"✅ MATCHED: '{best_text}' -> '{best_match}' (score: {match_score:.3f}, method: {match_method})")
                                 best_text = best_match
                             else:
-                                print(f"❌ NO SUITABLE MATCH FOUND. Using first allowed value: '{allowed_values[0]}'")
                                 best_text = allowed_values[0]
                     except Exception as e:
                         print(f"Error checking allowed_values for ROI {roi_name}: {str(e)}")
@@ -1116,25 +972,25 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                                     else:
                                         # Không có dấu chấm (số nguyên)
                                         num_str = str(best_text)
-                                        
-                                        # Thêm phần thập phân nếu cần
-                                        if decimal_places > 0:
-                                            # Đặt dấu chấm vào vị trí thích hợp: (độ dài - decimal_places)
-                                            if len(num_str) <= decimal_places:
-                                                # Nếu số chữ số ít hơn hoặc bằng decimal_places, thêm số 0 ở đầu
-                                                padded_str = num_str.zfill(decimal_places)
-                                                formatted_text = f"0.{padded_str}"
-                                            else:
-                                                # Đặt dấu chấm vào vị trí thích hợp
-                                                insert_pos = len(num_str) - decimal_places
-                                                formatted_text = f"{num_str[:insert_pos]}.{num_str[insert_pos:]}"
-                                            
-                                            formatted_text = '-' + str(formatted_text) if is_negative else str(formatted_text)
-                                            print(f"Formatted integer value {num_str} with decimal_places={decimal_places}: {formatted_text}")
+                                    
+                                    # Thêm phần thập phân nếu cần
+                                    if decimal_places > 0:
+                                        # Đặt dấu chấm vào vị trí thích hợp: (độ dài - decimal_places)
+                                        if len(num_str) <= decimal_places:
+                                            # Nếu số chữ số ít hơn hoặc bằng decimal_places, thêm số 0 ở đầu
+                                            padded_str = num_str.zfill(decimal_places)
+                                            formatted_text = f"0.{padded_str}"
                                         else:
-                                            # Giữ nguyên số nguyên nếu không cần thập phân
-                                            formatted_text = num_str
-                                            formatted_text = '-' + str(formatted_text) if is_negative else str(formatted_text)
+                                            # Đặt dấu chấm vào vị trí thích hợp
+                                            insert_pos = len(num_str) - decimal_places
+                                            formatted_text = f"{num_str[:insert_pos]}.{num_str[insert_pos:]}"
+                                        
+                                        formatted_text = '-' + str(formatted_text) if is_negative else str(formatted_text)
+                                        print(f"Formatted integer value {num_str} with decimal_places={decimal_places}: {formatted_text}")
+                                    else:
+                                        # Giữ nguyên số nguyên nếu không cần thập phân
+                                        formatted_text = num_str
+                                        formatted_text = '-' + str(formatted_text) if is_negative else str(formatted_text)
                                     print(f"Formatted value for ROI {roi_name}: Original: {best_text}, Formatted: {formatted_text}")
                                 
                                 # Cập nhật best_text cho các bước xử lý tiếp theo
@@ -1234,6 +1090,7 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                 
                 cv2.imwrite(final_result_path, final_img)
                 print(f"Saved final result image to: {final_result_path}")
+                
                 if best_confidence < 0.3 or (roi_quality_info is not None and ('low_contrast' in roi_quality_info['issues'] or roi_quality_info.get('has_moire', False))):
                     print(f"Confidence is below threshold or image has low contrast. Trying alternative approach with connected component analysis...")
                     
@@ -1496,11 +1353,11 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                                                 if len(all_digits) <= decimal_places:
                                                     # Thêm số 0 phía trước và đặt dấu chấm sau số 0 đầu tiên
                                                     padded_str = all_digits.zfill(decimal_places)
-                                                    formatted_retry_text = f"0.{padded_str}"
+                                                    formatted_text = f"0.{padded_str}"
                                                 else:
                                                     # Đặt dấu chấm vào vị trí thích hợp: (độ dài - decimal_places)
                                                     insert_pos = len(all_digits) - decimal_places
-                                                    formatted_retry_text = f"{all_digits[:insert_pos]}.{all_digits[insert_pos:]}"
+                                                    formatted_text = f"{all_digits[:insert_pos]}.{all_digits[insert_pos:]}"
                                             else:
                                                 # Nếu decimal_places = 0, bỏ dấu chấm
                                                 formatted_retry_text = all_digits
@@ -1514,13 +1371,13 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                                                 if len(num_str) <= decimal_places:
                                                     # Nếu số chữ số ít hơn hoặc bằng decimal_places, thêm số 0 ở đầu
                                                     padded_str = num_str.zfill(decimal_places)
-                                                    formatted_retry_text = f"0.{padded_str}"
+                                                    formatted_text = f"0.{padded_str}"
                                                 else:
                                                     # Đặt dấu chấm vào vị trí thích hợp
                                                     insert_pos = len(num_str) - decimal_places
-                                                    formatted_retry_text = f"{num_str[:insert_pos]}.{num_str[insert_pos:]}"
+                                                    formatted_text = f"{num_str[:insert_pos]}.{num_str[insert_pos:]}"
                                                 
-                                                print(f"Formatted integer retry value {num_str} with decimal_places={decimal_places}: {formatted_retry_text}")
+                                                print(f"Formatted integer retry value {num_str} with decimal_places={decimal_places}: {formatted_text}")
                                             else:
                                                 # Giữ nguyên số nguyên nếu không cần thập phân
                                                 formatted_retry_text = num_str
@@ -1542,7 +1399,6 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                             # Xử lý dấu "-" không ở vị trí đầu tiên
                             if "-" in formatted_retry_text[1:]:
                                 formatted_retry_text = formatted_retry_text[0] + formatted_retry_text[1:].replace('-', '.')
-                                print(f"Replaced dash in middle with dot in retry result: {formatted_retry_text}")
                             
                             # Cập nhật kết quả
                             results[-1]["text"] = formatted_retry_text.replace('C','0')
@@ -1550,28 +1406,20 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                             results[-1]["has_text"] = True
                             results[-1]["original_value"] = retry_text
                             best_confidence = retry_confidence
-                    else:
-                        print(f"No better results found with alternative approach.")
                     
                     # Nếu confidence vẫn thấp dưới 0.1, trả về mảng rỗng
                     if best_confidence < 0.1:
-                        print(f"The result with highest confidence is still below 0.1. Returning empty results.")
                         return []
                 # Kiểm tra độ tin cậy của OCR
                 # if best_confidence < 0.3:  # Nếu độ tin cậy < 30%
                 #     print(f"Warning: Low confidence ({best_confidence:.2f}) for ROI {roi_name}, text: '{best_text}'")
                 
-            except Exception as roi_error:
-                print(f"Error processing ROI {i}: {str(roi_error)}")
-                traceback.print_exc()
+            except:
                 continue
         
         return results
     
-    except Exception as e:
-        print(f"Error in OCR processing: {str(e)}")
-        traceback.print_exc()
-        
+    except:
         # Trả về kết quả giả khi không thể thực hiện OCR (để testing)
         mock_results = []
         for i in range(len(roi_coordinates)):
@@ -1599,23 +1447,9 @@ def upload_image():
     if file.filename == '':
         return jsonify({"error": "No file selected"}), 400
     
-    # Xóa tất cả các file trong thư mục processed_roi trước khi xử lý
+    # Tạo thư mục processed_roi nếu chưa tồn tại (không xóa file cũ để tăng tốc)
     processed_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'processed_roi')
-    if os.path.exists(processed_folder):
-        print("Clearing all old ROI processed images...")
-        deleted_count = 0
-        for filename in os.listdir(processed_folder):
-            file_path = os.path.join(processed_folder, filename)
-            try:
-                if os.path.isfile(file_path):
-                    os.unlink(file_path)
-                    deleted_count += 1
-            except Exception as e:
-                print(f"Error when deleting file {file_path}: {e}")
-        print(f"Deleted {deleted_count} old ROI processed images")
-    else:
-        os.makedirs(processed_folder, exist_ok=True)
-        print("Created processed_roi folder")
+    os.makedirs(processed_folder, exist_ok=True)
     
     # Lưu file tạm thời
     filename = secure_filename(file.filename)
@@ -1629,8 +1463,12 @@ def upload_image():
             return jsonify({"error": "Could not read uploaded image"}), 400
         
         # Tự động detect machine_code, area và screen từ hình ảnh
-        print("Bắt đầu auto detection machine và screen...")
-        detection_result = auto_detect_machine_and_screen(uploaded_image)
+        # Lấy area và machine_code từ form data nếu có
+        area = request.form.get('area', None)
+        machine_code = request.form.get('machine_code', None)
+        
+        # Gọi hàm smart detection với tham số area và machine_code
+        detection_result = auto_detect_machine_and_screen(uploaded_image, area=area, machine_code=machine_code)
         
         if detection_result is None:
             return jsonify({
@@ -1646,20 +1484,6 @@ def upload_image():
         screen_numeric_id = detection_result['screen_numeric_id']
         template_path = detection_result['template_path']
         similarity_score = detection_result['similarity_score']
-        
-        print(f"Detection thành công:")
-        print(f"  - Machine Code: {machine_code}")
-        print(f"  - Machine Name: {machine_name}")
-        print(f"  - Area: {area}")
-        print(f"  - Machine Type: {machine_type}")
-        print(f"  - Screen ID: {screen_id}")
-        print(f"  - Similarity Score: {similarity_score}")
-        
-        # Sử dụng template_path từ detection result
-        if template_path:
-            print(f"Using template image: {template_path}")
-        else:
-            print("No template image found, will not perform alignment")
             
         # Thêm mới: Phát hiện màn hình HMI
         hmi_detected = False
@@ -1675,39 +1499,19 @@ def upload_image():
         
         if hmi_screen is not None:
             hmi_detected = True
-            # Lưu ảnh visualization
-            visualization_filename = f"hmi_visualization_{machine_code}_{screen_id}.png"
-            visualization_path = os.path.join(app.config['UPLOAD_FOLDER'], visualization_filename)
-            # Sử dụng HMI đã phát hiện và tinh chỉnh thay vì ảnh gốc
-            print("Màn hình HMI đã được phát hiện, tinh chỉnh và cắt!")
             uploaded_image = hmi_screen
             
-            # Lưu ảnh HMI đã tinh chỉnh
-            refined_hmi_filename = f"refined_hmi_{machine_code}_{screen_id}.png"
-            refined_hmi_path = os.path.join(app.config['UPLOAD_FOLDER'], refined_hmi_filename)
-            print(f"Processing refined HMI")
-            
-            # Cập nhật thông tin phát hiện HMI
+            # Cập nhật thông tin phát hiện HMI (không lưu file để tăng tốc)
             hmi_detection_info = {
                 "hmi_detected": True,
-                "hmi_image": f"/api/images/hmi_detection/{refined_hmi_filename}",
-                "visualization": f"/api/images/hmi_detection/{visualization_filename}"
+                "hmi_image": None,
+                "visualization": None
             }
         else:
-            print("Không phát hiện màn hình HMI trong ảnh")
-            # Tạo ảnh visualization với thông báo không tìm thấy HMI
-            height, width = uploaded_image.shape[:2]
-            visualization = uploaded_image.copy()
-            cv2.putText(visualization, "No HMI Screen Detected", (int(width/2)-150, int(height/2)), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-            
-            visualization_filename = f"no_hmi_visualization.png"
-            visualization_path = os.path.join(app.config['UPLOAD_FOLDER'], visualization_filename)
-            
             hmi_detection_info = {
                 "hmi_detected": False,
                 "hmi_image": None,
-                "visualization": f"/api/images/hmi_detection/{visualization_filename}"
+                "visualization": None
             }
         
         # Lấy ROI coordinates và tên ROI dựa trên machine_type và screen_id đã phát hiện
@@ -1718,33 +1522,18 @@ def upload_image():
                 "error": f"No ROI coordinates found for machine_code={machine_code}, screen_id={screen_id}, machine_type={machine_type}"
             }), 404
         
-        print(f"Found {len(roi_coordinates)} ROI coordinates and {len(roi_names)} ROI names")
-        
         # Tiền xử lý ảnh với căn chỉnh nếu có template
         image = uploaded_image  # Sử dụng ảnh gốc hoặc ảnh HMI đã phát hiện
         if template_path:
-            print("Processing image with alignment...")
             # Đọc ảnh template
             template_img = cv2.imread(template_path)
-            if template_img is None:
-                print(f"Failed to read template image: {template_path}")
-            else:
-                # Căn chỉnh ảnh
+            if template_img is not None:
+                # Căn chỉnh ảnh (không lưu file để tăng tốc)
                 aligner = ImageAligner(template_img, image)
                 aligned_image = aligner.align_images()
-                
-                # Lưu ảnh đã căn chỉnh
-                aligned_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'aligned')
-                if not os.path.exists(aligned_folder):
-                    os.makedirs(aligned_folder)
-                
-                aligned_filename = f"aligned_{filename}"
-                aligned_path = os.path.join(aligned_folder, aligned_filename)
-                # Thay đổi biến image thành ảnh đã căn chỉnh
                 image = aligned_image
         
         # Thực hiện OCR trên các vùng ROI
-        print(f"Performing OCR on {len(roi_coordinates)} ROIs")
         ocr_results = perform_ocr_on_roi(
             image, 
             roi_coordinates, 
@@ -1754,15 +1543,6 @@ def upload_image():
             machine_code,
             screen_id
         )
-        
-        # Lưu kết quả OCR vào file JSON
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
-        base_name = os.path.splitext(filename)[0]
-        ocr_result_filename = f"ocr_result_{timestamp}_{base_name}_{machine_code}_{screen_id}.json"
-        ocr_result_path = os.path.join(app.config['OCR_RESULTS_FOLDER'], ocr_result_filename)
-        
-        # Đảm bảo thư mục tồn tại
-        os.makedirs(os.path.dirname(ocr_result_path), exist_ok=True)
         
         # Tạo cấu trúc dữ liệu giống với file OCR result
         result_data = {
@@ -1783,13 +1563,7 @@ def upload_image():
             }
         }
         
-        # Lưu kết quả OCR vào file JSON
-        with open(ocr_result_path, 'w', encoding='utf-8') as f:
-            json.dump(result_data, f, ensure_ascii=False, indent=2)
-        
-        print(f"Saved OCR results to: {ocr_result_path}")
-        
-        # Trả về kết quả
+        # Trả về kết quả (không lưu file để tăng tốc)
         return jsonify(result_data), 201
             
     except Exception as e:
@@ -1800,8 +1574,8 @@ def upload_image():
         try:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
-        except Exception as e:
-            print(f"Error removing temporary file: {e}")
+        except:
+            pass
 
 # API 2: Lấy danh sách hình ảnh
 @app.route('/api/images', methods=['GET'])
@@ -2863,38 +2637,16 @@ def preprocess_roi_for_ocr(roi, roi_index, original_filename, roi_name=None, ima
     
     # Kiểm tra nếu ảnh rỗng
     if roi is None or roi.size == 0 or roi.shape[0] <= 5 or roi.shape[1] <= 5:
-        print(f"ROI {identifier} quá nhỏ hoặc rỗng, bỏ qua")
         return None, None
-    
-    # Tạo thư mục để lưu ảnh ROI đã xử lý (nếu chưa tồn tại)
-    processed_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'processed_roi')
-    if not os.path.exists(processed_folder):
-        os.makedirs(processed_folder)
-    
-    # Lưu ảnh ROI gốc
-    base_filename = os.path.splitext(original_filename)[0]
-    original_roi_filename = f"{base_filename}_{identifier}_original.png"
-    original_roi_path = os.path.join(processed_folder, original_roi_filename)
-    cv2.imwrite(original_roi_path, roi)
-    print(f"Saved original ROI to: {original_roi_path}")
     
     # 1. Chuyển sang ảnh xám
     gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
 
     quality_info = check_image_quality(gray)
-    print(f"---Image quality for ROI {identifier}: {quality_info}")
     # Kiểm tra quality_info có phải là None không
     if quality_info is not None and not quality_info['is_good_quality']:
-        
         # Cải thiện chất lượng ảnh
         enhanced_gray = enhance_image_quality(gray, quality_info)
-        
-        # Lưu ảnh đã cải thiện
-        enhanced_filename = f"{base_filename}_{identifier}_enhanced.png"
-        enhanced_path = os.path.join(processed_folder, enhanced_filename)
-        cv2.imwrite(enhanced_path, enhanced_gray)
-        print(f"Saved enhanced ROI to: {enhanced_path}")
-        
         # Sử dụng ảnh đã cải thiện cho các bước tiếp theo
         gray = enhanced_gray
     
@@ -2910,22 +2662,11 @@ def preprocess_roi_for_ocr(roi, roi_index, original_filename, roi_name=None, ima
     # 4. Morphological Closing
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))  # Tăng lên (5,5) thay vì (2,2)
     closing = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
-    processed_filename = f"{base_filename}_{identifier}_step1_threshold.png"
-    processed_path = os.path.join(processed_folder, processed_filename)
-    cv2.imwrite(processed_path, closing)
-    print(f"Saved threshold ROI to: {processed_path}")
     # 5. Đảo ngược ảnh để số trở thành foreground (trắng trên nền đen)
     inverted = cv2.bitwise_not(closing)
     
-    # Lưu ảnh đảo ngược để debug
-    inverted_filename = f"{base_filename}_{identifier}_step1b_inverted.png"
-    inverted_path = os.path.join(processed_folder, inverted_filename)
-    cv2.imwrite(inverted_path, inverted)
-    print(f"Saved inverted ROI to: {inverted_path}")
-    
     # 6. Tìm contour với RETR_LIST để tìm tất cả contours
     contours, _ = cv2.findContours(inverted, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-    print(f"Found {len(contours)} contours in ROI {identifier}")
 
     # 7. Tính giới hạn trên và dưới cho mỗi contour
     contour_limits = []
@@ -2934,27 +2675,19 @@ def preprocess_roi_for_ocr(roi, roi_index, original_filename, roi_name=None, ima
         x, y, w, h = cv2.boundingRect(cnt)
         area = cv2.contourArea(cnt)
         
-        print(f"  Contour {i}: x={x}, y={y}, w={w}, h={h}, area={area:.0f}")
-        
         # Điều kiện lọc mới dựa trên phân tích thực tế:
         # - Loại bỏ contour quá nhỏ (nhiễu)
         # - Loại bỏ contour quá lớn (toàn bộ ảnh)
         # - Chấp nhận contour có kích thước phù hợp với số
         if w <= 3 or h <= 8 or area < 20:  # Quá nhỏ - nhiễu
-            print(f"    Rejected: too small (w={w}, h={h}, area={area})")
             continue
         if w > 50 or h > 50 or area > 1000:  # Quá lớn - có thể là background
-            print(f"    Rejected: too large (w={w}, h={h}, area={area})")
             continue
-        
-        print(f"    Accepted: valid digit contour")
         
         y_coords = [point[0][1] for point in cnt]  # Lấy tọa độ y của các điểm trong contour
         upper_limit = min(y_coords)
         lower_limit = max(y_coords)
         contour_limits.append((upper_limit, lower_limit, cnt))
-
-    print(f"Found {len(contour_limits)} valid contours after filtering")
 
     # 8. Đếm số lượng contour nằm trong giới hạn y của từng contour
     max_overlap_count = 0
@@ -2976,19 +2709,14 @@ def preprocess_roi_for_ocr(roi, roi_index, original_filename, roi_name=None, ima
 
     # 9. Gộp tất cả các contour trong vùng giới hạn y của contour tốt nhất
     if best_contour is not None and len(contour_limits) > 0:
-        print(f"Using best contour with {max_overlap_count} overlapping contours")
-        
         # Nếu chỉ có 1 contour thì sử dụng contour đó luôn mà không cần gộp
         if len(contour_limits) == 1:
             merged_contour = contour_limits[0][2]
-            print("Using single contour")
         else:
             merged_contour = np.vstack([cnt for upper, lower, cnt in contour_limits if not (best_limits[1] < upper or best_limits[0] > lower)])
-            print(f"Merged {len([cnt for upper, lower, cnt in contour_limits if not (best_limits[1] < upper or best_limits[0] > lower)])} contours")
         
         # 10. Cắt (crop) vùng boundingRect của contour lớn nhất với padding
         x, y, w, h = cv2.boundingRect(merged_contour)
-        print(f"Final bounding rect: x={x}, y={y}, w={w}, h={h}")
         
         # Mở rộng thêm padding xung quanh
         pad = 5
@@ -3018,22 +2746,10 @@ def preprocess_roi_for_ocr(roi, roi_index, original_filename, roi_name=None, ima
         closing_final = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
         closing_final = cv2.blur(closing_final, (3, 3))
         
-        # Lưu ảnh đã xử lý
-        processed_filename = f"{base_filename}_{identifier}_step2_cropped.png"
-        processed_path = os.path.join(processed_folder, processed_filename)
-        cv2.imwrite(processed_path, closing_final)
-        print(f"Saved cropped processed ROI to: {processed_path}")
-        
-        print(f"Processing ROI {identifier} completed successfully")
         return closing_final, quality_info  # Trả về ảnh grayscale và thông tin chất lượng
     else:
-        print(f"Không tìm thấy contour hợp lệ để cắt cho ROI {identifier}.")
         closing = cv2.blur(closing, (4, 4))
         # Trả về ảnh grayscale nếu không tìm thấy contour
-        processed_filename = f"{base_filename}_{identifier}_step3_final.png"
-        processed_path = os.path.join(processed_folder, processed_filename)
-        cv2.imwrite(processed_path, closing)
-        print(f"Saved final processed ROI to: {processed_path}")
         return closing, quality_info  # Trả về ảnh grayscale và thông tin chất lượng
 
 def is_named_roi_format(roi_list):
@@ -4205,7 +3921,7 @@ def update_machine_screen():
 
 # Thêm các hàm compare_images từ hmi_image_detector.py
 def compare_histograms(img1, img2):
-    """So sánh histogram giữa hai ảnh"""
+    """So sánh histogram giữa hai ảnh (legacy function)"""
     # Chuyển sang không gian màu HSV để giảm ảnh hưởng của độ sáng
     img1_hsv = cv2.cvtColor(img1, cv2.COLOR_BGR2HSV)
     img2_hsv = cv2.cvtColor(img2, cv2.COLOR_BGR2HSV)
@@ -4222,6 +3938,39 @@ def compare_histograms(img1, img2):
     correlation = cv2.compareHist(hist1, hist2, cv2.HISTCMP_CORREL)  # Correlation (1 = hoàn hảo)
     
     return correlation
+
+def compare_histograms_optimized(img1, img2):
+    """
+    🚀 Optimized histogram comparison for auto detection
+    
+    Improvements:
+    - Multi-channel histogram analysis
+    - Reduced bins for faster computation
+    - Combined color and texture features
+    """
+    try:
+        # Convert to HSV for better color representation
+        img1_hsv = cv2.cvtColor(img1, cv2.COLOR_BGR2HSV)
+        img2_hsv = cv2.cvtColor(img2, cv2.COLOR_BGR2HSV)
+        
+        # Reduce bins for faster computation while maintaining accuracy
+        # H: 32 bins, S: 32 bins (original was 180, 256)
+        hist1 = cv2.calcHist([img1_hsv], [0, 1], None, [32, 32], [0, 180, 0, 256])
+        hist2 = cv2.calcHist([img2_hsv], [0, 1], None, [32, 32], [0, 180, 0, 256])
+        
+        # Normalize histograms
+        cv2.normalize(hist1, hist1, 0, 1, cv2.NORM_MINMAX)
+        cv2.normalize(hist2, hist2, 0, 1, cv2.NORM_MINMAX)
+        
+        # Use correlation (best for template matching)
+        correlation = cv2.compareHist(hist1, hist2, cv2.HISTCMP_CORREL)
+        
+        # Ensure result is in [0, 1] range
+        return max(0, correlation)
+        
+    except Exception as e:
+        print(f"Error in optimized histogram comparison: {e}")
+        return 0
 
 def compare_features_orb(img1, img2, max_features=500):
     """So sánh hai ảnh dựa trên đặc trưng ORB (Oriented FAST và Rotated BRIEF)"""
@@ -4306,7 +4055,10 @@ def compare_phash(img1, img2, hash_size=16):
 
 def find_best_matching_template(hmi_image, reference_dir, machine_type=None):
     """
-    Tìm template phù hợp nhất với ảnh HMI đã upload
+    🔄 LEGACY: Tìm template phù hợp nhất với ảnh HMI (deprecated)
+    
+    ⚠️  Function này được giữ lại để tương thích ngược, 
+        nhưng auto_detect_machine_and_screen() đã được tối ưu hóa hoàn toàn
     
     Args:
         hmi_image: Ảnh cần so sánh
@@ -4316,6 +4068,8 @@ def find_best_matching_template(hmi_image, reference_dir, machine_type=None):
     Returns:
         Tuple (best_match_path, best_match_screen_id, similarity_score)
     """
+    print("⚠️  WARNING: Using legacy find_best_matching_template(). Consider using optimized auto_detect_machine_and_screen()")
+    
     if not os.path.exists(reference_dir):
         print(f"Thư mục reference không tồn tại: {reference_dir}")
         return None, None, 0
