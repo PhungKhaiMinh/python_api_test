@@ -1,0 +1,309 @@
+{
+  "filename": "F41_production_test1.jpg",
+  "machine_code": "IE-F4-WBI05",
+  "screen_id": "Production",
+  "timestamp": "2025-05-27 18:54:28",
+  "template_path": "d:\\Wrembly\\python_api_test\\roi_data\\reference_images\\template_F41_Production.jpg",
+  "results": [
+    {
+      "roi_index": "Cavity quantity",
+      "text": "64",
+      "confidence": 0.9999471482610469,
+      "has_text": true,
+      "original_value": "64"
+    },
+    {
+      "roi_index": "Target production quantity set",
+      "text": "140000",
+      "confidence": 0.9969742197063003,
+      "has_text": true,
+      "original_value": "140000"
+    },
+    {
+      "roi_index": "Target production quantity cur",
+      "text": "14400",
+      "confidence": 0.999988004788134,
+      "has_text": true,
+      "original_value": "14400"
+    },
+    {
+      "roi_index": "Target production mode",
+      "text": "OFF",
+      "confidence": 1.0,
+      "has_text": true
+    },
+    {
+      "roi_index": "Defective product quantity set",
+      "text": "0",
+      "confidence": 0.9999929666642835,
+      "has_text": true,
+      "original_value": "0"
+    },
+    {
+      "roi_index": "Defective product quantity cur",
+      "text": "0",
+      "confidence": 0.999969721069661,
+      "has_text": true,
+      "original_value": "0"
+    },
+    {
+      "roi_index": "Defective product mode",
+      "text": "OFF",
+      "confidence": 1.0,
+      "has_text": true
+    },
+    {
+      "roi_index": "Defect rate",
+      "text": "0.0",
+      "confidence": 0.9999965439601713,
+      "has_text": true,
+      "original_value": "00"
+    },
+    {
+      "roi_index": "Total production",
+      "text": "14400",
+      "confidence": 0.9995353197321379,
+      "has_text": true,
+      "original_value": "14400"
+    },
+    {
+      "roi_index": "Use quality screening",
+      "text": "OFF",
+      "confidence": 1.0,
+      "has_text": true
+    },
+    {
+      "roi_index": "Good check SW use",
+      "text": "OFF",
+      "confidence": 1.0,
+      "has_text": true
+    },
+    {
+      "roi_index": "Use bad selector switch",
+      "text": "OFF",
+      "confidence": 1.0,
+      "has_text": true
+    },
+    {
+      "roi_index": "D+0 Weather",
+      "text": "04.15",
+      "confidence": 0.99774322575513,
+      "has_text": true,
+      "original_value": "04.15"
+    },
+    {
+      "roi_index": "D+0 Total production",
+      "text": "52864",
+      "confidence": 0.9999882713485821,
+      "has_text": true,
+      "original_value": "52864"
+    },
+    {
+      "roi_index": "D+0 Defective product",
+      "text": "0",
+      "confidence": 0.9999922514111894,
+      "has_text": true,
+      "original_value": "0"
+    },
+    {
+      "roi_index": "D+0 Defect rate",
+      "text": "0.0",
+      "confidence": 0.9999955951683134,
+      "has_text": true,
+      "original_value": "0.0"
+    },
+    {
+      "roi_index": "D+0 Working hours",
+      "text": "0:85:13:31",
+      "confidence": 0.5040059906536638,
+      "has_text": true,
+      "original_value": "08.51331"
+    },
+    {
+      "roi_index": "D+1 Weather",
+      "text": "04.14",
+      "confidence": 0.9999952912330627,
+      "has_text": true,
+      "original_value": "0414"
+    },
+    {
+      "roi_index": "D+1 Total production",
+      "text": "97344",
+      "confidence": 0.9999974943349246,
+      "has_text": true,
+      "original_value": "97344"
+    },
+    {
+      "roi_index": "D+1 Defective product",
+      "text": "0",
+      "confidence": 0.9999963045154381,
+      "has_text": true,
+      "original_value": "0"
+    },
+    {
+      "roi_index": "D+1 Defect rate",
+      "text": "0.0",
+      "confidence": 0.9999935992298111,
+      "has_text": true,
+      "original_value": "0.0"
+    },
+    {
+      "roi_index": "D+1 Working hours",
+      "text": "16:18:56",
+      "confidence": 0.7996288760594156,
+      "has_text": true,
+      "original_value": "16.18.56"
+    },
+    {
+      "roi_index": "D+2 Weather",
+      "text": "04.13",
+      "confidence": 0.716953865384454,
+      "has_text": true,
+      "original_value": "04.13"
+    },
+    {
+      "roi_index": "D+2 Total production",
+      "text": "38016",
+      "confidence": 0.9999949886691082,
+      "has_text": true,
+      "original_value": "38016"
+    },
+    {
+      "roi_index": "D+2 Defective product",
+      "text": "0",
+      "confidence": 0.9999980926522767,
+      "has_text": true,
+      "original_value": "0"
+    },
+    {
+      "roi_index": "D+2 Defect rate",
+      "text": "0.0",
+      "confidence": 0.9999897450052484,
+      "has_text": true,
+      "original_value": "0.0"
+    },
+    {
+      "roi_index": "D+2 Working hours",
+      "text": "06:20:34",
+      "confidence": 0.9595000889974115,
+      "has_text": true,
+      "original_value": "06.20.34"
+    },
+    {
+      "roi_index": "D+3 Weather",
+      "text": "04.12",
+      "confidence": 0.999985552431617,
+      "has_text": true,
+      "original_value": "04.12"
+    },
+    {
+      "roi_index": "D+3 Total production",
+      "text": "140736",
+      "confidence": 0.9999922132749999,
+      "has_text": true,
+      "original_value": "140736"
+    },
+    {
+      "roi_index": "D+3 Defective product",
+      "text": "0",
+      "confidence": 0.9999966621426779,
+      "has_text": true,
+      "original_value": "0"
+    },
+    {
+      "roi_index": "D+3 Defect rate",
+      "text": "0.0",
+      "confidence": 0.9999438524246216,
+      "has_text": true,
+      "original_value": "0.0"
+    },
+    {
+      "roi_index": "D+3 Working hours",
+      "text": "2:33:13:24",
+      "confidence": 0.4683299171852155,
+      "has_text": true,
+      "original_value": "23.31324"
+    },
+    {
+      "roi_index": "D+4 Weather",
+      "text": "04.11",
+      "confidence": 0.9998783411082418,
+      "has_text": true,
+      "original_value": "04.11"
+    },
+    {
+      "roi_index": "D+4 Total production",
+      "text": "142016",
+      "confidence": 0.9999908992638122,
+      "has_text": true,
+      "original_value": "142016"
+    },
+    {
+      "roi_index": "D+4 Defective product",
+      "text": "0",
+      "confidence": 0.9999823571029651,
+      "has_text": true,
+      "original_value": "0"
+    },
+    {
+      "roi_index": "D+4 Defect rate",
+      "text": "0.0",
+      "confidence": 0.9999786641207165,
+      "has_text": true,
+      "original_value": "0.0"
+    },
+    {
+      "roi_index": "D+4 Working hours",
+      "text": "23:40:30",
+      "confidence": 0.994107414501839,
+      "has_text": true,
+      "original_value": "23.40.30"
+    },
+    {
+      "roi_index": "D+5 Weather",
+      "text": "04.10",
+      "confidence": 0.9999856590558281,
+      "has_text": true,
+      "original_value": "04.10"
+    },
+    {
+      "roi_index": "D+5 Total production",
+      "text": "139520",
+      "confidence": 0.8523572210574768,
+      "has_text": true,
+      "original_value": "139520"
+    },
+    {
+      "roi_index": "D+5 Defective product",
+      "text": "0",
+      "confidence": 0.9999608997352425,
+      "has_text": true,
+      "original_value": "0"
+    },
+    {
+      "roi_index": "D+5 Defect rate",
+      "text": "0.0",
+      "confidence": 0.9999947692626615,
+      "has_text": true,
+      "original_value": "0.0"
+    },
+    {
+      "roi_index": "D+5 Working hours",
+      "text": "23:15:47",
+      "confidence": 0.9999980046530172,
+      "has_text": true,
+      "original_value": "23:15:47"
+    }
+  ],
+  "hmi_detection": {
+    "hmi_detected": true,
+    "hmi_image": "/api/images/hmi_detection/refined_hmi_IE-F4-WBI05_Production.png",
+    "visualization": "/api/images/hmi_detection/hmi_visualization_IE-F4-WBI05_Production.png"
+  },
+  "detected_screen": {
+    "screen_id": "Production",
+    "screen_numeric_id": 5,
+    "similarity_score": "template_F41_Production.jpg",
+    "machine_type": "F41"
+  }
+}

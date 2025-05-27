@@ -294,66 +294,54 @@ def get_roi_coordinates(machine_code, screen_id=None, machine_type=None):
                 return [], []
             print(f"Determined machine_type: {machine_type} for machine_code: {machine_code}")
         
-        # Xác định screen_name từ screen_id
         screen_name = None
-        valid_screen_names = ["Production Data", "Faults", "Feeders and Conveyors", 
-                            "Main Machine Parameters", "Selectors and Maintenance",
-                            "Setting", "Temp", "Plasticizer", "Overview", "Tracking", "Production", 
-                            "Clamp", "Ejector", "Injection"]
         
-        if isinstance(screen_id, str):
-            if screen_id in valid_screen_names:
-                screen_name = screen_id
-                print(f"Using screen_id as screen_name: {screen_name}")
-            else:
-                # Lấy tên màn hình từ screen_id (nếu là numeric id)
-                machine_screens_path = 'roi_data/machine_screens.json'
-                if not os.path.exists(machine_screens_path):
-                    machine_screens_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'roi_data/machine_screens.json')
-                
-                with open(machine_screens_path, 'r', encoding='utf-8') as f:
-                    machine_screens = json.load(f)
-                    
-                # Tìm trong areas
-                for area_code, area_info in machine_screens.get("areas", {}).items():
-                    machines = area_info.get("machines", {})
-                    if machine_code in machines:
-                        for screen in machines[machine_code].get("screens", []):
-                            if str(screen.get("id")) == str(screen_id):
-                                screen_name = screen.get("screen_id")
-                                print(f"Found screen_name: {screen_name} for screen_id: {screen_id} in machine_code: {machine_code}")
-                                break
-        
-        if not screen_name:
-            print(f"Could not determine screen_name for screen_id: {screen_id}")
-            return [], []
+        # Kiểm tra xem screen_id có phải là tên màn hình không
+        if isinstance(screen_id, str) and screen_id in ["Production Data", "Faults", "Feeders and Conveyors", 
+                                                  "Main Machine Parameters", "Selectors and Maintenance",
+                                                  "Setting", "Temp", "Plasticizer", "Overview", "Tracking", "Production", 
+                                                  "Clamp", "Ejector", "Injection"]:
+            screen_name = screen_id
+            print(f"Using screen_id as screen_name: {screen_name}")
+        elif screen_id is not None:
+            # Lấy tên màn hình từ screen_id (nếu là numeric id)
+            machine_screens_path = 'roi_data/machine_screens.json'
+            if not os.path.exists(machine_screens_path):
+                machine_screens_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'roi_data/machine_screens.json')
             
-        print(f"Looking for ROIs in machine_type: {machine_type}, screen: {screen_name}")
+            with open(machine_screens_path, 'r', encoding='utf-8') as f:
+                machine_screens = json.load(f)
+            
+            # Tìm trong areas
+            for area_code, area_info in machine_screens.get("areas", {}).items():
+                machines = area_info.get("machines", {})
+                if machine_code in machines:
+                    for screen in machines[machine_code].get("screens", []):
+                        if str(screen.get("id")) == str(screen_id):
+                            screen_name = screen.get("screen_id")
+                            print(f"Found screen_name: {screen_name} for screen_id: {screen_id} in machine_code: {machine_code}")
+                            break
         
-        # Tìm thông tin ROI trong roi_info.json
-        if machine_type in roi_data.get('machines', {}):
-            screens_data = roi_data['machines'][machine_type].get('screens', {})
-            if screen_name in screens_data:
-                screen_data = screens_data[screen_name]
-                
-                # Xử lý cả hai trường hợp: screen_data là list hoặc dict
-                roi_list = []
-                if isinstance(screen_data, dict):
-                    roi_list = screen_data.get('rois', [])
-                elif isinstance(screen_data, list):
-                    roi_list = screen_data
+        print(f"Looking for ROIs in machine_type: {machine_type}, screen: {screen_name} (id: {screen_id})")
+        
+        # Tìm trong machines
+        if machine_type in roi_data.get("machines", {}):
+            screens_data = roi_data["machines"][machine_type].get("screens", {})
+            
+            if screen_name and screen_name in screens_data:
+                roi_list = screens_data[screen_name]
                 
                 # Xử lý định dạng ROI
                 roi_coordinates = []
                 roi_names = []
                 
                 for roi_item in roi_list:
-                    if isinstance(roi_item, dict) and "coordinates" in roi_item:
+                    if isinstance(roi_item, dict) and "name" in roi_item and "coordinates" in roi_item:
                         roi_coordinates.append(roi_item["coordinates"])
-                        roi_names.append(roi_item.get("name", ""))
+                        roi_names.append(roi_item["name"])
                     else:
                         roi_coordinates.append(roi_item)
-                        roi_names.append("")
+                        roi_names.append(f"ROI_{len(roi_names)}")
                 
                 print(f"Found {len(roi_coordinates)} ROIs for {screen_name}")
                 return roi_coordinates, roi_names
@@ -431,6 +419,179 @@ def get_area_for_machine(machine_code):
         return None
     except Exception as e:
         print(f"Error getting area for machine: {str(e)}")
+        return None
+
+def get_machine_name_from_code(machine_code):
+    """
+    Lấy tên máy (machine_name) từ mã máy (machine_code) trong file machine_screens.json
+    
+    Args:
+        machine_code: Mã máy (ví dụ: IE-F1-CWA01, IE-F4-WBI01)
+        
+    Returns:
+        str: Tên máy (ví dụ: "Máy IE-F1-CWA01") hoặc None nếu không tìm thấy
+    """
+    try:
+        machine_screens_path = os.path.join(app.config['ROI_DATA_FOLDER'], 'machine_screens.json')
+        if not os.path.exists(machine_screens_path):
+            return None
+        
+        with open(machine_screens_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        # Tìm kiếm trong cấu trúc areas
+        for area_code, area_info in data.get('areas', {}).items():
+            machines = area_info.get('machines', {})
+            if machine_code in machines:
+                machine_info = machines[machine_code]
+                return machine_info.get('name')
+        
+        # Nếu không tìm thấy, trả về None
+        return None
+    except Exception as e:
+        print(f"Error getting machine name from code: {str(e)}")
+        return None
+
+def get_all_machine_types():
+    """
+    Lấy tất cả machine_type có sẵn từ file machine_screens.json
+    
+    Returns:
+        list: Danh sách các machine_type duy nhất
+    """
+    try:
+        machine_screens_path = os.path.join(app.config['ROI_DATA_FOLDER'], 'machine_screens.json')
+        if not os.path.exists(machine_screens_path):
+            return []
+        
+        with open(machine_screens_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        machine_types = set()
+        # Tìm kiếm trong cấu trúc areas
+        for area_code, area_info in data.get('areas', {}).items():
+            machines = area_info.get('machines', {})
+            for machine_code, machine_info in machines.items():
+                machine_type = machine_info.get('type')
+                if machine_type:
+                    machine_types.add(machine_type)
+        
+        return list(machine_types)
+    except Exception as e:
+        print(f"Error getting all machine types: {str(e)}")
+        return []
+
+def find_machine_code_from_template(template_filename):
+    """
+    Tìm machine_code từ template filename và machine_type
+    
+    Args:
+        template_filename: Tên file template (ví dụ: template_F1_Main Machine Parameters.jpg)
+        
+    Returns:
+        tuple: (machine_code, area) hoặc (None, None) nếu không tìm thấy
+    """
+    try:
+        # Trích xuất machine_type từ filename template
+        # Format: template_{machine_type}_{screen_name}.ext
+        parts = template_filename.split('_')
+        if len(parts) < 3:
+            return None, None
+        
+        machine_type = parts[1]  # Lấy machine_type từ template filename
+        
+        machine_screens_path = os.path.join(app.config['ROI_DATA_FOLDER'], 'machine_screens.json')
+        if not os.path.exists(machine_screens_path):
+            return None, None
+        
+        with open(machine_screens_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        # Tìm machine_code đầu tiên có machine_type tương ứng
+        for area_code, area_info in data.get('areas', {}).items():
+            machines = area_info.get('machines', {})
+            for machine_code, machine_info in machines.items():
+                if machine_info.get('type') == machine_type:
+                    return machine_code, area_code
+        
+        return None, None
+    except Exception as e:
+        print(f"Error finding machine code from template: {str(e)}")
+        return None, None
+
+def auto_detect_machine_and_screen(image):
+    """
+    Tự động detect machine_code, area và screen từ hình ảnh
+    
+    Args:
+        image: Ảnh đầu vào
+        
+    Returns:
+        dict: {
+            'machine_code': str,
+            'machine_type': str,
+            'area': str,
+            'machine_name': str,
+            'screen_id': str,
+            'screen_numeric_id': int,
+            'template_path': str,
+            'similarity_score': float
+        } hoặc None nếu không detect được
+    """
+    try:
+        # Lấy tất cả machine_type có sẵn
+        machine_types = get_all_machine_types()
+        if not machine_types:
+            print("No machine types found")
+            return None
+        
+        print(f"Trying to detect screen with machine types: {machine_types}")
+        
+        best_result = None
+        best_similarity = 0
+        
+        # Thử với từng machine_type
+        for machine_type in machine_types:
+            print(f"Detecting screen for machine_type: {machine_type}")
+            screen_id, screen_numeric_id, template_path = detect_screen_by_template_matching(image, machine_type)
+            
+            if screen_id and template_path:
+                # Tính similarity score từ template matching
+                reference_dir = app.config['REFERENCE_IMAGES_FOLDER']
+                _, _, similarity = find_best_matching_template(image, reference_dir, machine_type)
+                
+                print(f"Found match for {machine_type}: screen_id={screen_id}, similarity={similarity}")
+                
+                if similarity > best_similarity:
+                    best_similarity = similarity
+                    template_filename = os.path.basename(template_path)
+                    
+                    # Tìm machine_code từ template
+                    machine_code, area = find_machine_code_from_template(template_filename)
+                    if machine_code and area:
+                        machine_name = get_machine_name_from_code(machine_code)
+                        
+                        best_result = {
+                            'machine_code': machine_code,
+                            'machine_type': machine_type,
+                            'area': area,
+                            'machine_name': machine_name,
+                            'screen_id': screen_id,
+                            'screen_numeric_id': screen_numeric_id,
+                            'template_path': template_path,
+                            'similarity_score': similarity
+                        }
+        
+        if best_result and best_similarity >= 0.4:  # Ngưỡng tối thiểu
+            print(f"Best detection result: {best_result}")
+            return best_result
+        else:
+            print(f"No suitable match found (best similarity: {best_similarity})")
+            return None
+            
+    except Exception as e:
+        print(f"Error in auto detection: {str(e)}")
+        traceback.print_exc()
         return None
 
 # Sửa lại hàm perform_ocr_on_roi để sử dụng ảnh đã căn chỉnh
@@ -582,7 +743,7 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                                     if "ON" in allowed_values and "OFF" in allowed_values:
                                         is_special_on_off_case = True
                                         print(f"Found ON/OFF values for ROI {roi_name} using machine_type")
-                                break
+                                    break
                 except Exception as e:
                     print(f"Error checking allowed_values for ROI {roi_name}: {str(e)}")
                 
@@ -735,7 +896,7 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                     # Thêm kết quả cho ROI này (không có original_value cho kết quả text)
                     if len(best_text) == 1:
                         best_text = best_text.replace('O', '0').replace('I', '1').replace('C','0').replace('S','5').replace('G','6').replace('A','4').replace('H','8').replace('L','1').replace('T','7').replace('U','0').replace('E','3').replace('Z','2').replace('Q','0')
-
+                    
                     # Kiểm tra nếu ROI này có allowed_values trong roi_info.json
                     try:
                         roi_json_path = 'roi_data/roi_info.json'
@@ -761,110 +922,110 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                                 if isinstance(roi_item, dict) and roi_item.get("name") == roi_name and "allowed_values" in roi_item:
                                     allowed_values = roi_item["allowed_values"]
                                     break
+                        
+                        # Nếu có allowed_values và không rỗng, so sánh với best_text
+                        if allowed_values and len(allowed_values) > 0:
+                            print(f"Found allowed_values for ROI {roi_name}: {allowed_values}")
                             
-                            # Nếu có allowed_values và không rỗng, so sánh với best_text
-                            if allowed_values and len(allowed_values) > 0:
-                                print(f"Found allowed_values for ROI {roi_name}: {allowed_values}")
+                            # Tìm khớp chính xác
+                            if best_text in allowed_values:
+                                print(f"Found exact match for '{best_text}' in allowed_values")
+                                # Đã có trong allowed_values, không cần sửa đổi gì
+                            else:
+                                print(f"No exact match for '{best_text}' in allowed_values. Trying to find partial match...")
+                                # Không tìm thấy khớp chính xác, tìm kiếm khớp một phần
                                 
-                                # Tìm khớp chính xác
-                                if best_text in allowed_values:
-                                    print(f"Found exact match for '{best_text}' in allowed_values")
-                                    # Đã có trong allowed_values, không cần sửa đổi gì
-                                else:
-                                    print(f"No exact match for '{best_text}' in allowed_values. Trying to find partial match...")
-                                    # Không tìm thấy khớp chính xác, tìm kiếm khớp một phần
+                                # Chuyển đổi best_text thành chữ hoa để so sánh không phân biệt hoa thường
+                                best_text_upper = best_text.upper()
+                                
+                                # Phương pháp 1: Tìm giá trị chứa text hoặc text chứa trong giá trị
+                                best_match = None
+                                max_overlap = 0
+                                
+                                for value in allowed_values:
+                                    value_upper = value.upper()
                                     
-                                    # Chuyển đổi best_text thành chữ hoa để so sánh không phân biệt hoa thường
-                                    best_text_upper = best_text.upper()
+                                    # Kiểm tra nếu chuỗi OCR nằm hoàn toàn trong allowed_value 
+                                    if best_text_upper in value_upper:
+                                        # Tính tỷ lệ khớp: độ dài text / độ dài value
+                                        overlap_ratio = len(best_text_upper) / len(value_upper)
+                                        if overlap_ratio > max_overlap:
+                                            max_overlap = overlap_ratio
+                                            best_match = value
+                                            print(f"Found text '{best_text_upper}' in allowed value '{value}' with overlap ratio {overlap_ratio}")
                                     
-                                    # Phương pháp 1: Tìm giá trị chứa text hoặc text chứa trong giá trị
-                                    best_match = None
-                                    max_overlap = 0
+                                    # Kiểm tra nếu allowed_value nằm hoàn toàn trong chuỗi OCR
+                                    elif value_upper in best_text_upper:
+                                        # Tính tỷ lệ khớp: độ dài value / độ dài text
+                                        overlap_ratio = len(value_upper) / len(best_text_upper)
+                                        if overlap_ratio > max_overlap:
+                                            max_overlap = overlap_ratio
+                                            best_match = value
+                                            print(f"Found allowed value '{value}' in text '{best_text_upper}' with overlap ratio {overlap_ratio}")
+                                
+                                # Phương pháp 2: Đếm số từ chung
+                                if not best_match:
+                                    best_word_match = None
+                                    max_word_match = 0
+                                    
+                                    best_text_words = set(best_text_upper.split())
                                     
                                     for value in allowed_values:
-                                        value_upper = value.upper()
+                                        value_words = set(value.upper().split())
+                                        common_words = best_text_words.intersection(value_words)
                                         
-                                        # Kiểm tra nếu chuỗi OCR nằm hoàn toàn trong allowed_value 
-                                        if best_text_upper in value_upper:
-                                            # Tính tỷ lệ khớp: độ dài text / độ dài value
-                                            overlap_ratio = len(best_text_upper) / len(value_upper)
-                                            if overlap_ratio > max_overlap:
-                                                max_overlap = overlap_ratio
-                                                best_match = value
-                                                print(f"Found text '{best_text_upper}' in allowed value '{value}' with overlap ratio {overlap_ratio}")
-                                        
-                                        # Kiểm tra nếu allowed_value nằm hoàn toàn trong chuỗi OCR
-                                        elif value_upper in best_text_upper:
-                                            # Tính tỷ lệ khớp: độ dài value / độ dài text
-                                            overlap_ratio = len(value_upper) / len(best_text_upper)
-                                            if overlap_ratio > max_overlap:
-                                                max_overlap = overlap_ratio
-                                                best_match = value
-                                                print(f"Found allowed value '{value}' in text '{best_text_upper}' with overlap ratio {overlap_ratio}")
+                                        if len(common_words) > max_word_match:
+                                            max_word_match = len(common_words)
+                                            best_word_match = value
+                                            print(f"Found {len(common_words)} common words between '{best_text_upper}' and '{value}': {common_words}")
                                     
-                                    # Phương pháp 2: Đếm số từ chung
-                                    if not best_match:
-                                        best_word_match = None
-                                        max_word_match = 0
-                                        
-                                        best_text_words = set(best_text_upper.split())
-                                        
-                                        for value in allowed_values:
-                                            value_words = set(value.upper().split())
-                                            common_words = best_text_words.intersection(value_words)
-                                            
-                                            if len(common_words) > max_word_match:
-                                                max_word_match = len(common_words)
-                                                best_word_match = value
-                                                print(f"Found {len(common_words)} common words between '{best_text_upper}' and '{value}': {common_words}")
-                                        
-                                        if best_word_match:
-                                            best_match = best_word_match
+                                    if best_word_match:
+                                        best_match = best_word_match
+                                
+                                # Nếu không tìm thấy bằng hai phương pháp trên, dùng phương pháp cũ
+                                if not best_match:
+                                    first_char_matches = []
+                                    for value in allowed_values:
+                                        if len(best_text) > 0 and len(value) > 0 and best_text[0].upper() == value[0].upper():
+                                            first_char_matches.append(value)
                                     
-                                    # Nếu không tìm thấy bằng hai phương pháp trên, dùng phương pháp cũ
-                                    if not best_match:
-                                        first_char_matches = []
-                                        for value in allowed_values:
-                                            if len(best_text) > 0 and len(value) > 0 and best_text[0].upper() == value[0].upper():
-                                                first_char_matches.append(value)
+                                    if first_char_matches:
+                                        print(f"Found values with matching first character: {first_char_matches}")
+                                        # Mặc định sử dụng giá trị đầu tiên khớp
+                                        best_match = first_char_matches[0]
+                                        best_match_count = 1
                                         
-                                        if first_char_matches:
-                                            print(f"Found values with matching first character: {first_char_matches}")
-                                            # Mặc định sử dụng giá trị đầu tiên khớp
-                                            best_match = first_char_matches[0]
-                                            best_match_count = 1
-                                            
-                                            # Tìm giá trị có nhiều ký tự khớp liên tiếp nhất
-                                            for value in first_char_matches:
-                                                current_count = 0
-                                                for i in range(min(len(best_text), len(value))):
-                                                    if best_text[i].upper() == value[i].upper():
-                                                        current_count += 1
-                                                    else:
-                                                        break
-                                                
-                                                if current_count > best_match_count:
-                                                    best_match = value
-                                                    best_match_count = current_count
-                                                    print(f"Better match found: '{value}' with {current_count} consecutive character(s)")
-                                    
-                                    # Nếu đã tìm được match phù hợp, áp dụng
-                                    if best_match:
-                                        print(f"Changed best_text from '{best_text}' to '{best_match}' based on partial matching")
-                                        best_text = best_match
-                                    else:
-                                    # Thử tìm match ở vị trí khác nếu không có vị trí đầu tiên
-                                        match_found = False
-                                        for value in allowed_values:
-                                            for i in range(1, min(len(best_text), len(value))):
+                                        # Tìm giá trị có nhiều ký tự khớp liên tiếp nhất
+                                        for value in first_char_matches:
+                                            current_count = 0
+                                            for i in range(min(len(best_text), len(value))):
                                                 if best_text[i].upper() == value[i].upper():
-                                                    print(f"Match found at position {i}: '{best_text[i]}' with '{value}'")
-                                                    best_text = value
-                                                    print(f"Changed best_text to '{value}' based on match at position {i}")
-                                                    match_found = True
+                                                    current_count += 1
+                                                else:
                                                     break
-                                            if match_found:
+                                            
+                                            if current_count > best_match_count:
+                                                best_match = value
+                                                best_match_count = current_count
+                                                print(f"Better match found: '{value}' with {current_count} consecutive character(s)")
+                                
+                                # Nếu đã tìm được match phù hợp, áp dụng
+                                if best_match:
+                                    print(f"Changed best_text from '{best_text}' to '{best_match}' based on partial matching")
+                                    best_text = best_match
+                                else:
+                                    # Thử tìm match ở vị trí khác nếu không có vị trí đầu tiên
+                                    match_found = False
+                                    for value in allowed_values:
+                                        for i in range(1, min(len(best_text), len(value))):
+                                            if best_text[i].upper() == value[i].upper():
+                                                print(f"Match found at position {i}: '{best_text[i]}' with '{value}'")
+                                                best_text = value
+                                                print(f"Changed best_text to '{value}' based on match at position {i}")
+                                                match_found = True
                                                 break
+                                        if match_found:
+                                            break
                                     
                                     # Nếu vẫn không tìm thấy match nào, sử dụng phương pháp cuối: chỉ cần chọn phần tử đầu tiên
                                     if not match_found and allowed_values:
@@ -1487,39 +1648,6 @@ def upload_image():
     else:
         os.makedirs(processed_folder, exist_ok=True)
     
-    # Kiểm tra các tham số bắt buộc
-    if 'area' not in request.form:
-        return jsonify({"error": "Missing required parameter: area"}), 400
-    
-    if 'machine_code' not in request.form:
-        return jsonify({"error": "Missing required parameter: machine_code"}), 400
-    
-    area = request.form['area'].strip().upper()
-    machine_code = request.form['machine_code'].strip().upper()
-    
-    # Kiểm tra xem area và machine_code có tồn tại không
-    try:
-        # Đọc file cấu hình
-        machine_screens_path = os.path.join(app.config['ROI_DATA_FOLDER'], 'machine_screens.json')
-        if not os.path.exists(machine_screens_path):
-            return jsonify({"error": "Machine screens configuration not found"}), 404
-        
-        with open(machine_screens_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        
-        # Kiểm tra xem area có tồn tại không
-        if area not in data["areas"]:
-            return jsonify({"error": f"Area '{area}' not found"}), 404
-        
-        # Kiểm tra xem machine_code có tồn tại trong area này không
-        if machine_code not in data["areas"][area]["machines"]:
-            return jsonify({"error": f"Machine '{machine_code}' not found in area '{area}'"}), 404
-        
-        # Lấy machine_type từ cấu hình
-        machine_type = data["areas"][area]["machines"][machine_code]["type"]
-    except Exception as e:
-        return jsonify({"error": f"Error loading machine configuration: {str(e)}"}), 500
-    
     # Lưu file tạm thời
     filename = secure_filename(file.filename)
     temp_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
@@ -1531,20 +1659,34 @@ def upload_image():
         if uploaded_image is None:
             return jsonify({"error": "Could not read uploaded image"}), 400
         
-        # Tự động nhận diện loại màn hình bằng template matching
-        print(f"Nhận diện loại màn hình cho machine_type={machine_type}...")
-        screen_id, screen_numeric_id, best_template = detect_screen_by_template_matching(uploaded_image, machine_type)
+        # Tự động detect machine_code, area và screen từ hình ảnh
+        print("Bắt đầu auto detection machine và screen...")
+        detection_result = auto_detect_machine_and_screen(uploaded_image)
         
-        if screen_id is None:
+        if detection_result is None:
             return jsonify({
-                "error": "Could not automatically detect screen type from image. Please specify a screen_id.",
-                "machine_type": machine_type
+                "error": "Could not automatically detect machine and screen from image. Please ensure the image contains a clear HMI screen."
             }), 400
         
-        print(f"Đã nhận diện màn hình: {screen_id} (numeric_id: {screen_numeric_id})")
+        # Lấy thông tin từ kết quả detection
+        machine_code = detection_result['machine_code']
+        machine_type = detection_result['machine_type']
+        area = detection_result['area']
+        machine_name = detection_result['machine_name']
+        screen_id = detection_result['screen_id']
+        screen_numeric_id = detection_result['screen_numeric_id']
+        template_path = detection_result['template_path']
+        similarity_score = detection_result['similarity_score']
         
-        # Lấy template path cho màn hình đã phát hiện
-        template_path = get_reference_template_path(machine_type, screen_id)
+        print(f"Detection thành công:")
+        print(f"  - Machine Code: {machine_code}")
+        print(f"  - Machine Name: {machine_name}")
+        print(f"  - Area: {area}")
+        print(f"  - Machine Type: {machine_type}")
+        print(f"  - Screen ID: {screen_id}")
+        print(f"  - Similarity Score: {similarity_score}")
+        
+        # Sử dụng template_path từ detection result
         if template_path:
             print(f"Using template image: {template_path}")
         else:
@@ -1657,6 +1799,8 @@ def upload_image():
         result_data = {
             "filename": filename,
             "machine_code": machine_code,
+            "area": area,
+            "machine_name": machine_name,
             "screen_id": screen_id,
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
             "template_path": template_path if template_path else None,
@@ -1665,11 +1809,9 @@ def upload_image():
             "detected_screen": {
                 "screen_id": screen_id,
                 "screen_numeric_id": screen_numeric_id,
-                "similarity_score": best_template and os.path.basename(best_template),
+                "similarity_score": similarity_score,
                 "machine_type": machine_type
-            },
-            "area": area,
-            "machine_name": data["areas"][area]["machines"][machine_code]["name"]
+            }
         }
         
         # Lưu kết quả OCR vào file JSON
@@ -2824,8 +2966,7 @@ def preprocess_roi_for_ocr(roi, roi_index, original_filename, roi_name=None, ima
     best_limits = None
 
     for i, (upper, lower, cnt) in enumerate(contour_limits):
-        overlap_count = sum(1 for j, (other_upper, other_lower, _) in enumerate(contour_limits) 
-                          if i != j and not (lower < other_upper or upper > other_lower))
+        overlap_count = sum(1 for j, (other_upper, other_lower, _) in enumerate(contour_limits) if i != j and not (lower < other_upper or upper > other_lower))
         
         if overlap_count > max_overlap_count:
             max_overlap_count = overlap_count
