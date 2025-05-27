@@ -294,62 +294,75 @@ def get_roi_coordinates(machine_code, screen_id=None, machine_type=None):
                 return [], []
             print(f"Determined machine_type: {machine_type} for machine_code: {machine_code}")
         
-            screen_name = None
+        # Xác định screen_name từ screen_id
+        screen_name = None
+        valid_screen_names = ["Production Data", "Faults", "Feeders and Conveyors", 
+                            "Main Machine Parameters", "Selectors and Maintenance",
+                            "Setting", "Temp", "Plasticizer", "Overview", "Tracking", "Production", 
+                            "Clamp", "Ejector", "Injection"]
         
-        # Kiểm tra xem screen_id có phải là tên màn hình không
-        if isinstance(screen_id, str) and screen_id in ["Production Data", "Faults", "Feeders and Conveyors", 
-                                                  "Main Machine Parameters", "Selectors and Maintenance",
-                                                  "Setting", "Temp", "Plasticizer", "Overview", "Tracking", "Production", 
-                                                  "Clamp", "Ejector", "Injection"]:
-            screen_name = screen_id
-            print(f"Using screen_id as screen_name: {screen_name}")
-        elif screen_id is not None:
-            # Lấy tên màn hình từ screen_id (nếu là numeric id)
-            machine_screens_path = 'roi_data/machine_screens.json'
-            if not os.path.exists(machine_screens_path):
-                machine_screens_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'roi_data/machine_screens.json')
-            
-            with open(machine_screens_path, 'r', encoding='utf-8') as f:
-                machine_screens = json.load(f)
-                
-            # Tìm trong areas
-            for area_code, area_info in machine_screens.get("areas", {}).items():
-                machines = area_info.get("machines", {})
-                if machine_code in machines:
-                    for screen in machines[machine_code].get("screens", []):
-                        if str(screen.get("id")) == str(screen_id):
-                            screen_name = screen.get("screen_id")
-                            print(f"Found screen_name: {screen_name} for screen_id: {screen_id} in machine_code: {machine_code}")
-                            break
-            
-            print(f"Looking for ROIs in machine_type: {machine_type}, screen: {screen_name} (id: {screen_id})")
-            
-            # Tìm thông tin ROI trong roi_info.json
-            if machine_type in roi_data.get('machines', {}):
-                screens_data = roi_data['machines'][machine_type].get('screens', {})
-                if screen_name in screens_data:
-                    roi_list = screens_data[screen_name].get('rois', [])
-                    
-                    # Xử lý định dạng ROI
-                    roi_coordinates = []
-                    roi_names = []
-                    
-                    for roi_item in roi_list:
-                        if isinstance(roi_item, dict) and "coordinates" in roi_item:
-                            roi_coordinates.append(roi_item["coordinates"])
-                            roi_names.append(roi_item.get("name", ""))
-                        else:
-                            roi_coordinates.append(roi_item)
-                            roi_names.append("")
-                    
-                    print(f"Found {len(roi_coordinates)} ROIs for {screen_name}")
-                    return roi_coordinates, roi_names
-                else:
-                    print(f"Screen '{screen_name}' not found in roi_info.json for machine_type {machine_type}")
-                    print(f"Available screens: {list(screens_data.keys())}")
+        if isinstance(screen_id, str):
+            if screen_id in valid_screen_names:
+                screen_name = screen_id
+                print(f"Using screen_id as screen_name: {screen_name}")
             else:
-                print(f"Machine type '{machine_type}' not found in roi_info.json")
-                print(f"Available machine types: {list(roi_data.get('machines', {}).keys())}")
+                # Lấy tên màn hình từ screen_id (nếu là numeric id)
+                machine_screens_path = 'roi_data/machine_screens.json'
+                if not os.path.exists(machine_screens_path):
+                    machine_screens_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'roi_data/machine_screens.json')
+                
+                with open(machine_screens_path, 'r', encoding='utf-8') as f:
+                    machine_screens = json.load(f)
+                    
+                # Tìm trong areas
+                for area_code, area_info in machine_screens.get("areas", {}).items():
+                    machines = area_info.get("machines", {})
+                    if machine_code in machines:
+                        for screen in machines[machine_code].get("screens", []):
+                            if str(screen.get("id")) == str(screen_id):
+                                screen_name = screen.get("screen_id")
+                                print(f"Found screen_name: {screen_name} for screen_id: {screen_id} in machine_code: {machine_code}")
+                                break
+        
+        if not screen_name:
+            print(f"Could not determine screen_name for screen_id: {screen_id}")
+            return [], []
+            
+        print(f"Looking for ROIs in machine_type: {machine_type}, screen: {screen_name}")
+        
+        # Tìm thông tin ROI trong roi_info.json
+        if machine_type in roi_data.get('machines', {}):
+            screens_data = roi_data['machines'][machine_type].get('screens', {})
+            if screen_name in screens_data:
+                screen_data = screens_data[screen_name]
+                
+                # Xử lý cả hai trường hợp: screen_data là list hoặc dict
+                roi_list = []
+                if isinstance(screen_data, dict):
+                    roi_list = screen_data.get('rois', [])
+                elif isinstance(screen_data, list):
+                    roi_list = screen_data
+                
+                # Xử lý định dạng ROI
+                roi_coordinates = []
+                roi_names = []
+                
+                for roi_item in roi_list:
+                    if isinstance(roi_item, dict) and "coordinates" in roi_item:
+                        roi_coordinates.append(roi_item["coordinates"])
+                        roi_names.append(roi_item.get("name", ""))
+                    else:
+                        roi_coordinates.append(roi_item)
+                        roi_names.append("")
+                
+                print(f"Found {len(roi_coordinates)} ROIs for {screen_name}")
+                return roi_coordinates, roi_names
+            else:
+                print(f"Screen '{screen_name}' not found in roi_info.json for machine_type {machine_type}")
+                print(f"Available screens: {list(screens_data.keys())}")
+        else:
+            print(f"Machine type '{machine_type}' not found in roi_info.json")
+            print(f"Available machine types: {list(roi_data.get('machines', {}).keys())}")
         
         print(f"No ROI coordinates found for machine_code={machine_code}, screen_id={screen_id}, machine_type={machine_type}")
         return [], []
