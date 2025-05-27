@@ -294,7 +294,7 @@ def get_roi_coordinates(machine_code, screen_id=None, machine_type=None):
                 return [], []
             print(f"Determined machine_type: {machine_type} for machine_code: {machine_code}")
         
-        screen_name = None
+            screen_name = None
         
         # Kiểm tra xem screen_id có phải là tên màn hình không
         if isinstance(screen_id, str) and screen_id in ["Production Data", "Faults", "Feeders and Conveyors", 
@@ -311,7 +311,7 @@ def get_roi_coordinates(machine_code, screen_id=None, machine_type=None):
             
             with open(machine_screens_path, 'r', encoding='utf-8') as f:
                 machine_screens = json.load(f)
-            
+                
             # Tìm trong areas
             for area_code, area_info in machine_screens.get("areas", {}).items():
                 machines = area_info.get("machines", {})
@@ -321,36 +321,35 @@ def get_roi_coordinates(machine_code, screen_id=None, machine_type=None):
                             screen_name = screen.get("screen_id")
                             print(f"Found screen_name: {screen_name} for screen_id: {screen_id} in machine_code: {machine_code}")
                             break
-        
-        print(f"Looking for ROIs in machine_type: {machine_type}, screen: {screen_name} (id: {screen_id})")
-        
-        # Tìm trong machines
-        if machine_type in roi_data.get("machines", {}):
-            screens_data = roi_data["machines"][machine_type].get("screens", {})
             
-            if screen_name and screen_name in screens_data:
-                roi_list = screens_data[screen_name]
-                
-                # Xử lý định dạng ROI
-                roi_coordinates = []
-                roi_names = []
-                
-                for roi_item in roi_list:
-                    if isinstance(roi_item, dict) and "name" in roi_item and "coordinates" in roi_item:
-                        roi_coordinates.append(roi_item["coordinates"])
-                        roi_names.append(roi_item["name"])
-                    else:
-                        roi_coordinates.append(roi_item)
-                        roi_names.append(f"ROI_{len(roi_names)}")
-                
-                print(f"Found {len(roi_coordinates)} ROIs for {screen_name}")
-                return roi_coordinates, roi_names
+            print(f"Looking for ROIs in machine_type: {machine_type}, screen: {screen_name} (id: {screen_id})")
+            
+            # Tìm thông tin ROI trong roi_info.json
+            if machine_type in roi_data.get('machines', {}):
+                screens_data = roi_data['machines'][machine_type].get('screens', {})
+                if screen_name in screens_data:
+                    roi_list = screens_data[screen_name].get('rois', [])
+                    
+                    # Xử lý định dạng ROI
+                    roi_coordinates = []
+                    roi_names = []
+                    
+                    for roi_item in roi_list:
+                        if isinstance(roi_item, dict) and "coordinates" in roi_item:
+                            roi_coordinates.append(roi_item["coordinates"])
+                            roi_names.append(roi_item.get("name", ""))
+                        else:
+                            roi_coordinates.append(roi_item)
+                            roi_names.append("")
+                    
+                    print(f"Found {len(roi_coordinates)} ROIs for {screen_name}")
+                    return roi_coordinates, roi_names
+                else:
+                    print(f"Screen '{screen_name}' not found in roi_info.json for machine_type {machine_type}")
+                    print(f"Available screens: {list(screens_data.keys())}")
             else:
-                print(f"Screen '{screen_name}' not found in roi_info.json for machine_type {machine_type}")
-                print(f"Available screens: {list(screens_data.keys())}")
-        else:
-            print(f"Machine type '{machine_type}' not found in roi_info.json")
-            print(f"Available machine types: {list(roi_data.get('machines', {}).keys())}")
+                print(f"Machine type '{machine_type}' not found in roi_info.json")
+                print(f"Available machine types: {list(roi_data.get('machines', {}).keys())}")
         
         print(f"No ROI coordinates found for machine_code={machine_code}, screen_id={screen_id}, machine_type={machine_type}")
         return [], []
@@ -570,7 +569,7 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                                     if "ON" in allowed_values and "OFF" in allowed_values:
                                         is_special_on_off_case = True
                                         print(f"Found ON/OFF values for ROI {roi_name} using machine_type")
-                                    break
+                                break
                 except Exception as e:
                     print(f"Error checking allowed_values for ROI {roi_name}: {str(e)}")
                 
@@ -723,7 +722,7 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                     # Thêm kết quả cho ROI này (không có original_value cho kết quả text)
                     if len(best_text) == 1:
                         best_text = best_text.replace('O', '0').replace('I', '1').replace('C','0').replace('S','5').replace('G','6').replace('A','4').replace('H','8').replace('L','1').replace('T','7').replace('U','0').replace('E','3').replace('Z','2').replace('Q','0')
-                    
+
                     # Kiểm tra nếu ROI này có allowed_values trong roi_info.json
                     try:
                         roi_json_path = 'roi_data/roi_info.json'
@@ -749,110 +748,110 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                                 if isinstance(roi_item, dict) and roi_item.get("name") == roi_name and "allowed_values" in roi_item:
                                     allowed_values = roi_item["allowed_values"]
                                     break
-                        
-                        # Nếu có allowed_values và không rỗng, so sánh với best_text
-                        if allowed_values and len(allowed_values) > 0:
-                            print(f"Found allowed_values for ROI {roi_name}: {allowed_values}")
                             
-                            # Tìm khớp chính xác
-                            if best_text in allowed_values:
-                                print(f"Found exact match for '{best_text}' in allowed_values")
-                                # Đã có trong allowed_values, không cần sửa đổi gì
-                            else:
-                                print(f"No exact match for '{best_text}' in allowed_values. Trying to find partial match...")
-                                # Không tìm thấy khớp chính xác, tìm kiếm khớp một phần
+                            # Nếu có allowed_values và không rỗng, so sánh với best_text
+                            if allowed_values and len(allowed_values) > 0:
+                                print(f"Found allowed_values for ROI {roi_name}: {allowed_values}")
                                 
-                                # Chuyển đổi best_text thành chữ hoa để so sánh không phân biệt hoa thường
-                                best_text_upper = best_text.upper()
-                                
-                                # Phương pháp 1: Tìm giá trị chứa text hoặc text chứa trong giá trị
-                                best_match = None
-                                max_overlap = 0
-                                
-                                for value in allowed_values:
-                                    value_upper = value.upper()
-                                    
-                                    # Kiểm tra nếu chuỗi OCR nằm hoàn toàn trong allowed_value 
-                                    if best_text_upper in value_upper:
-                                        # Tính tỷ lệ khớp: độ dài text / độ dài value
-                                        overlap_ratio = len(best_text_upper) / len(value_upper)
-                                        if overlap_ratio > max_overlap:
-                                            max_overlap = overlap_ratio
-                                            best_match = value
-                                            print(f"Found text '{best_text_upper}' in allowed value '{value}' with overlap ratio {overlap_ratio}")
-                                    
-                                    # Kiểm tra nếu allowed_value nằm hoàn toàn trong chuỗi OCR
-                                    elif value_upper in best_text_upper:
-                                        # Tính tỷ lệ khớp: độ dài value / độ dài text
-                                        overlap_ratio = len(value_upper) / len(best_text_upper)
-                                        if overlap_ratio > max_overlap:
-                                            max_overlap = overlap_ratio
-                                            best_match = value
-                                            print(f"Found allowed value '{value}' in text '{best_text_upper}' with overlap ratio {overlap_ratio}")
-                                
-                                # Phương pháp 2: Đếm số từ chung
-                                if not best_match:
-                                    best_word_match = None
-                                    max_word_match = 0
-                                    
-                                    best_text_words = set(best_text_upper.split())
-                                    
-                                    for value in allowed_values:
-                                        value_words = set(value.upper().split())
-                                        common_words = best_text_words.intersection(value_words)
-                                        
-                                        if len(common_words) > max_word_match:
-                                            max_word_match = len(common_words)
-                                            best_word_match = value
-                                            print(f"Found {len(common_words)} common words between '{best_text_upper}' and '{value}': {common_words}")
-                                    
-                                    if best_word_match:
-                                        best_match = best_word_match
-                                
-                                # Nếu không tìm thấy bằng hai phương pháp trên, dùng phương pháp cũ
-                                if not best_match:
-                                    first_char_matches = []
-                                    for value in allowed_values:
-                                        if len(best_text) > 0 and len(value) > 0 and best_text[0].upper() == value[0].upper():
-                                            first_char_matches.append(value)
-                                    
-                                    if first_char_matches:
-                                        print(f"Found values with matching first character: {first_char_matches}")
-                                        # Mặc định sử dụng giá trị đầu tiên khớp
-                                        best_match = first_char_matches[0]
-                                        best_match_count = 1
-                                        
-                                        # Tìm giá trị có nhiều ký tự khớp liên tiếp nhất
-                                        for value in first_char_matches:
-                                            current_count = 0
-                                            for i in range(min(len(best_text), len(value))):
-                                                if best_text[i].upper() == value[i].upper():
-                                                    current_count += 1
-                                                else:
-                                                    break
-                                            
-                                            if current_count > best_match_count:
-                                                best_match = value
-                                                best_match_count = current_count
-                                                print(f"Better match found: '{value}' with {current_count} consecutive character(s)")
-                                
-                                # Nếu đã tìm được match phù hợp, áp dụng
-                                if best_match:
-                                    print(f"Changed best_text from '{best_text}' to '{best_match}' based on partial matching")
-                                    best_text = best_match
+                                # Tìm khớp chính xác
+                                if best_text in allowed_values:
+                                    print(f"Found exact match for '{best_text}' in allowed_values")
+                                    # Đã có trong allowed_values, không cần sửa đổi gì
                                 else:
-                                    # Thử tìm match ở vị trí khác nếu không có vị trí đầu tiên
-                                    match_found = False
+                                    print(f"No exact match for '{best_text}' in allowed_values. Trying to find partial match...")
+                                    # Không tìm thấy khớp chính xác, tìm kiếm khớp một phần
+                                    
+                                    # Chuyển đổi best_text thành chữ hoa để so sánh không phân biệt hoa thường
+                                    best_text_upper = best_text.upper()
+                                    
+                                    # Phương pháp 1: Tìm giá trị chứa text hoặc text chứa trong giá trị
+                                    best_match = None
+                                    max_overlap = 0
+                                    
                                     for value in allowed_values:
-                                        for i in range(1, min(len(best_text), len(value))):
-                                            if best_text[i].upper() == value[i].upper():
-                                                print(f"Match found at position {i}: '{best_text[i]}' with '{value}'")
-                                                best_text = value
-                                                print(f"Changed best_text to '{value}' based on match at position {i}")
-                                                match_found = True
+                                        value_upper = value.upper()
+                                        
+                                        # Kiểm tra nếu chuỗi OCR nằm hoàn toàn trong allowed_value 
+                                        if best_text_upper in value_upper:
+                                            # Tính tỷ lệ khớp: độ dài text / độ dài value
+                                            overlap_ratio = len(best_text_upper) / len(value_upper)
+                                            if overlap_ratio > max_overlap:
+                                                max_overlap = overlap_ratio
+                                                best_match = value
+                                                print(f"Found text '{best_text_upper}' in allowed value '{value}' with overlap ratio {overlap_ratio}")
+                                        
+                                        # Kiểm tra nếu allowed_value nằm hoàn toàn trong chuỗi OCR
+                                        elif value_upper in best_text_upper:
+                                            # Tính tỷ lệ khớp: độ dài value / độ dài text
+                                            overlap_ratio = len(value_upper) / len(best_text_upper)
+                                            if overlap_ratio > max_overlap:
+                                                max_overlap = overlap_ratio
+                                                best_match = value
+                                                print(f"Found allowed value '{value}' in text '{best_text_upper}' with overlap ratio {overlap_ratio}")
+                                    
+                                    # Phương pháp 2: Đếm số từ chung
+                                    if not best_match:
+                                        best_word_match = None
+                                        max_word_match = 0
+                                        
+                                        best_text_words = set(best_text_upper.split())
+                                        
+                                        for value in allowed_values:
+                                            value_words = set(value.upper().split())
+                                            common_words = best_text_words.intersection(value_words)
+                                            
+                                            if len(common_words) > max_word_match:
+                                                max_word_match = len(common_words)
+                                                best_word_match = value
+                                                print(f"Found {len(common_words)} common words between '{best_text_upper}' and '{value}': {common_words}")
+                                        
+                                        if best_word_match:
+                                            best_match = best_word_match
+                                    
+                                    # Nếu không tìm thấy bằng hai phương pháp trên, dùng phương pháp cũ
+                                    if not best_match:
+                                        first_char_matches = []
+                                        for value in allowed_values:
+                                            if len(best_text) > 0 and len(value) > 0 and best_text[0].upper() == value[0].upper():
+                                                first_char_matches.append(value)
+                                        
+                                        if first_char_matches:
+                                            print(f"Found values with matching first character: {first_char_matches}")
+                                            # Mặc định sử dụng giá trị đầu tiên khớp
+                                            best_match = first_char_matches[0]
+                                            best_match_count = 1
+                                            
+                                            # Tìm giá trị có nhiều ký tự khớp liên tiếp nhất
+                                            for value in first_char_matches:
+                                                current_count = 0
+                                                for i in range(min(len(best_text), len(value))):
+                                                    if best_text[i].upper() == value[i].upper():
+                                                        current_count += 1
+                                                    else:
+                                                        break
+                                                
+                                                if current_count > best_match_count:
+                                                    best_match = value
+                                                    best_match_count = current_count
+                                                    print(f"Better match found: '{value}' with {current_count} consecutive character(s)")
+                                    
+                                    # Nếu đã tìm được match phù hợp, áp dụng
+                                    if best_match:
+                                        print(f"Changed best_text from '{best_text}' to '{best_match}' based on partial matching")
+                                        best_text = best_match
+                                    else:
+                                    # Thử tìm match ở vị trí khác nếu không có vị trí đầu tiên
+                                        match_found = False
+                                        for value in allowed_values:
+                                            for i in range(1, min(len(best_text), len(value))):
+                                                if best_text[i].upper() == value[i].upper():
+                                                    print(f"Match found at position {i}: '{best_text[i]}' with '{value}'")
+                                                    best_text = value
+                                                    print(f"Changed best_text to '{value}' based on match at position {i}")
+                                                    match_found = True
+                                                    break
+                                            if match_found:
                                                 break
-                                        if match_found:
-                                            break
                                     
                                     # Nếu vẫn không tìm thấy match nào, sử dụng phương pháp cuối: chỉ cần chọn phần tử đầu tiên
                                     if not match_found and allowed_values:
@@ -1655,7 +1654,9 @@ def upload_image():
                 "screen_numeric_id": screen_numeric_id,
                 "similarity_score": best_template and os.path.basename(best_template),
                 "machine_type": machine_type
-            }
+            },
+            "area": area,
+            "machine_name": data["areas"][area]["machines"][machine_code]["name"]
         }
         
         # Lưu kết quả OCR vào file JSON
@@ -2810,7 +2811,8 @@ def preprocess_roi_for_ocr(roi, roi_index, original_filename, roi_name=None, ima
     best_limits = None
 
     for i, (upper, lower, cnt) in enumerate(contour_limits):
-        overlap_count = sum(1 for j, (other_upper, other_lower, _) in enumerate(contour_limits) if i != j and not (lower < other_upper or upper > other_lower))
+        overlap_count = sum(1 for j, (other_upper, other_lower, _) in enumerate(contour_limits) 
+                          if i != j and not (lower < other_upper or upper > other_lower))
         
         if overlap_count > max_overlap_count:
             max_overlap_count = overlap_count
