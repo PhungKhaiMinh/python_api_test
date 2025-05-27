@@ -13,6 +13,8 @@ import random
 from math import sqrt, atan2, degrees
 from datetime import datetime
 from PIL import Image, ImageEnhance
+from difflib import SequenceMatcher
+import Levenshtein
 
 # Thêm try-except khi import EasyOCR
 try:
@@ -773,6 +775,26 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                 # Tiền xử lý ROI cho OCR (cho các trường hợp thông thường)
                 roi_processed, roi_quality_info = preprocess_roi_for_ocr(roi, i, original_filename, roi_name, image_aligned, x1, y1, x2, y2)
                 
+                # Thêm Gaussian Blur để cải thiện OCR (dựa trên test cho thấy kết quả tốt hơn)
+                if roi_processed is not None:
+                    roi_processed = cv2.GaussianBlur(roi_processed, (3, 3), 0)
+                    
+                    # Lưu ảnh sau Gaussian Blur
+                    processed_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'processed_roi')
+                    base_filename = os.path.splitext(original_filename)[0]
+                    blur_filename = f"{base_filename}_{roi_name}_step4_gaussian_blur.png"
+                    blur_path = os.path.join(processed_folder, blur_filename)
+                    cv2.imwrite(blur_path, roi_processed)
+                    print(f"Applied Gaussian Blur and saved to: {blur_path}")
+                
+                # Lưu ảnh ROI sau khi crop từ ảnh gốc (trước khi preprocess)
+                processed_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'processed_roi')
+                base_filename = os.path.splitext(original_filename)[0]
+                roi_crop_filename = f"{base_filename}_{roi_name}_step0_crop_from_main.png"
+                roi_crop_path = os.path.join(processed_folder, roi_crop_filename)
+                cv2.imwrite(roi_crop_path, roi)
+                print(f"Saved cropped ROI from main image to: {roi_crop_path}")
+                
                 # Kiểm tra xem ảnh đã tiền xử lý có thành công không
                 if roi_processed is None:
                     print(f"ROI {i} preprocessing failed")
@@ -791,12 +813,12 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                     detail=1, 
                     paragraph=False, 
                     batch_size=1, 
-                    text_threshold=0.4,
-                    link_threshold=0.2, 
-                    low_text=0.3, 
-                    mag_ratio=2, 
-                    slope_ths=0.05,
-                    decoder='beamsearch'
+                    text_threshold=0.6,    # Tăng từ 0.4 → 0.6 để giảm nhiễu, tăng độ chính xác
+                    link_threshold=0.2,    # Giảm từ 0.8 → 0.2 để kết nối tốt hơn số và dấu chấm (04.12)
+                    low_text=0.2,          # Giảm từ 0.3 → 0.2 để detect text nhỏ tốt hơn
+                    mag_ratio=2,           # Giữ nguyên - tỷ lệ phóng đại ảnh
+                    slope_ths=0.05,        # Giữ nguyên - threshold góc nghiêng
+                    decoder='beamsearch'   # Giữ nguyên - phương pháp decode
                     )
                     if ocr_results and len(ocr_results) > 0:
                         # Lấy kết quả có confidence cao nhất
@@ -806,6 +828,27 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                         original_value = best_text
                         has_text = True
                         print(f"Found text in full ROI: '{best_text}' with confidence {best_confidence}")
+                        
+                        # Lưu ảnh OCR result với text tốt nhất
+                        processed_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'processed_roi')
+                        base_filename = os.path.splitext(original_filename)[0]
+                        ocr_result_filename = f"{base_filename}_{roi_name}_step5_ocr_result.png"
+                        ocr_result_path = os.path.join(processed_folder, ocr_result_filename)
+                        
+                        # Tạo ảnh với text overlay
+                        result_img = roi_processed.copy() if roi_processed is not None else roi.copy()
+                        if len(result_img.shape) == 2:  # Grayscale
+                            result_img = cv2.cvtColor(result_img, cv2.COLOR_GRAY2BGR)
+                        elif len(result_img.shape) == 3 and result_img.shape[2] == 1:  # Single channel
+                            result_img = cv2.cvtColor(result_img, cv2.COLOR_GRAY2BGR)
+                        
+                        # Vẽ text lên ảnh (resize font tùy theo kích thước ảnh)
+                        font_scale = max(0.5, min(result_img.shape[0], result_img.shape[1]) / 100)
+                        cv2.putText(result_img, f"'{best_text}' ({best_confidence:.2f})", 
+                                  (5, int(result_img.shape[0] - 10)), cv2.FONT_HERSHEY_SIMPLEX, 
+                                  font_scale, (0, 255, 0), 2)
+                        cv2.imwrite(ocr_result_path, result_img)
+                        print(f"Saved OCR result image to: {ocr_result_path}")
                         
                         # Kiểm tra nếu kết quả ban đầu có dấu trừ ở đầu
                         has_negative_sign = best_text.startswith('-')
@@ -877,16 +920,58 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                 
                 # Kiểm tra xem ROI có key "allowed_values" không rỗng hay không
                 has_allowed_values = False
+                
+                # Kiểm tra allowed_values từ roi_names (từ ROI coordinates)
                 if roi_names and i < len(roi_names) and isinstance(roi_names[i], dict) and "allowed_values" in roi_names[i]:
                     allowed_values = roi_names[i].get("allowed_values", [])
                     if allowed_values and len(allowed_values) > 0:
                         has_allowed_values = True
-                        print(f"ROI {roi_name} has allowed_values: {allowed_values}")
+                        print(f"ROI {roi_name} has allowed_values from coordinates: {allowed_values}")
                         # Buộc xử lý như text nếu có allowed_values
                         is_text_result = True
                 
+                # Kiểm tra allowed_values từ roi_info.json (quan trọng hơn)
+                try:
+                    roi_json_path = 'roi_data/roi_info.json'
+                    if not os.path.exists(roi_json_path):
+                        roi_json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'roi_data/roi_info.json')
+                    
+                    with open(roi_json_path, 'r', encoding='utf-8') as f:
+                        roi_info = json.load(f)
+                    
+                    # *** FIX: Sử dụng machine_type thay vì machine_code để lookup ***
+                    machine_type_for_lookup = get_machine_type(machine_code)
+                    print(f"🔍 Looking up allowed_values: machine_code={machine_code} -> machine_type={machine_type_for_lookup}, screen_id={screen_id}, roi_name={roi_name}")
+                    
+                    # Tìm allowed_values cho ROI hiện tại từ roi_info.json
+                    if (machine_type_for_lookup in roi_info.get("machines", {}) and 
+                        "screens" in roi_info["machines"][machine_type_for_lookup] and 
+                        screen_id in roi_info["machines"][machine_type_for_lookup]["screens"]):
+                        
+                        roi_list = roi_info["machines"][machine_type_for_lookup]["screens"][screen_id]
+                        
+                        for roi_item in roi_list:
+                            if isinstance(roi_item, dict) and roi_item.get("name") == roi_name and "allowed_values" in roi_item:
+                                allowed_values_from_json = roi_item["allowed_values"]
+                                if allowed_values_from_json and len(allowed_values_from_json) > 0:
+                                    has_allowed_values = True
+                                    print(f"✅ ROI {roi_name} has allowed_values from roi_info.json: {allowed_values_from_json}")
+                                    # Buộc xử lý như text nếu có allowed_values
+                                    is_text_result = True
+                                break
+                    else:
+                        print(f"❌ No match found for machine_type={machine_type_for_lookup}, screen_id={screen_id}")
+                        available_machines = list(roi_info.get("machines", {}).keys())
+                        print(f"Available machines in roi_info.json: {available_machines}")
+                except Exception as e:
+                    print(f"Error checking allowed_values from roi_info.json for ROI {roi_name}: {str(e)}")
+                
                 # Xử lý kết quả OCR dựa vào loại kết quả (số hoặc chữ)
                 formatted_text = best_text
+                
+                # Debug prints
+                print(f"🔍 ROI {roi_name}: has_text={has_text}, is_text_result={is_text_result}, has_allowed_values={has_allowed_values}")
+                print(f"🔍 Condition check: has_text={has_text} AND (is_text_result={is_text_result} OR has_allowed_values={has_allowed_values}) = {has_text and (is_text_result or has_allowed_values)}")
                 
                 # Nếu là kết quả chủ yếu là chữ hoặc ROI có allowed_values, xử lý như text
                 if has_text and (is_text_result or has_allowed_values):
@@ -906,131 +991,38 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                         with open(roi_json_path, 'r', encoding='utf-8') as f:
                             roi_info = json.load(f)
                         
-                        # Sửa: Sử dụng machine_code trực tiếp thay vì gọi get_machine_type
-                        print(f"Looking for allowed_values with machine_code={machine_code}, screen_id={screen_id}, roi_name={roi_name}")
+                        # *** FIX: Sử dụng machine_type thay vì machine_code để lookup ***
+                        machine_type_for_lookup = get_machine_type(machine_code)
+                        print(f"🔍 Looking for allowed_values: machine_code={machine_code} -> machine_type={machine_type_for_lookup}, screen_id={screen_id}, roi_name={roi_name}")
                         
                         # Tìm allowed_values cho ROI hiện tại
                         allowed_values = None
                         
-                        if (machine_code in roi_info.get("machines", {}) and 
-                            "screens" in roi_info["machines"][machine_code] and 
-                            screen_id in roi_info["machines"][machine_code]["screens"]):
+                        if (machine_type_for_lookup in roi_info.get("machines", {}) and 
+                            "screens" in roi_info["machines"][machine_type_for_lookup] and 
+                            screen_id in roi_info["machines"][machine_type_for_lookup]["screens"]):
                             
-                            roi_list = roi_info["machines"][machine_code]["screens"][screen_id]
+                            roi_list = roi_info["machines"][machine_type_for_lookup]["screens"][screen_id]
                             
                             for roi_item in roi_list:
                                 if isinstance(roi_item, dict) and roi_item.get("name") == roi_name and "allowed_values" in roi_item:
                                     allowed_values = roi_item["allowed_values"]
                                     break
                         
-                        # Nếu có allowed_values và không rỗng, so sánh với best_text
+                        # Sử dụng hàm tối ưu mới để tìm best match
                         if allowed_values and len(allowed_values) > 0:
                             print(f"Found allowed_values for ROI {roi_name}: {allowed_values}")
                             
-                            # Tìm khớp chính xác
-                            if best_text in allowed_values:
-                                print(f"Found exact match for '{best_text}' in allowed_values")
-                                # Đã có trong allowed_values, không cần sửa đổi gì
+                            best_match, match_score, match_method = find_best_allowed_value_match(
+                                best_text, allowed_values, roi_name
+                            )
+                            
+                            if best_match:
+                                print(f"✅ MATCHED: '{best_text}' -> '{best_match}' (score: {match_score:.3f}, method: {match_method})")
+                                best_text = best_match
                             else:
-                                print(f"No exact match for '{best_text}' in allowed_values. Trying to find partial match...")
-                                # Không tìm thấy khớp chính xác, tìm kiếm khớp một phần
-                                
-                                # Chuyển đổi best_text thành chữ hoa để so sánh không phân biệt hoa thường
-                                best_text_upper = best_text.upper()
-                                
-                                # Phương pháp 1: Tìm giá trị chứa text hoặc text chứa trong giá trị
-                                best_match = None
-                                max_overlap = 0
-                                
-                                for value in allowed_values:
-                                    value_upper = value.upper()
-                                    
-                                    # Kiểm tra nếu chuỗi OCR nằm hoàn toàn trong allowed_value 
-                                    if best_text_upper in value_upper:
-                                        # Tính tỷ lệ khớp: độ dài text / độ dài value
-                                        overlap_ratio = len(best_text_upper) / len(value_upper)
-                                        if overlap_ratio > max_overlap:
-                                            max_overlap = overlap_ratio
-                                            best_match = value
-                                            print(f"Found text '{best_text_upper}' in allowed value '{value}' with overlap ratio {overlap_ratio}")
-                                    
-                                    # Kiểm tra nếu allowed_value nằm hoàn toàn trong chuỗi OCR
-                                    elif value_upper in best_text_upper:
-                                        # Tính tỷ lệ khớp: độ dài value / độ dài text
-                                        overlap_ratio = len(value_upper) / len(best_text_upper)
-                                        if overlap_ratio > max_overlap:
-                                            max_overlap = overlap_ratio
-                                            best_match = value
-                                            print(f"Found allowed value '{value}' in text '{best_text_upper}' with overlap ratio {overlap_ratio}")
-                                
-                                # Phương pháp 2: Đếm số từ chung
-                                if not best_match:
-                                    best_word_match = None
-                                    max_word_match = 0
-                                    
-                                    best_text_words = set(best_text_upper.split())
-                                    
-                                    for value in allowed_values:
-                                        value_words = set(value.upper().split())
-                                        common_words = best_text_words.intersection(value_words)
-                                        
-                                        if len(common_words) > max_word_match:
-                                            max_word_match = len(common_words)
-                                            best_word_match = value
-                                            print(f"Found {len(common_words)} common words between '{best_text_upper}' and '{value}': {common_words}")
-                                    
-                                    if best_word_match:
-                                        best_match = best_word_match
-                                
-                                # Nếu không tìm thấy bằng hai phương pháp trên, dùng phương pháp cũ
-                                if not best_match:
-                                    first_char_matches = []
-                                    for value in allowed_values:
-                                        if len(best_text) > 0 and len(value) > 0 and best_text[0].upper() == value[0].upper():
-                                            first_char_matches.append(value)
-                                    
-                                    if first_char_matches:
-                                        print(f"Found values with matching first character: {first_char_matches}")
-                                        # Mặc định sử dụng giá trị đầu tiên khớp
-                                        best_match = first_char_matches[0]
-                                        best_match_count = 1
-                                        
-                                        # Tìm giá trị có nhiều ký tự khớp liên tiếp nhất
-                                        for value in first_char_matches:
-                                            current_count = 0
-                                            for i in range(min(len(best_text), len(value))):
-                                                if best_text[i].upper() == value[i].upper():
-                                                    current_count += 1
-                                                else:
-                                                    break
-                                            
-                                            if current_count > best_match_count:
-                                                best_match = value
-                                                best_match_count = current_count
-                                                print(f"Better match found: '{value}' with {current_count} consecutive character(s)")
-                                
-                                # Nếu đã tìm được match phù hợp, áp dụng
-                                if best_match:
-                                    print(f"Changed best_text from '{best_text}' to '{best_match}' based on partial matching")
-                                    best_text = best_match
-                                else:
-                                    # Thử tìm match ở vị trí khác nếu không có vị trí đầu tiên
-                                    match_found = False
-                                    for value in allowed_values:
-                                        for i in range(1, min(len(best_text), len(value))):
-                                            if best_text[i].upper() == value[i].upper():
-                                                print(f"Match found at position {i}: '{best_text[i]}' with '{value}'")
-                                                best_text = value
-                                                print(f"Changed best_text to '{value}' based on match at position {i}")
-                                                match_found = True
-                                                break
-                                        if match_found:
-                                            break
-                                    
-                                    # Nếu vẫn không tìm thấy match nào, sử dụng phương pháp cuối: chỉ cần chọn phần tử đầu tiên
-                                    if not match_found and allowed_values:
-                                        best_text = allowed_values[0]
-                                        print(f"No matches found at all, defaulting to first allowed value: '{best_text}'")
+                                print(f"❌ NO SUITABLE MATCH FOUND. Using first allowed value: '{allowed_values[0]}'")
+                                best_text = allowed_values[0]
                     except Exception as e:
                         print(f"Error checking allowed_values for ROI {roi_name}: {str(e)}")
                         traceback.print_exc()
@@ -1209,6 +1201,39 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                     "original_value": original_value
                 })
                 print(f"Added result for ROI {i} ({roi_name}): Original: '{best_text}', Formatted: '{formatted_text}'")
+                
+                # Lưu ảnh kết quả cuối cùng
+                processed_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'processed_roi')
+                base_filename = os.path.splitext(original_filename)[0]
+                final_result_filename = f"{base_filename}_{roi_name}_step7_final_result.png"
+                final_result_path = os.path.join(processed_folder, final_result_filename)
+                
+                # Tạo ảnh tổng hợp với kết quả cuối cùng
+                final_img = roi.copy()
+                if len(final_img.shape) == 2:  # Grayscale
+                    final_img = cv2.cvtColor(final_img, cv2.COLOR_GRAY2BGR)
+                
+                # Vẽ bounding box cho ROI
+                cv2.rectangle(final_img, (2, 2), (final_img.shape[1]-2, final_img.shape[0]-2), (255, 0, 0), 2)
+                
+                # Vẽ text kết quả cuối cùng
+                font_scale = max(0.4, min(final_img.shape[0], final_img.shape[1]) / 120)
+                
+                # Kết quả gốc (màu xanh lá)
+                cv2.putText(final_img, f"Original: '{best_text}'", 
+                          (5, 25), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 255, 0), 1)
+                
+                # Kết quả đã format (màu đỏ)
+                cv2.putText(final_img, f"Final: '{formatted_text}'", 
+                          (5, int(final_img.shape[0] - 10)), cv2.FONT_HERSHEY_SIMPLEX, 
+                          font_scale, (0, 0, 255), 2)
+                
+                # Confidence (màu trắng)
+                cv2.putText(final_img, f"Conf: {best_confidence:.2f}", 
+                          (5, 50), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 255, 255), 1)
+                
+                cv2.imwrite(final_result_path, final_img)
+                print(f"Saved final result image to: {final_result_path}")
                 if best_confidence < 0.3 or (roi_quality_info is not None and ('low_contrast' in roi_quality_info['issues'] or roi_quality_info.get('has_moire', False))):
                     print(f"Confidence is below threshold or image has low contrast. Trying alternative approach with connected component analysis...")
                     
@@ -1275,12 +1300,13 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                                             detail=1, 
                                             paragraph=False, 
                                             batch_size=1, 
-                                            text_threshold=0.4,
-                                            link_threshold=0.2, 
-                                            low_text=0.3, 
-                                            mag_ratio=2, 
-                                            slope_ths=0.05,
-                                            decoder='beamsearch')
+                                            text_threshold=0.6,    # Tăng từ 0.4 → 0.6 để giảm nhiễu, tăng độ chính xác
+                                            link_threshold=0.2,    # Giữ nguyên 0.2 - đã tối ưu cho việc kết nối số và dấu chấm  
+                                            low_text=0.2,          # Giảm từ 0.3 → 0.2 để detect text nhỏ tốt hơn
+                                            mag_ratio=2,           # Giữ nguyên - tỷ lệ phóng đại ảnh
+                                            slope_ths=0.05,        # Giữ nguyên - threshold góc nghiêng
+                                            decoder='beamsearch'   # Giữ nguyên - phương pháp decode
+                                            )
                     
                     # Kiểm tra nếu có kết quả OCR
                     if retry_results and len(retry_results) > 0:
@@ -1320,6 +1346,25 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                                         retry_text = cleaned_text
                         
                         print(f"Best retry result: '{retry_text}' with confidence {retry_confidence}")
+                        
+                        # Lưu ảnh retry OCR result với text tốt nhất
+                        processed_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'processed_roi')
+                        base_filename = os.path.splitext(original_filename)[0]
+                        retry_result_filename = f"{base_filename}_{roi_name}_step6_retry_ocr_result.png"
+                        retry_result_path = os.path.join(processed_folder, retry_result_filename)
+                        
+                        # Tạo ảnh với retry text overlay trên digit mask
+                        retry_result_img = digit_mask.copy()
+                        if len(retry_result_img.shape) == 2:  # Grayscale
+                            retry_result_img = cv2.cvtColor(retry_result_img, cv2.COLOR_GRAY2BGR)
+                        
+                        # Vẽ retry text lên ảnh
+                        font_scale = max(0.5, min(retry_result_img.shape[0], retry_result_img.shape[1]) / 100)
+                        cv2.putText(retry_result_img, f"RETRY: '{retry_text}' ({retry_confidence:.2f})", 
+                                  (5, int(retry_result_img.shape[0] - 10)), cv2.FONT_HERSHEY_SIMPLEX, 
+                                  font_scale, (0, 255, 255), 2)  # Yellow color for retry
+                        cv2.imwrite(retry_result_path, retry_result_img)
+                        print(f"Saved retry OCR result image to: {retry_result_path}")
                         
                         # Xử lý khoảng trắng giữa các số (tương tự như xử lý trên best_text)
                         retry_text = retry_text.upper()
@@ -1380,114 +1425,33 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                                             allowed_values = roi_item["allowed_values"]
                                             break
                                     
-                                    # Nếu có allowed_values và không rỗng, so sánh với retry_text
+                                    # Sử dụng hàm tối ưu mới để tìm best match cho retry_text
                                     if allowed_values and len(allowed_values) > 0:
                                         print(f"Found allowed_values for retry ROI {roi_name}: {allowed_values}")
                                         
-                                        # Tìm khớp chính xác
-                                        if retry_text in allowed_values:
-                                            print(f"Found exact match for retry '{retry_text}' in allowed_values")
-                                            # Trả về kết quả allowed_values ngay lập tức, không kiểm tra confidence
-                                            print(f"Found exact match in allowed_values. Using '{retry_text}' as final result.")
-                                            return [{
-                                                "roi_index": roi_name,
-                                                "roi_name": roi_name,
-                                                "original_text": best_text,
-                                                "formatted_text": retry_text,
-                                                "confidence": retry_confidence
-                                            }]
+                                        retry_best_match, retry_match_score, retry_match_method = find_best_allowed_value_match(
+                                            retry_text, allowed_values, f"{roi_name}_retry"
+                                        )
+                                        
+                                        if retry_best_match:
+                                            print(f"✅ RETRY MATCHED: '{retry_text}' -> '{retry_best_match}' (score: {retry_match_score:.3f}, method: {retry_match_method})")
+                                            retry_text = retry_best_match
+                                            # Cập nhật kết quả ngay lập tức và bỏ qua các xử lý tiếp theo
+                                            results[-1]["text"] = retry_text
+                                            results[-1]["confidence"] = retry_confidence
+                                            results[-1]["has_text"] = True
+                                            results[-1]["original_value"] = retry_text
+                                            best_confidence = retry_confidence
+                                            continue  # Chuyển sang xử lý ROI tiếp theo
                                         else:
-                                            print(f"No exact match for retry '{retry_text}' in allowed_values. Trying to find partial match...")
-                                            # Không tìm thấy khớp chính xác, tìm kiếm khớp một phần
-                                            
-                                            # Chuyển đổi retry_text thành chữ hoa để so sánh không phân biệt hoa thường
-                                            retry_text_upper = retry_text.upper().replace(' ','')
-                                            
-                                            # Phương pháp 1: Tìm giá trị chứa text hoặc text chứa trong giá trị
-                                            best_match = None
-                                            max_overlap = 0
-                                            
-                                            for value in allowed_values:
-                                                value_upper = value.upper()
-                                                
-                                                # Kiểm tra nếu chuỗi OCR nằm hoàn toàn trong allowed_value 
-                                                if retry_text_upper in value_upper:
-                                                    # Tính tỷ lệ khớp: độ dài text / độ dài value
-                                                    overlap_ratio = len(retry_text_upper) / len(value_upper)
-                                                    if overlap_ratio > max_overlap:
-                                                        max_overlap = overlap_ratio
-                                                        best_match = value
-                                                        print(f"Found retry text '{retry_text_upper}' in allowed value '{value}' with overlap ratio {overlap_ratio}")
-                                                
-                                                # Kiểm tra nếu allowed_value nằm hoàn toàn trong chuỗi OCR
-                                                elif value_upper in retry_text_upper:
-                                                    # Tính tỷ lệ khớp: độ dài value / độ dài text
-                                                    overlap_ratio = len(value_upper) / len(retry_text_upper)
-                                                    if overlap_ratio > max_overlap:
-                                                        max_overlap = overlap_ratio
-                                                        best_match = value
-                                                        print(f"Found allowed value '{value}' in retry text '{retry_text_upper}' with overlap ratio {overlap_ratio}")
-                                            
-                                            # Phương pháp 2: Đếm số từ chung
-                                            if not best_match:
-                                                best_word_match = None
-                                                max_word_match = 0
-                                                
-                                                retry_text_words = set(retry_text_upper.split())
-                                                
-                                                for value in allowed_values:
-                                                    value_words = set(value.upper().split())
-                                                    common_words = retry_text_words.intersection(value_words)
-                                                    
-                                                    if len(common_words) > max_word_match:
-                                                        max_word_match = len(common_words)
-                                                        best_word_match = value
-                                                        print(f"Found {len(common_words)} common words between retry '{retry_text_upper}' and '{value}': {common_words}")
-                                                
-                                                if best_word_match:
-                                                    best_match = best_word_match
-                                            
-                                            # Nếu không tìm thấy bằng hai phương pháp trên, dùng phương pháp cũ
-                                            if not best_match:
-                                                first_char_matches = []
-                                                for value in allowed_values:
-                                                    if len(retry_text) > 0 and len(value) > 0 and retry_text[0].upper() == value[0].upper():
-                                                        first_char_matches.append(value)
-                                                
-                                                if first_char_matches:
-                                                    print(f"Found values with matching first character for retry: {first_char_matches}")
-                                                    # Mặc định sử dụng giá trị đầu tiên khớp
-                                                    best_match = first_char_matches[0]
-                                                    best_match_count = 1
-                                                    
-                                                    # Tìm giá trị có nhiều ký tự khớp liên tiếp nhất
-                                                    for value in first_char_matches:
-                                                        current_count = 0
-                                                        for i in range(min(len(retry_text), len(value))):
-                                                            if retry_text[i].upper() == value[i].upper():
-                                                                current_count += 1
-                                                            else:
-                                                                break
-                                                        
-                                                        if current_count > best_match_count:
-                                                            best_match = value
-                                                            best_match_count = current_count
-                                                            print(f"Better retry match found: '{value}' with {current_count} consecutive character(s)")
-                                            
-                                            # Nếu đã tìm được match phù hợp, áp dụng
-                                            if best_match:
-                                                print(f"Changed retry_text from '{retry_text}' to '{best_match}' based on partial matching")
-                                                retry_text = best_match
-                                                # Trả về kết quả ngay sau khi tìm thấy partial match
-                                                print(f"Found partial match in allowed_values. Using '{retry_text}' as final result.")
-                                                # Cập nhật kết quả ngay lập tức và bỏ qua các xử lý tiếp theo
-                                                results[-1]["text"] = retry_text
-                                                results[-1]["confidence"] = retry_confidence
-                                                results[-1]["has_text"] = True
-                                                results[-1]["original_value"] = retry_text
-                                                best_confidence = retry_confidence
-                                                continue  # Chuyển sang xử lý ROI tiếp theo
-                                            # Tiếp tục xử lý các roi tiếp theo, nếu không tìm thấy match
+                                            print(f"❌ NO SUITABLE RETRY MATCH FOUND. Using first allowed value: '{allowed_values[0]}'")
+                                            retry_text = allowed_values[0]
+                                            results[-1]["text"] = retry_text
+                                            results[-1]["confidence"] = retry_confidence
+                                            results[-1]["has_text"] = True
+                                            results[-1]["original_value"] = retry_text
+                                            best_confidence = retry_confidence
+                                            continue
                         except Exception as e:
                             print(f"Error checking allowed_values for retry ROI {roi_name}: {str(e)}")
                         
@@ -1638,15 +1602,20 @@ def upload_image():
     # Xóa tất cả các file trong thư mục processed_roi trước khi xử lý
     processed_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'processed_roi')
     if os.path.exists(processed_folder):
+        print("Clearing all old ROI processed images...")
+        deleted_count = 0
         for filename in os.listdir(processed_folder):
             file_path = os.path.join(processed_folder, filename)
             try:
                 if os.path.isfile(file_path):
                     os.unlink(file_path)
+                    deleted_count += 1
             except Exception as e:
                 print(f"Error when deleting file {file_path}: {e}")
+        print(f"Deleted {deleted_count} old ROI processed images")
     else:
         os.makedirs(processed_folder, exist_ok=True)
+        print("Created processed_roi folder")
     
     # Lưu file tạm thời
     filename = secure_filename(file.filename)
@@ -2906,7 +2875,8 @@ def preprocess_roi_for_ocr(roi, roi_index, original_filename, roi_name=None, ima
     base_filename = os.path.splitext(original_filename)[0]
     original_roi_filename = f"{base_filename}_{identifier}_original.png"
     original_roi_path = os.path.join(processed_folder, original_roi_filename)
-    # cv2.imwrite(original_roi_path, roi)
+    cv2.imwrite(original_roi_path, roi)
+    print(f"Saved original ROI to: {original_roi_path}")
     
     # 1. Chuyển sang ảnh xám
     gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
@@ -2922,7 +2892,8 @@ def preprocess_roi_for_ocr(roi, roi_index, original_filename, roi_name=None, ima
         # Lưu ảnh đã cải thiện
         enhanced_filename = f"{base_filename}_{identifier}_enhanced.png"
         enhanced_path = os.path.join(processed_folder, enhanced_filename)
-        # cv2.imwrite(enhanced_path, enhanced_gray)
+        cv2.imwrite(enhanced_path, enhanced_gray)
+        print(f"Saved enhanced ROI to: {enhanced_path}")
         
         # Sử dụng ảnh đã cải thiện cho các bước tiếp theo
         gray = enhanced_gray
@@ -2939,28 +2910,53 @@ def preprocess_roi_for_ocr(roi, roi_index, original_filename, roi_name=None, ima
     # 4. Morphological Closing
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))  # Tăng lên (5,5) thay vì (2,2)
     closing = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
-    processed_filename = f"{base_filename}_{identifier}_processed1.png"
+    processed_filename = f"{base_filename}_{identifier}_step1_threshold.png"
     processed_path = os.path.join(processed_folder, processed_filename)
-    # cv2.imwrite(processed_path, closing)
-    # 5. Tìm contour
-    contours, _ = cv2.findContours(closing, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cv2.imwrite(processed_path, closing)
+    print(f"Saved threshold ROI to: {processed_path}")
+    # 5. Đảo ngược ảnh để số trở thành foreground (trắng trên nền đen)
+    inverted = cv2.bitwise_not(closing)
+    
+    # Lưu ảnh đảo ngược để debug
+    inverted_filename = f"{base_filename}_{identifier}_step1b_inverted.png"
+    inverted_path = os.path.join(processed_folder, inverted_filename)
+    cv2.imwrite(inverted_path, inverted)
+    print(f"Saved inverted ROI to: {inverted_path}")
+    
+    # 6. Tìm contour với RETR_LIST để tìm tất cả contours
+    contours, _ = cv2.findContours(inverted, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    print(f"Found {len(contours)} contours in ROI {identifier}")
 
-    # 6. Tính giới hạn trên và dưới cho mỗi contour
+    # 7. Tính giới hạn trên và dưới cho mỗi contour
     contour_limits = []
-    for cnt in contours:
+    for i, cnt in enumerate(contours):
         # Tính bounding rectangle cho contour
         x, y, w, h = cv2.boundingRect(cnt)
+        area = cv2.contourArea(cnt)
         
-        # Loại bỏ contour nếu chiều rộng <= 20 pixel hoặc chiều cao <= 30 pixel
-        if w <= 8 and h <= 20:
+        print(f"  Contour {i}: x={x}, y={y}, w={w}, h={h}, area={area:.0f}")
+        
+        # Điều kiện lọc mới dựa trên phân tích thực tế:
+        # - Loại bỏ contour quá nhỏ (nhiễu)
+        # - Loại bỏ contour quá lớn (toàn bộ ảnh)
+        # - Chấp nhận contour có kích thước phù hợp với số
+        if w <= 3 or h <= 8 or area < 20:  # Quá nhỏ - nhiễu
+            print(f"    Rejected: too small (w={w}, h={h}, area={area})")
             continue
+        if w > 50 or h > 50 or area > 1000:  # Quá lớn - có thể là background
+            print(f"    Rejected: too large (w={w}, h={h}, area={area})")
+            continue
+        
+        print(f"    Accepted: valid digit contour")
         
         y_coords = [point[0][1] for point in cnt]  # Lấy tọa độ y của các điểm trong contour
         upper_limit = min(y_coords)
         lower_limit = max(y_coords)
         contour_limits.append((upper_limit, lower_limit, cnt))
 
-    # 7. Đếm số lượng contour nằm trong giới hạn y của từng contour
+    print(f"Found {len(contour_limits)} valid contours after filtering")
+
+    # 8. Đếm số lượng contour nằm trong giới hạn y của từng contour
     max_overlap_count = 0
     best_contour = None
     best_limits = None
@@ -2978,53 +2974,66 @@ def preprocess_roi_for_ocr(roi, roi_index, original_filename, roi_name=None, ima
                 best_contour = cnt
                 best_limits = (upper, lower)
 
-    # 8. Gộp tất cả các contour trong vùng giới hạn y của contour tốt nhất
+    # 9. Gộp tất cả các contour trong vùng giới hạn y của contour tốt nhất
     if best_contour is not None and len(contour_limits) > 0:
+        print(f"Using best contour with {max_overlap_count} overlapping contours")
+        
         # Nếu chỉ có 1 contour thì sử dụng contour đó luôn mà không cần gộp
         if len(contour_limits) == 1:
             merged_contour = contour_limits[0][2]
+            print("Using single contour")
         else:
             merged_contour = np.vstack([cnt for upper, lower, cnt in contour_limits if not (best_limits[1] < upper or best_limits[0] > lower)])
+            print(f"Merged {len([cnt for upper, lower, cnt in contour_limits if not (best_limits[1] < upper or best_limits[0] > lower)])} contours")
         
-        # 9. Cắt (crop) vùng boundingRect của contour lớn nhất với padding
+        # 10. Cắt (crop) vùng boundingRect của contour lớn nhất với padding
         x, y, w, h = cv2.boundingRect(merged_contour)
+        print(f"Final bounding rect: x={x}, y={y}, w={w}, h={h}")
         
-        # Mở rộng thêm 20 pixel xung quanh
+        # Mở rộng thêm padding xung quanh
         pad = 5
         x3, y3 = x1+x-pad, y1+y-pad
         x4, y4 = x1+x+w+pad, y1+y+h+pad
+
+        # Đảm bảo không vượt quá biên ảnh
+        x3 = max(0, x3)
+        y3 = max(0, y3)
+        x4 = min(image_aligned.shape[1], x4)
+        y4 = min(image_aligned.shape[0], y4)
 
         # Lưu ý: Cắt từ ảnh đã xử lý (closing) để có dạng grayscale
         cropped_closing = image_aligned[y3:y4, x3:x4]
 
         gray = cv2.cvtColor(cropped_closing, cv2.COLOR_BGR2GRAY)
 
-        # 10. Tiền xử lý (làm mượt, giảm nhiễu)
+        # 11. Tiền xử lý (làm mượt, giảm nhiễu)
         blur = cv2.GaussianBlur(gray, (3, 3), 0)
 
-        # 11. Threshold (Otsu)
+        # 12. Threshold (Otsu)
         _, thresh_otsu = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         thresh = thresh_otsu
 
-        # 12. Morphological Closing
+        # 13. Morphological Closing
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))  # Tăng lên (5,5) thay vì (2,2)
-        closing = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
-        closing = cv2.blur(closing, (3, 3))
-        # Lưu ảnh đã xử lý
-        processed_filename = f"{base_filename}_{identifier}_processed2.png"
-        processed_path = os.path.join(processed_folder, processed_filename)
-        # cv2.imwrite(processed_path, closing)
+        closing_final = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
+        closing_final = cv2.blur(closing_final, (3, 3))
         
-        # print(f"Saved processed ROI to: {processed_path}")
-        print(f"Processing ROI {identifier} completed (saving disabled)")
-        return closing, quality_info  # Trả về ảnh grayscale và thông tin chất lượng
+        # Lưu ảnh đã xử lý
+        processed_filename = f"{base_filename}_{identifier}_step2_cropped.png"
+        processed_path = os.path.join(processed_folder, processed_filename)
+        cv2.imwrite(processed_path, closing_final)
+        print(f"Saved cropped processed ROI to: {processed_path}")
+        
+        print(f"Processing ROI {identifier} completed successfully")
+        return closing_final, quality_info  # Trả về ảnh grayscale và thông tin chất lượng
     else:
         print(f"Không tìm thấy contour hợp lệ để cắt cho ROI {identifier}.")
         closing = cv2.blur(closing, (4, 4))
         # Trả về ảnh grayscale nếu không tìm thấy contour
-        processed_filename = f"{base_filename}_{identifier}_processed.png"
+        processed_filename = f"{base_filename}_{identifier}_step3_final.png"
         processed_path = os.path.join(processed_folder, processed_filename)
-        # cv2.imwrite(processed_path, closing)
+        cv2.imwrite(processed_path, closing)
+        print(f"Saved final processed ROI to: {processed_path}")
         return closing, quality_info  # Trả về ảnh grayscale và thông tin chất lượng
 
 def is_named_roi_format(roi_list):
@@ -4449,6 +4458,296 @@ def get_decimal_places(machine_type, screen_id):
     
     except Exception as e:
         return jsonify({"error": f"Failed to update machine and screen selection: {str(e)}"}), 500
+
+def find_best_allowed_value_match(ocr_text, allowed_values, debug_roi_name=""):
+    """
+    Tìm giá trị phù hợp nhất từ allowed_values cho kết quả OCR
+    
+    Args:
+        ocr_text (str): Kết quả OCR gốc
+        allowed_values (list): Danh sách giá trị cho phép
+        debug_roi_name (str): Tên ROI để debug
+    
+    Returns:
+        tuple: (best_match, confidence_score, method_used)
+    """
+    if not allowed_values or not ocr_text:
+        return None, 0.0, "no_data"
+    
+    ocr_upper = ocr_text.upper().strip()
+    print(f"\n=== FINDING BEST MATCH FOR ROI '{debug_roi_name}' ===")
+    print(f"OCR text: '{ocr_text}' -> normalized: '{ocr_upper}'")
+    print(f"Allowed values: {allowed_values}")
+    
+    methods = []
+    
+    for value in allowed_values:
+        value_upper = value.upper().strip()
+        
+        # 1. Exact match (highest priority)
+        if ocr_upper == value_upper:
+            print(f"  ✅ EXACT MATCH: '{value}' (score: 1.0)")
+            return value, 1.0, "exact_match"
+        
+        # 2. Levenshtein distance (character-level similarity)
+        lev_distance = Levenshtein.distance(ocr_upper, value_upper)
+        max_len = max(len(ocr_upper), len(value_upper))
+        lev_similarity = 1.0 - (lev_distance / max_len) if max_len > 0 else 0.0
+        
+        # 3. SequenceMatcher (difflib similarity)
+        seq_similarity = SequenceMatcher(None, ocr_upper, value_upper).ratio()
+        
+        # 4. Substring matching
+        substring_score = 0.0
+        if ocr_upper in value_upper:
+            substring_score = len(ocr_upper) / len(value_upper)
+        elif value_upper in ocr_upper:
+            substring_score = len(value_upper) / len(ocr_upper)
+        
+        # 5. Character set overlap (tỷ lệ ký tự chung)
+        ocr_chars = set(ocr_upper)
+        value_chars = set(value_upper)
+        char_overlap = len(ocr_chars.intersection(value_chars)) / len(ocr_chars.union(value_chars)) if ocr_chars.union(value_chars) else 0.0
+        
+        # 6. Prefix/Suffix matching
+        prefix_score = 0.0
+        suffix_score = 0.0
+        min_len = min(len(ocr_upper), len(value_upper))
+        if min_len > 0:
+            # Prefix matching
+            prefix_match_len = 0
+            for i in range(min_len):
+                if ocr_upper[i] == value_upper[i]:
+                    prefix_match_len += 1
+                else:
+                    break
+            prefix_score = prefix_match_len / min_len
+            
+            # Suffix matching  
+            suffix_match_len = 0
+            for i in range(1, min_len + 1):
+                if ocr_upper[-i] == value_upper[-i]:
+                    suffix_match_len += 1
+                else:
+                    break
+            suffix_score = suffix_match_len / min_len
+        
+        # 7. Common character confusion handling (I/T, G/C, L/I, etc.)
+        confusion_score = calculate_ocr_confusion_similarity(ocr_upper, value_upper)
+        
+        # 8. Weighted character matching (ưu tiên các ký tự khớp quan trọng)
+        weighted_char_score = calculate_weighted_character_similarity(ocr_upper, value_upper)
+        
+        # 9. Length similarity (tương đối về độ dài)
+        length_similarity = 1.0 - abs(len(ocr_upper) - len(value_upper)) / max(len(ocr_upper), len(value_upper))
+        
+        # 10. Abbreviation matching (text ngắn có thể là viết tắt của text dài)
+        abbreviation_score = calculate_abbreviation_similarity(ocr_upper, value_upper)
+        
+        # 11. Phonetic similarity (âm thanh tương tự)
+        phonetic_score = calculate_phonetic_similarity(ocr_upper, value_upper)
+        
+        # Tính điểm tổng hợp với trọng số điều chỉnh
+        composite_score = (
+            lev_similarity * 0.18 +       # Levenshtein distance
+            seq_similarity * 0.18 +       # Sequence matcher
+            substring_score * 0.10 +      # Substring matching
+            char_overlap * 0.10 +         # Character overlap
+            prefix_score * 0.08 +         # Prefix matching
+            suffix_score * 0.03 +         # Suffix matching
+            confusion_score * 0.10 +      # OCR confusion handling
+            weighted_char_score * 0.07 +  # Weighted character matching
+            length_similarity * 0.03 +    # Length similarity
+            abbreviation_score * 0.08 +   # Abbreviation matching
+            phonetic_score * 0.05         # Phonetic similarity
+        )
+        
+        methods.append({
+            'value': value,
+            'value_upper': value_upper,
+            'lev_similarity': lev_similarity,
+            'seq_similarity': seq_similarity,
+            'substring_score': substring_score,
+            'char_overlap': char_overlap,
+            'prefix_score': prefix_score,
+            'suffix_score': suffix_score,
+            'confusion_score': confusion_score,
+            'weighted_char_score': weighted_char_score,
+            'length_similarity': length_similarity,
+            'abbreviation_score': abbreviation_score,
+            'phonetic_score': phonetic_score,
+            'composite_score': composite_score
+        })
+        
+        print(f"  📊 '{value}': lev={lev_similarity:.3f}, seq={seq_similarity:.3f}, abbrev={abbreviation_score:.3f}, phone={phonetic_score:.3f} -> composite={composite_score:.3f}")
+    
+    # Sắp xếp theo composite score
+    methods.sort(key=lambda x: x['composite_score'], reverse=True)
+    
+    if methods:
+        best_match = methods[0]
+        best_value = best_match['value']
+        best_score = best_match['composite_score']
+        
+        print(f"  🏆 BEST MATCH: '{best_value}' (composite score: {best_score:.3f})")
+        
+        # Giảm threshold để chấp nhận nhiều match hơn
+        if best_score >= 0.20:  
+            return best_value, best_score, "composite_similarity"
+        else:
+            print(f"  ❌ SCORE TOO LOW ({best_score:.3f} < 0.20), rejecting match")
+            return None, best_score, "low_confidence"
+    
+    return None, 0.0, "no_match"
+
+def calculate_ocr_confusion_similarity(text1, text2):
+    """
+    Tính similarity dựa trên các lỗi OCR phổ biến
+    I/T, G/C, L/I, O/0, etc.
+    """
+    # Mapping các ký tự dễ nhầm lẫn trong OCR
+    confusion_map = {
+        'I': ['1', 'l', 'T', '|'],
+        'T': ['I', '1', 'l', '7'],
+        'G': ['C', '6', '0', 'O'],
+        'C': ['G', '0', 'O'],
+        'L': ['I', '1', 'l', '7'],
+        'O': ['0', 'Q', 'D'],
+        '0': ['O', 'Q', 'D'],
+        'S': ['5', '8'],
+        '5': ['S', '8'],
+        'B': ['8', '6'],
+        '8': ['B', '6', 'S'],
+        '6': ['G', 'B'],
+        'N': ['H'],
+        'H': ['N'],
+        'A': ['4'],
+        '4': ['A'],
+    }
+    
+    if len(text1) != len(text2):
+        return 0.0
+    
+    matches = 0
+    for i in range(len(text1)):
+        c1, c2 = text1[i], text2[i]
+        if c1 == c2:
+            matches += 1
+        elif c1 in confusion_map and c2 in confusion_map[c1]:
+            matches += 0.8  # Partial match for confusable characters
+        elif c2 in confusion_map and c1 in confusion_map[c2]:
+            matches += 0.8
+    
+    return matches / len(text1) if text1 else 0.0
+
+def calculate_weighted_character_similarity(text1, text2):
+    """
+    Tính similarity với trọng số cho các ký tự quan trọng
+    Ví dụ: ký tự đầu và ký tự cuối có trọng số cao hơn
+    """
+    if not text1 or not text2:
+        return 0.0
+    
+    max_len = max(len(text1), len(text2))
+    min_len = min(len(text1), len(text2))
+    
+    total_weight = 0
+    matched_weight = 0
+    
+    # Tính trọng số cho từng vị trí
+    for i in range(max_len):
+        # Ký tự đầu và cuối có trọng số cao hơn
+        if i == 0 or i == max_len - 1:
+            weight = 2.0  # Trọng số cao cho ký tự đầu/cuối
+        else:
+            weight = 1.0  # Trọng số bình thường
+        
+        total_weight += weight
+        
+        # Kiểm tra khớp nếu cả hai text có ký tự ở vị trí này
+        if i < len(text1) and i < len(text2):
+            if text1[i] == text2[i]:
+                matched_weight += weight
+    
+    return matched_weight / total_weight if total_weight > 0 else 0.0
+
+def calculate_abbreviation_similarity(short_text, long_text):
+    """
+    Tính similarity dựa trên khả năng short_text là viết tắt của long_text
+    Ví dụ: "GLNI" có thể là viết tắt của "DAGIANHIET" (các ký tự G, L, N, I xuất hiện)
+    """
+    if len(short_text) >= len(long_text):
+        return 0.0  # Chỉ áp dụng khi text ngắn hơn rõ rệt
+    
+    if len(short_text) <= 2:
+        return 0.0  # Text quá ngắn không tin cậy
+        
+    # Kiểm tra xem các ký tự của short_text có xuất hiện theo thứ tự trong long_text không
+    long_idx = 0
+    matched_chars = 0
+    
+    for char in short_text:
+        # Tìm ký tự này trong long_text từ vị trí hiện tại
+        found = False
+        for i in range(long_idx, len(long_text)):
+            if long_text[i] == char:
+                matched_chars += 1
+                long_idx = i + 1  # Tiếp tục tìm từ vị trí sau
+                found = True
+                break
+        if not found:
+            # Thử tìm với ký tự tương tự OCR confusion
+            for i in range(long_idx, len(long_text)):
+                if are_similar_chars(char, long_text[i]):
+                    matched_chars += 0.7  # Partial match
+                    long_idx = i + 1
+                    found = True
+                    break
+    
+    # Tính điểm dựa trên tỷ lệ ký tự khớp
+    score = matched_chars / len(short_text)
+    return min(score, 1.0)  # Giới hạn tối đa 1.0
+
+def calculate_phonetic_similarity(text1, text2):
+    """
+    Tính similarity dựa trên âm thanh tương tự (đơn giản)
+    """
+    # Mapping âm thanh tương tự
+    phonetic_map = {
+        'G': 'C', 'C': 'G',
+        'I': 'E', 'E': 'I', 
+        'L': 'N', 'N': 'L',
+        'T': 'D', 'D': 'T',
+        'H': 'K', 'K': 'H'
+    }
+    
+    matches = 0
+    total = max(len(text1), len(text2))
+    
+    for i in range(min(len(text1), len(text2))):
+        c1, c2 = text1[i], text2[i]
+        if c1 == c2:
+            matches += 1
+        elif phonetic_map.get(c1) == c2 or phonetic_map.get(c2) == c1:
+            matches += 0.5
+    
+    return matches / total if total > 0 else 0.0
+
+def are_similar_chars(char1, char2):
+    """Kiểm tra hai ký tự có tương tự nhau không (OCR confusion)"""
+    similar_groups = [
+        {'G', 'C', '6', '0', 'O'},
+        {'I', 'L', '1', 'l', 'T'},
+        {'N', 'H'},
+        {'A', '4'},
+        {'S', '5'},
+        {'B', '8'}
+    ]
+    
+    for group in similar_groups:
+        if char1 in group and char2 in group:
+            return True
+    return False
 
 if __name__ == '__main__':
     print("DEBUG INFO:")
