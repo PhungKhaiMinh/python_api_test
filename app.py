@@ -39,6 +39,11 @@ app.config['ROI_DATA_FOLDER'] = 'roi_data'
 app.config['REFERENCE_IMAGES_FOLDER'] = 'roi_data/reference_images'  # Thư mục chứa ảnh tham chiếu
 app.config['OCR_RESULTS_FOLDER'] = 'ocr_results'  # Thư mục lưu kết quả OCR
 
+# Cấu hình thư mục lưu trữ ảnh HMI refined
+HMI_REFINED_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads', 'hmi_refined')
+if not os.path.exists(HMI_REFINED_FOLDER):
+    os.makedirs(HMI_REFINED_FOLDER)
+
 # Cho phép CORS
 @app.after_request
 def after_request(response):
@@ -68,6 +73,7 @@ def debug_info():
             "upload_folder": app.config['UPLOAD_FOLDER'],
             "roi_data_folder": app.config['ROI_DATA_FOLDER'],
             "ocr_results_folder": app.config['OCR_RESULTS_FOLDER'],
+            "hmi_refined_folder": app.config['HMI_REFINED_FOLDER'],
             "allowed_extensions": list(app.config['ALLOWED_EXTENSIONS']),
             "max_content_length": app.config['MAX_CONTENT_LENGTH']
         },
@@ -107,6 +113,7 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['ROI_DATA_FOLDER'] = ROI_DATA_FOLDER
 app.config['OCR_RESULTS_FOLDER'] = OCR_RESULTS_FOLDER
 app.config['REFERENCE_IMAGES_FOLDER'] = REFERENCE_IMAGES_FOLDER  # Thêm cấu hình cho thư mục reference_images
+app.config['HMI_REFINED_FOLDER'] = HMI_REFINED_FOLDER  # Thêm cấu hình cho thư mục HMI refined
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # Giới hạn kích thước file 16MB
 app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'gif'}
 
@@ -1488,12 +1495,14 @@ def upload_image():
         # Thêm mới: Phát hiện màn hình HMI
         hmi_detected = False
         visualization_path = None
+        hmi_refined_filename = None
         hmi_screen, visualization, roi_coords = detect_hmi_screen(uploaded_image)
         
         # Lưu trữ thông tin phát hiện HMI
         hmi_detection_info = {
             "hmi_detected": False,
             "hmi_image": None,
+            "hmi_refined_filename": None,
             "visualization": None
         }
         
@@ -1501,16 +1510,23 @@ def upload_image():
             hmi_detected = True
             uploaded_image = hmi_screen
             
-            # Cập nhật thông tin phát hiện HMI (không lưu file để tăng tốc)
+            # Lưu ảnh HMI refined
+            hmi_refined_filename = f"hmi_refined_{filename}"
+            hmi_refined_path = os.path.join(app.config['HMI_REFINED_FOLDER'], hmi_refined_filename)
+            cv2.imwrite(hmi_refined_path, hmi_screen)
+            
+            # Cập nhật thông tin phát hiện HMI
             hmi_detection_info = {
                 "hmi_detected": True,
                 "hmi_image": None,
+                "hmi_refined_filename": hmi_refined_filename,
                 "visualization": None
             }
         else:
             hmi_detection_info = {
                 "hmi_detected": False,
                 "hmi_image": None,
+                "hmi_refined_filename": None,
                 "visualization": None
             }
         
@@ -2594,6 +2610,17 @@ def get_hmi_detection_image(filename):
         return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
     except Exception as e:
         print(f"Error serving HMI detection image: {str(e)}")
+        abort(404)
+
+@app.route('/api/images/hmi_refined/<filename>', methods=['GET'])
+def get_hmi_refined_image(filename):
+    """Trả về file ảnh HMI refined đã được lưu"""
+    try:
+        print(f"Accessing HMI refined image: {filename}")
+        print(f"Looking in directory: {app.config['HMI_REFINED_FOLDER']}")
+        return send_from_directory(app.config['HMI_REFINED_FOLDER'], filename)
+    except Exception as e:
+        print(f"Error serving HMI refined image: {str(e)}")
         abort(404)
 
 # Hàm mới: Lấy đường dẫn đến ảnh template mẫu dựa trên machine_code và screen_id
