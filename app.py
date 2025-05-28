@@ -1360,11 +1360,11 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                                                 if len(all_digits) <= decimal_places:
                                                     # Thêm số 0 phía trước và đặt dấu chấm sau số 0 đầu tiên
                                                     padded_str = all_digits.zfill(decimal_places)
-                                                    formatted_text = f"0.{padded_str}"
+                                                    formatted_retry_text = f"0.{padded_str}"
                                                 else:
                                                     # Đặt dấu chấm vào vị trí thích hợp: (độ dài - decimal_places)
                                                     insert_pos = len(all_digits) - decimal_places
-                                                    formatted_text = f"{all_digits[:insert_pos]}.{all_digits[insert_pos:]}"
+                                                    formatted_retry_text = f"{all_digits[:insert_pos]}.{all_digits[insert_pos:]}"
                                             else:
                                                 # Nếu decimal_places = 0, bỏ dấu chấm
                                                 formatted_retry_text = all_digits
@@ -1378,13 +1378,13 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                                                 if len(num_str) <= decimal_places:
                                                     # Nếu số chữ số ít hơn hoặc bằng decimal_places, thêm số 0 ở đầu
                                                     padded_str = num_str.zfill(decimal_places)
-                                                    formatted_text = f"0.{padded_str}"
+                                                    formatted_retry_text = f"0.{padded_str}"
                                                 else:
                                                     # Đặt dấu chấm vào vị trí thích hợp
                                                     insert_pos = len(num_str) - decimal_places
-                                                    formatted_text = f"{num_str[:insert_pos]}.{num_str[insert_pos:]}"
+                                                    formatted_retry_text = f"{num_str[:insert_pos]}.{num_str[insert_pos:]}"
                                                 
-                                                print(f"Formatted integer retry value {num_str} with decimal_places={decimal_places}: {formatted_text}")
+                                                print(f"Formatted integer retry value {num_str} with decimal_places={decimal_places}: {formatted_retry_text}")
                                             else:
                                                 # Giữ nguyên số nguyên nếu không cần thập phân
                                                 formatted_retry_text = num_str
