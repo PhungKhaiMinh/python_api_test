@@ -1,0 +1,440 @@
+{
+  "total_images": 38,
+  "correct_predictions": 0,
+  "accuracy": 0.0,
+  "avg_processing_time": 0.14589320985894455,
+  "total_time": 6.735990285873413,
+  "per_class_accuracy": {
+    "Production": {
+      "accuracy": 0.0,
+      "correct": 0,
+      "total": 1
+    }
+  },
+  "processing_times": [
+    5.512593746185303,
+    0.0008728504180908203,
+    0.0008003711700439453,
+    0.0007884502410888672,
+    0.0007870197296142578,
+    0.0007698535919189453,
+    0.0009996891021728516,
+    0.0008502006530761719,
+    0.0007190704345703125,
+    0.0010085105895996094,
+    0.0008795261383056641,
+    0.0008881092071533203,
+    0.0007593631744384766,
+    0.0008056163787841797,
+    0.0010197162628173828,
+    0.0010936260223388672,
+    0.001241445541381836,
+    0.0008921623229980469,
+    0.0007784366607666016,
+    0.0009019374847412109,
+    0.0008292198181152344,
+    0.0006973743438720703,
+    0.0008225440979003906,
+    0.0007493495941162109,
+    0.0007674694061279297,
+    0.0007772445678710938,
+    0.0006988048553466797,
+    0.0010445117950439453,
+    0.0007898807525634766,
+    0.0008120536804199219,
+    0.0008389949798583984,
+    0.0007669925689697266,
+    0.0008089542388916016,
+    0.0007352828979492188,
+    0.0008568763732910156,
+    0.0007879734039306641,
+    0.0009334087371826172,
+    0.0007753372192382812
+  ],
+  "detailed_results": [
+    {
+      "filename": "F41_production_1.jpg",
+      "expected_screen": "Production",
+      "predicted_screen": "Main",
+      "is_correct": false,
+      "confidence": 0.5,
+      "processing_time": 5.512593746185303,
+      "detection_method": "legacy_fallback",
+      "machine_type": "F41"
+    },
+    {
+      "filename": "F41_production_2.jpg",
+      "expected_screen": "Production",
+      "predicted_screen": "ERROR",
+      "is_correct": false,
+      "confidence": 0.0,
+      "processing_time": 0.0008728504180908203,
+      "detection_method": "error",
+      "machine_type": "ERROR"
+    },
+    {
+      "filename": "F41_production_3.jpg",
+      "expected_screen": "Production",
+      "predicted_screen": "ERROR",
+      "is_correct": false,
+      "confidence": 0.0,
+      "processing_time": 0.0008003711700439453,
+      "detection_method": "error",
+      "machine_type": "ERROR"
+    },
+    {
+      "filename": "F41_temp_1.jpg",
+      "expected_screen": "Temperature",
+      "predicted_screen": "ERROR",
+      "is_correct": false,
+      "confidence": 0.0,
+      "processing_time": 0.0007884502410888672,
+      "detection_method": "error",
+      "machine_type": "ERROR"
+    },
+    {
+      "filename": "F41_temp_2.jpg",
+      "expected_screen": "Temperature",
+      "predicted_screen": "ERROR",
+      "is_correct": false,
+      "confidence": 0.0,
+      "processing_time": 0.0007870197296142578,
+      "detection_method": "error",
+      "machine_type": "ERROR"
+    },
+    {
+      "filename": "F41_temp_3.jpg",
+      "expected_screen": "Temperature",
+      "predicted_screen": "ERROR",
+      "is_correct": false,
+      "confidence": 0.0,
+      "processing_time": 0.0007698535919189453,
+      "detection_method": "error",
+      "machine_type": "ERROR"
+    },
+    {
+      "filename": "F42_Overview_1.jpg",
+      "expected_screen": "Overview",
+      "predicted_screen": "ERROR",
+      "is_correct": false,
+      "confidence": 0.0,
+      "processing_time": 0.0009996891021728516,
+      "detection_method": "error",
+      "machine_type": "ERROR"
+    },
+    {
+      "filename": "F42_Overview_2.jpg",
+      "expected_screen": "Overview",
+      "predicted_screen": "ERROR",
+      "is_correct": false,
+      "confidence": 0.0,
+      "processing_time": 0.0008502006530761719,
+      "detection_method": "error",
+      "machine_type": "ERROR"
+    },
+    {
+      "filename": "F42_Plasticizer_1.jpg",
+      "expected_screen": "Plasticizer",
+      "predicted_screen": "ERROR",
+      "is_correct": false,
+      "confidence": 0.0,
+      "processing_time": 0.0007190704345703125,
+      "detection_method": "error",
+      "machine_type": "ERROR"
+    },
+    {
+      "filename": "F42_Plasticizer_2.jpg",
+      "expected_screen": "Plasticizer",
+      "predicted_screen": "ERROR",
+      "is_correct": false,
+      "confidence": 0.0,
+      "processing_time": 0.0010085105895996094,
+      "detection_method": "error",
+      "machine_type": "ERROR"
+    },
+    {
+      "filename": "F42_Plasticizer_3.jpg",
+      "expected_screen": "Plasticizer",
+      "predicted_screen": "ERROR",
+      "is_correct": false,
+      "confidence": 0.0,
+      "processing_time": 0.0008795261383056641,
+      "detection_method": "error",
+      "machine_type": "ERROR"
+    },
+    {
+      "filename": "F42_setting_1.jpg",
+      "expected_screen": "Setup",
+      "predicted_screen": "ERROR",
+      "is_correct": false,
+      "confidence": 0.0,
+      "processing_time": 0.0008881092071533203,
+      "detection_method": "error",
+      "machine_type": "ERROR"
+    },
+    {
+      "filename": "F42_setting_2.jpg",
+      "expected_screen": "Setup",
+      "predicted_screen": "ERROR",
+      "is_correct": false,
+      "confidence": 0.0,
+      "processing_time": 0.0007593631744384766,
+      "detection_method": "error",
+      "machine_type": "ERROR"
+    },
+    {
+      "filename": "F42_temp_1.jpg",
+      "expected_screen": "Temperature",
+      "predicted_screen": "ERROR",
+      "is_correct": false,
+      "confidence": 0.0,
+      "processing_time": 0.0008056163787841797,
+      "detection_method": "error",
+      "machine_type": "ERROR"
+    },
+    {
+      "filename": "F42_temp_2.jpg",
+      "expected_screen": "Temperature",
+      "predicted_screen": "ERROR",
+      "is_correct": false,
+      "confidence": 0.0,
+      "processing_time": 0.0010197162628173828,
+      "detection_method": "error",
+      "machine_type": "ERROR"
+    },
+    {
+      "filename": "F42_temp_3.jpg",
+      "expected_screen": "Temperature",
+      "predicted_screen": "ERROR",
+      "is_correct": false,
+      "confidence": 0.0,
+      "processing_time": 0.0010936260223388672,
+      "detection_method": "error",
+      "machine_type": "ERROR"
+    },
+    {
+      "filename": "F42_tracking_1.jpg",
+      "expected_screen": "Tracking",
+      "predicted_screen": "ERROR",
+      "is_correct": false,
+      "confidence": 0.0,
+      "processing_time": 0.001241445541381836,
+      "detection_method": "error",
+      "machine_type": "ERROR"
+    },
+    {
+      "filename": "F42_tracking_2.jpg",
+      "expected_screen": "Tracking",
+      "predicted_screen": "ERROR",
+      "is_correct": false,
+      "confidence": 0.0,
+      "processing_time": 0.0008921623229980469,
+      "detection_method": "error",
+      "machine_type": "ERROR"
+    },
+    {
+      "filename": "F42_tracking_3.jpg",
+      "expected_screen": "Tracking",
+      "predicted_screen": "ERROR",
+      "is_correct": false,
+      "confidence": 0.0,
+      "processing_time": 0.0007784366607666016,
+      "detection_method": "error",
+      "machine_type": "ERROR"
+    },
+    {
+      "filename": "F41_production_1.jpg",
+      "expected_screen": "Production",
+      "predicted_screen": "ERROR",
+      "is_correct": false,
+      "confidence": 0.0,
+      "processing_time": 0.0009019374847412109,
+      "detection_method": "error",
+      "machine_type": "ERROR"
+    },
+    {
+      "filename": "F41_production_2.jpg",
+      "expected_screen": "Production",
+      "predicted_screen": "ERROR",
+      "is_correct": false,
+      "confidence": 0.0,
+      "processing_time": 0.0008292198181152344,
+      "detection_method": "error",
+      "machine_type": "ERROR"
+    },
+    {
+      "filename": "F41_production_3.jpg",
+      "expected_screen": "Production",
+      "predicted_screen": "ERROR",
+      "is_correct": false,
+      "confidence": 0.0,
+      "processing_time": 0.0006973743438720703,
+      "detection_method": "error",
+      "machine_type": "ERROR"
+    },
+    {
+      "filename": "F41_temp_1.jpg",
+      "expected_screen": "Temperature",
+      "predicted_screen": "ERROR",
+      "is_correct": false,
+      "confidence": 0.0,
+      "processing_time": 0.0008225440979003906,
+      "detection_method": "error",
+      "machine_type": "ERROR"
+    },
+    {
+      "filename": "F41_temp_2.jpg",
+      "expected_screen": "Temperature",
+      "predicted_screen": "ERROR",
+      "is_correct": false,
+      "confidence": 0.0,
+      "processing_time": 0.0007493495941162109,
+      "detection_method": "error",
+      "machine_type": "ERROR"
+    },
+    {
+      "filename": "F41_temp_3.jpg",
+      "expected_screen": "Temperature",
+      "predicted_screen": "ERROR",
+      "is_correct": false,
+      "confidence": 0.0,
+      "processing_time": 0.0007674694061279297,
+      "detection_method": "error",
+      "machine_type": "ERROR"
+    },
+    {
+      "filename": "F42_Overview_1.jpg",
+      "expected_screen": "Overview",
+      "predicted_screen": "ERROR",
+      "is_correct": false,
+      "confidence": 0.0,
+      "processing_time": 0.0007772445678710938,
+      "detection_method": "error",
+      "machine_type": "ERROR"
+    },
+    {
+      "filename": "F42_Overview_2.jpg",
+      "expected_screen": "Overview",
+      "predicted_screen": "ERROR",
+      "is_correct": false,
+      "confidence": 0.0,
+      "processing_time": 0.0006988048553466797,
+      "detection_method": "error",
+      "machine_type": "ERROR"
+    },
+    {
+      "filename": "F42_Plasticizer_1.jpg",
+      "expected_screen": "Plasticizer",
+      "predicted_screen": "ERROR",
+      "is_correct": false,
+      "confidence": 0.0,
+      "processing_time": 0.0010445117950439453,
+      "detection_method": "error",
+      "machine_type": "ERROR"
+    },
+    {
+      "filename": "F42_Plasticizer_2.jpg",
+      "expected_screen": "Plasticizer",
+      "predicted_screen": "ERROR",
+      "is_correct": false,
+      "confidence": 0.0,
+      "processing_time": 0.0007898807525634766,
+      "detection_method": "error",
+      "machine_type": "ERROR"
+    },
+    {
+      "filename": "F42_Plasticizer_3.jpg",
+      "expected_screen": "Plasticizer",
+      "predicted_screen": "ERROR",
+      "is_correct": false,
+      "confidence": 0.0,
+      "processing_time": 0.0008120536804199219,
+      "detection_method": "error",
+      "machine_type": "ERROR"
+    },
+    {
+      "filename": "F42_setting_1.jpg",
+      "expected_screen": "Setup",
+      "predicted_screen": "ERROR",
+      "is_correct": false,
+      "confidence": 0.0,
+      "processing_time": 0.0008389949798583984,
+      "detection_method": "error",
+      "machine_type": "ERROR"
+    },
+    {
+      "filename": "F42_setting_2.jpg",
+      "expected_screen": "Setup",
+      "predicted_screen": "ERROR",
+      "is_correct": false,
+      "confidence": 0.0,
+      "processing_time": 0.0007669925689697266,
+      "detection_method": "error",
+      "machine_type": "ERROR"
+    },
+    {
+      "filename": "F42_temp_1.jpg",
+      "expected_screen": "Temperature",
+      "predicted_screen": "ERROR",
+      "is_correct": false,
+      "confidence": 0.0,
+      "processing_time": 0.0008089542388916016,
+      "detection_method": "error",
+      "machine_type": "ERROR"
+    },
+    {
+      "filename": "F42_temp_2.jpg",
+      "expected_screen": "Temperature",
+      "predicted_screen": "ERROR",
+      "is_correct": false,
+      "confidence": 0.0,
+      "processing_time": 0.0007352828979492188,
+      "detection_method": "error",
+      "machine_type": "ERROR"
+    },
+    {
+      "filename": "F42_temp_3.jpg",
+      "expected_screen": "Temperature",
+      "predicted_screen": "ERROR",
+      "is_correct": false,
+      "confidence": 0.0,
+      "processing_time": 0.0008568763732910156,
+      "detection_method": "error",
+      "machine_type": "ERROR"
+    },
+    {
+      "filename": "F42_tracking_1.jpg",
+      "expected_screen": "Tracking",
+      "predicted_screen": "ERROR",
+      "is_correct": false,
+      "confidence": 0.0,
+      "processing_time": 0.0007879734039306641,
+      "detection_method": "error",
+      "machine_type": "ERROR"
+    },
+    {
+      "filename": "F42_tracking_2.jpg",
+      "expected_screen": "Tracking",
+      "predicted_screen": "ERROR",
+      "is_correct": false,
+      "confidence": 0.0,
+      "processing_time": 0.0009334087371826172,
+      "detection_method": "error",
+      "machine_type": "ERROR"
+    },
+    {
+      "filename": "F42_tracking_3.jpg",
+      "expected_screen": "Tracking",
+      "predicted_screen": "ERROR",
+      "is_correct": false,
+      "confidence": 0.0,
+      "processing_time": 0.0007753372192382812,
+      "detection_method": "error",
+      "machine_type": "ERROR"
+    }
+  ],
+  "requirements_met": {
+    "accuracy_>=_90%": false,
+    "speed_<=_10s": "True"
+  }
+}

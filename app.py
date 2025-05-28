@@ -1440,10 +1440,41 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
             })
         return mock_results
 
+# Thêm helper function để xóa tất cả files trong processed_roi folder
+def clear_processed_roi_folder():
+    """Xóa tất cả các file trong thư mục processed_roi để đảm bảo không có file cũ"""
+    try:
+        processed_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'processed_roi')
+        if os.path.exists(processed_folder):
+            # Lấy danh sách tất cả files trong folder
+            files = os.listdir(processed_folder)
+            deleted_count = 0
+            
+            for filename in files:
+                file_path = os.path.join(processed_folder, filename)
+                if os.path.isfile(file_path):  # Chỉ xóa files, không xóa folders
+                    try:
+                        os.remove(file_path)
+                        deleted_count += 1
+                    except Exception as e:
+                        print(f"Warning: Could not delete {file_path}: {str(e)}")
+            
+            if deleted_count > 0:
+                print(f"🗑️ Cleared {deleted_count} old files from processed_roi folder")
+            else:
+                print("📁 Processed_roi folder is already empty")
+        else:
+            print("📁 Processed_roi folder does not exist yet")
+    except Exception as e:
+        print(f"Warning: Error clearing processed_roi folder: {str(e)}")
+
 # Sửa lại route upload_image để sử dụng template reference từ thư mục mới
 @app.route('/api/images', methods=['POST'])
 def upload_image():
     """API để tải lên ảnh và thực hiện OCR trên các vùng ROI được định nghĩa"""
+    # Xóa tất cả files cũ trong processed_roi trước khi xử lý ảnh mới
+    clear_processed_roi_folder()
+    
     # Kiểm tra xem có file trong request không
     if 'file' not in request.files:
         return jsonify({"error": "No file part in the request"}), 400
@@ -1491,6 +1522,13 @@ def upload_image():
         screen_numeric_id = detection_result['screen_numeric_id']
         template_path = detection_result['template_path']
         similarity_score = detection_result['similarity_score']
+        
+        # THIẾT LẬP TEMPLATE PATH - Đây là điều thiếu!
+        if template_path is None:
+            template_path = get_reference_template_path(machine_type, screen_id)
+            print(f"🔧 DEBUG: Auto-detected template_path: {template_path}")
+        else:
+            print(f"🔧 DEBUG: Using provided template_path: {template_path}")
             
         # Thêm mới: Phát hiện màn hình HMI
         hmi_detected = False
