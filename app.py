@@ -1159,17 +1159,18 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                     cv2.imwrite(digit_mask_path, digit_mask)
                     print(f"Saved digit mask to: {digit_mask_path}")
                     
-                    # 5. Thực hiện OCR trên mask đã tạo
-                    retry_results = reader.readtext(digit_mask, allowlist='0123456789.-ABCDEFGHIKLNORTUabcdefghiklnortu', 
+                    # 5. Thực hiện OCR trên mask đã tạo với thông số tối ưu
+                    retry_results = reader.readtext(digit_mask, 
+                                            allowlist='0123456789.-ABCDEFGHIKLNORTUabcdefghiklnortu', 
                                             detail=1, 
                                             paragraph=False, 
                                             batch_size=1, 
-                                            text_threshold=0.6,    # Tăng từ 0.4 → 0.6 để giảm nhiễu, tăng độ chính xác
-                                            link_threshold=0.2,    # Giữ nguyên 0.2 - đã tối ưu cho việc kết nối số và dấu chấm  
-                                            low_text=0.2,          # Giảm từ 0.3 → 0.2 để detect text nhỏ tốt hơn
-                                            mag_ratio=2,           # Giữ nguyên - tỷ lệ phóng đại ảnh
-                                            slope_ths=0.05,        # Giữ nguyên - threshold góc nghiêng
-                                            decoder='beamsearch'   # Giữ nguyên - phương pháp decode
+                                            text_threshold=0.1,    # OPTIMIZED: Giảm từ 0.6 → 0.1 (Very Relaxed)
+                                            link_threshold=0.05,   # OPTIMIZED: Giảm từ 0.2 → 0.05 (Very Relaxed)  
+                                            low_text=0.05,         # OPTIMIZED: Giảm từ 0.2 → 0.05 (Very Relaxed)
+                                            mag_ratio=4,           # OPTIMIZED: Tăng từ 2 → 4 (Very Relaxed)
+                                            slope_ths=0.2,         # OPTIMIZED: Tăng từ 0.05 → 0.2 (Very Relaxed)
+                                            decoder='greedy'       # OPTIMIZED: Chuyển từ 'beamsearch' → 'greedy' (Very Relaxed)
                                             )
                     
                     # Kiểm tra nếu có kết quả OCR
@@ -1262,6 +1263,7 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                             print(f"Replaced dash in middle with dot in retry_text: {retry_text}")
                         
                         # Kiểm tra allowed_values cho retry_text, tương tự như đã làm với best_text
+                        retry_matched_with_allowed_values = False
                         try:
                             # Kiểm tra xem file ROIs JSON có tồn tại
                             roi_json_path = 'roi_data/roi_info.json'
@@ -1306,7 +1308,8 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                                             results[-1]["has_text"] = True
                                             results[-1]["original_value"] = retry_text
                                             best_confidence = retry_confidence
-                                            continue  # Chuyển sang xử lý ROI tiếp theo
+                                            retry_matched_with_allowed_values = True
+                                            print(f"✅ Updated result with allowed value match: '{retry_text}'")
                                         else:
                                             print(f"❌ NO SUITABLE RETRY MATCH FOUND. Using first allowed value: '{allowed_values[0]}'")
                                             retry_text = allowed_values[0]
@@ -1315,104 +1318,114 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                                             results[-1]["has_text"] = True
                                             results[-1]["original_value"] = retry_text
                                             best_confidence = retry_confidence
-                                            continue
+                                            retry_matched_with_allowed_values = True
+                                            print(f"✅ Updated result with first allowed value: '{retry_text}'")
                         except Exception as e:
                             print(f"Error checking allowed_values for retry ROI {roi_name}: {str(e)}")
                         
-                        # Chỉ sử dụng kết quả mới nếu có độ tin cậy cao hơn
-                        if retry_confidence > best_confidence:
-                            print(f"Using retry result instead of original result.")
-                            
-                            # Áp dụng định dạng theo decimal_places nếu kết quả là số và có cấu hình
-                            formatted_retry_text = retry_text
-                            
-                            # Xử lý trường hợp retry_text chỉ có các ký tự số nhưng không có dấu chấm thập phân
-                            is_numeric = re.match(r'^-?\d+$', retry_text) is not None
-                            has_decimal_point = '.' in retry_text
-                            
-                            if (is_numeric or re.match(r'^-?\d+\.?\d*$', retry_text)) and (
-                                machine_type in decimal_places_config and 
-                                screen_id in decimal_places_config[machine_type] and 
-                                roi_name in decimal_places_config[machine_type][screen_id]):
+                        # Nếu chưa match với allowed_values hoặc không có allowed_values,
+                        # kiểm tra xem retry result có tốt hơn original result không
+                        if not retry_matched_with_allowed_values:
+                            # Chấp nhận retry result nếu confidence > 0.3 (theo yêu cầu user)
+                            # hoặc nếu retry confidence tốt hơn original
+                            if retry_confidence > 0.3 or retry_confidence > best_confidence:
+                                print(f"✅ Accepting retry result: confidence {retry_confidence:.4f} (threshold: 0.3, original: {best_confidence:.4f})")
                                 
-                                try:
-                                    is_negative = retry_text.startswith('-')
-                                    clean_text = retry_text[1:] if is_negative else retry_text
-                                    decimal_places = int(decimal_places_config[machine_type][screen_id][roi_name])
-                                    print(f"Getting decimal places config for machine_type={machine_type}, screen_id={screen_id}, roi_name={roi_name}")
-                                    print(f"Found decimal places config for ROI {roi_name}: {decimal_places}")
+                                # Áp dụng định dạng theo decimal_places nếu kết quả là số và có cấu hình
+                                formatted_retry_text = retry_text
+                                
+                                # Xử lý trường hợp retry_text chỉ có các ký tự số nhưng không có dấu chấm thập phân
+                                is_numeric = re.match(r'^-?\d+$', retry_text) is not None
+                                has_decimal_point = '.' in retry_text
+                                
+                                if (is_numeric or re.match(r'^-?\d+\.?\d*$', retry_text)) and (
+                                    machine_type in decimal_places_config and 
+                                    screen_id in decimal_places_config[machine_type] and 
+                                    roi_name in decimal_places_config[machine_type][screen_id]):
                                     
-                                    # Xử lý tương tự như phần xử lý decimal_places ở trên
-                                    if decimal_places == 0:
-                                        # Nếu decimal_places là 0, bỏ dấu chấm
-                                        formatted_retry_text = clean_text.replace('.', '')
-                                        print(f"Removed decimal point for ROI {roi_name}: {formatted_retry_text}")
-                                    else:
-                                        # Xử lý vị trí dấu thập phân
-                                        if '.' in clean_text:
-                                            int_part, dec_part = clean_text.split('.')
-                                            
-                                            # Kết hợp phần nguyên và phần thập phân thành một chuỗi không có dấu chấm
-                                            all_digits = int_part + dec_part
-                                            
-                                            # Đặt dấu chấm vào vị trí thích hợp theo decimal_places
-                                            if decimal_places > 0:
-                                                if len(all_digits) <= decimal_places:
-                                                    # Thêm số 0 phía trước và đặt dấu chấm sau số 0 đầu tiên
-                                                    padded_str = all_digits.zfill(decimal_places)
-                                                    formatted_retry_text = f"0.{padded_str}"
-                                                else:
-                                                    # Đặt dấu chấm vào vị trí thích hợp: (độ dài - decimal_places)
-                                                    insert_pos = len(all_digits) - decimal_places
-                                                    formatted_retry_text = f"{all_digits[:insert_pos]}.{all_digits[insert_pos:]}"
-                                            else:
-                                                # Nếu decimal_places = 0, bỏ dấu chấm
-                                                formatted_retry_text = all_digits
-                                        else:
-                                            # Không có dấu chấm (số nguyên)
-                                            num_str = clean_text
-                                            
-                                            # Thêm phần thập phân nếu cần
-                                            if decimal_places > 0:
-                                                # Đặt dấu chấm vào vị trí thích hợp: (độ dài - decimal_places)
-                                                if len(num_str) <= decimal_places:
-                                                    # Nếu số chữ số ít hơn hoặc bằng decimal_places, thêm số 0 ở đầu
-                                                    padded_str = num_str.zfill(decimal_places)
-                                                    formatted_retry_text = f"0.{padded_str}"
-                                                else:
-                                                    # Đặt dấu chấm vào vị trí thích hợp
-                                                    insert_pos = len(num_str) - decimal_places
-                                                    formatted_retry_text = f"{num_str[:insert_pos]}.{num_str[insert_pos:]}"
-                                                
-                                                print(f"Formatted integer retry value {num_str} with decimal_places={decimal_places}: {formatted_retry_text}")
-                                            else:
-                                                # Giữ nguyên số nguyên nếu không cần thập phân
-                                                formatted_retry_text = num_str
-                                    
-                                    # Thêm dấu âm nếu cần
-                                    if is_negative:
-                                        formatted_retry_text = f"-{formatted_retry_text}"
+                                    try:
+                                        is_negative = retry_text.startswith('-')
+                                        clean_text = retry_text[1:] if is_negative else retry_text
+                                        decimal_places = int(decimal_places_config[machine_type][screen_id][roi_name])
+                                        print(f"Getting decimal places config for machine_type={machine_type}, screen_id={screen_id}, roi_name={roi_name}")
+                                        print(f"Found decimal places config for ROI {roi_name}: {decimal_places}")
                                         
-                                    print(f"Formatted retry text: Original: '{retry_text}', Formatted: '{formatted_retry_text}'")
-                                except Exception as e:
-                                    print(f"Error formatting retry text: {str(e)}")
-                            
-                            # Kiểm tra nếu ROI có chứa "working hours" trong tên 
-                            # và kết quả đọc được là định dạng kiểu số.số.số
-                            if "working hours" in roi_name.lower() and re.match(r'^\d+\.\d+\.\d+$', formatted_retry_text):
-                                # Chuyển đổi từ định dạng số.số.số sang số:số:số
-                                formatted_retry_text = formatted_retry_text.replace('.', ':').replace(' ', ':').replace('-', ':')
-                            
-                            # Xử lý dấu "-" không ở vị trí đầu tiên
-                            if "-" in formatted_retry_text[1:]:
-                                formatted_retry_text = formatted_retry_text[0] + formatted_retry_text[1:].replace('-', '.')
-                            
-                            # Cập nhật kết quả
-                            results[-1]["text"] = formatted_retry_text.replace('C','0')
-                            results[-1]["confidence"] = retry_confidence
-                            results[-1]["has_text"] = True
-                            results[-1]["original_value"] = retry_text
-                            best_confidence = retry_confidence
+                                        # Xử lý tương tự như phần xử lý decimal_places ở trên
+                                        if decimal_places == 0:
+                                            # Nếu decimal_places là 0, bỏ dấu chấm
+                                            formatted_retry_text = clean_text.replace('.', '')
+                                            print(f"Removed decimal point for ROI {roi_name}: {formatted_retry_text}")
+                                        else:
+                                            # Xử lý vị trí dấu thập phân
+                                            if '.' in clean_text:
+                                                int_part, dec_part = clean_text.split('.')
+                                                
+                                                # Kết hợp phần nguyên và phần thập phân thành một chuỗi không có dấu chấm
+                                                all_digits = int_part + dec_part
+                                                
+                                                # Đặt dấu chấm vào vị trí thích hợp theo decimal_places
+                                                if decimal_places > 0:
+                                                    if len(all_digits) <= decimal_places:
+                                                        # Thêm số 0 phía trước và đặt dấu chấm sau số 0 đầu tiên
+                                                        padded_str = all_digits.zfill(decimal_places)
+                                                        formatted_retry_text = f"0.{padded_str}"
+                                                    else:
+                                                        # Đặt dấu chấm vào vị trí thích hợp: (độ dài - decimal_places)
+                                                        insert_pos = len(all_digits) - decimal_places
+                                                        formatted_retry_text = f"{all_digits[:insert_pos]}.{all_digits[insert_pos:]}"
+                                                else:
+                                                    # Nếu decimal_places = 0, bỏ dấu chấm
+                                                    formatted_retry_text = all_digits
+                                            else:
+                                                # Không có dấu chấm (số nguyên)
+                                                num_str = clean_text
+                                                
+                                                # Thêm phần thập phân nếu cần
+                                                if decimal_places > 0:
+                                                    # Đặt dấu chấm vào vị trí thích hợp: (độ dài - decimal_places)
+                                                    if len(num_str) <= decimal_places:
+                                                        # Nếu số chữ số ít hơn hoặc bằng decimal_places, thêm số 0 ở đầu
+                                                        padded_str = num_str.zfill(decimal_places)
+                                                        formatted_retry_text = f"0.{padded_str}"
+                                                    else:
+                                                        # Đặt dấu chấm vào vị trí thích hợp
+                                                        insert_pos = len(num_str) - decimal_places
+                                                        formatted_retry_text = f"{num_str[:insert_pos]}.{num_str[insert_pos:]}"
+                                                    
+                                                    print(f"Formatted integer retry value {num_str} with decimal_places={decimal_places}: {formatted_retry_text}")
+                                                else:
+                                                    # Giữ nguyên số nguyên nếu không cần thập phân
+                                                    formatted_retry_text = num_str
+                                        
+                                        # Thêm dấu âm nếu cần
+                                        if is_negative:
+                                            formatted_retry_text = f"-{formatted_retry_text}"
+                                            
+                                        print(f"Formatted retry text: Original: '{retry_text}', Formatted: '{formatted_retry_text}'")
+                                    except Exception as e:
+                                        print(f"Error formatting retry text: {str(e)}")
+                                
+                                # Kiểm tra nếu ROI có chứa "working hours" trong tên 
+                                # và kết quả đọc được là định dạng kiểu số.số.số
+                                if "working hours" in roi_name.lower() and re.match(r'^\d+\.\d+\.\d+$', formatted_retry_text):
+                                    # Chuyển đổi từ định dạng số.số.số sang số:số:số
+                                    formatted_retry_text = formatted_retry_text.replace('.', ':').replace(' ', ':').replace('-', ':')
+                                
+                                # Xử lý dấu "-" không ở vị trí đầu tiên
+                                if "-" in formatted_retry_text[1:]:
+                                    formatted_retry_text = formatted_retry_text[0] + formatted_retry_text[1:].replace('-', '.')
+                                
+                                # Cập nhật kết quả với formatted text
+                                results[-1]["text"] = formatted_retry_text.replace('C','0')
+                                results[-1]["confidence"] = retry_confidence
+                                results[-1]["has_text"] = True
+                                results[-1]["original_value"] = retry_text
+                                best_confidence = retry_confidence
+                                print(f"✅ Updated result with retry OCR: '{formatted_retry_text}' (confidence: {retry_confidence:.4f})")
+                            else:
+                                print(f"Keeping original result: retry confidence {retry_confidence:.4f} not meeting threshold 0.3")
+                    else:
+                        print(f"❌ No retry OCR results found on digit mask")
                     
                     # Nếu confidence vẫn thấp dưới 0.1, trả về mảng rỗng
                     if best_confidence < 0.1:

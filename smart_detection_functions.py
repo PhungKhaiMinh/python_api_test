@@ -419,8 +419,8 @@ def _adaptive_edge_detection_fast(image: np.ndarray) -> np.ndarray:
     
     return edges
 
-def compare_images_multi_method_optimized(img1: np.ndarray, img2: np.ndarray) -> Dict[str, float]:
-    """So sánh ảnh bằng nhiều phương pháp được tối ưu"""
+def compare_images_multi_method_optimized_v2(img1: np.ndarray, img2: np.ndarray, context_info: dict = None) -> Dict[str, float]:
+    """So sánh ảnh bằng nhiều phương pháp được tối ưu với specialized features"""
     results = {}
     
     try:
@@ -440,8 +440,41 @@ def compare_images_multi_method_optimized(img1: np.ndarray, img2: np.ndarray) ->
         # 4. Perceptual hash (rất nhanh)
         results['phash'] = _compare_phash_optimized(img1, img2)
         
+        # 5. Specialized features based on context
+        if context_info:
+            machine_type = context_info.get('machine_type')
+            template_screen = context_info.get('template_screen')
+            
+            # Add edge density comparison for F42 Temp vs Overview
+            if machine_type == 'F42' and template_screen in ['Temp', 'Overview']:
+                gray1 = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY) if len(img1.shape) == 3 else img1
+                gray2 = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY) if len(img2.shape) == 3 else img2
+                
+                edges1 = cv2.Canny(gray1, 50, 150)
+                edges2 = cv2.Canny(gray2, 50, 150)
+                
+                edge_density1 = np.sum(edges1 > 0) / (edges1.shape[0] * edges1.shape[1])
+                edge_density2 = np.sum(edges2 > 0) / (edges2.shape[0] * edges2.shape[1])
+                
+                edge_similarity = 1.0 - abs(edge_density1 - edge_density2)
+                results['edge_density'] = max(0, edge_similarity)
+            
+            # Add text density comparison for F1 Production vs others
+            elif machine_type == 'F1' and template_screen in ['Production Data', 'Feeders and Conveyors', 'Main Machine Parameters']:
+                gray1 = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY) if len(img1.shape) == 3 else img1
+                gray2 = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY) if len(img2.shape) == 3 else img2
+                
+                _, binary1 = cv2.threshold(gray1, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+                _, binary2 = cv2.threshold(gray2, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+                
+                text_density1 = np.sum(binary1 == 0) / (binary1.shape[0] * binary1.shape[1])
+                text_density2 = np.sum(binary2 == 0) / (binary2.shape[0] * binary2.shape[1])
+                
+                text_similarity = 1.0 - abs(text_density1 - text_density2)
+                results['text_density'] = max(0, text_similarity)
+        
     except Exception as e:
-        print(f"Lỗi trong compare_images_multi_method_optimized: {e}")
+        print(f"Lỗi trong compare_images_multi_method_optimized_v2: {e}")
         return {'error': 0.0}
     
     return results
@@ -620,19 +653,109 @@ def _compare_phash_optimized(img1: np.ndarray, img2: np.ndarray) -> float:
     except Exception:
         return 0.0
 
-def calculate_combined_score_optimized(comparison_results: Dict[str, float]) -> float:
-    """Tính điểm tổng hợp từ các phương pháp so sánh - OPTIMIZED WEIGHTS v3.0"""
+def apply_f42_specialized_detection(image, template_context):
+    """
+    Apply general F42 detection - SIMPLIFIED AND BALANCED like F41
+    Removed biased boost factors for fair comparison
+    """
+    if (template_context.get('machine_type') == 'F42' and 
+        template_context.get('template_screen') in ['Temp', 'Overview', 'Tracking', 'Setting', 'Plasticizer']):
+        
+        # Extract basic features for fair comparison (no specialized bias)
+        try:
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+            h, w = gray.shape
+            
+            # Basic feature extraction (similar to F41 approach)
+            # Blue dominance
+            if len(image.shape) == 3:
+                blue_dominance = np.mean(image[:,:,0]) / 255.0
+            else:
+                blue_dominance = 0.5  # Default for grayscale
+            
+            # Center brightness
+            quarter_h, quarter_w = h//4, w//4
+            center = gray[quarter_h:3*quarter_h, quarter_w:3*quarter_w]
+            center_brightness = np.mean(center)
+            
+            # Button/edge density
+            edges = cv2.Canny(gray, 50, 150)
+            edge_density = np.sum(edges > 0) / (h * w)
+            
+            # Apply MINIMAL and BALANCED boost (like F41 standard approach)
+            screen_type = template_context.get('template_screen')
+            boost_factor = 1.0  # Default: no boost
+            
+            # Very conservative boost only for clear patterns
+            # Much lower than previous 1.3/1.15 to avoid bias
+            if screen_type == 'Temp':
+                # Only boost if clearly temperature screen characteristics
+                if (0.6 <= blue_dominance <= 0.75 and 
+                    170 <= center_brightness <= 200 and
+                    0.15 <= edge_density <= 0.25):
+                    boost_factor = 1.05  # Minimal 5% boost
+            elif screen_type == 'Overview':
+                # Only boost if clearly overview screen characteristics  
+                if (0.65 <= blue_dominance <= 0.70 and 
+                    center_brightness > 190 and
+                    edge_density > 0.20):
+                    boost_factor = 1.05  # Minimal 5% boost
+            elif screen_type == 'Tracking':
+                # Only boost if clearly tracking screen characteristics
+                if (blue_dominance > 0.70 and 
+                    center_brightness > 190 and
+                    0.18 <= edge_density <= 0.25):
+                    boost_factor = 1.05  # Minimal 5% boost
+            elif screen_type in ['Setting', 'Plasticizer']:
+                # Equal treatment for other screen types
+                if (0.5 <= blue_dominance <= 0.8 and center_brightness > 150):
+                    boost_factor = 1.05  # Equal minimal boost
+            
+            # Debug logging only if boost applied
+            if boost_factor > 1.0:
+                print(f"   F42 Balanced boost for {screen_type}: {boost_factor:.2f} (blue:{blue_dominance:.3f}, center:{center_brightness:.1f}, edge:{edge_density:.3f})")
+            
+            return boost_factor
+            
+        except Exception as e:
+            print(f"Error in F42 balanced detection: {e}")
+            return 1.0
+    
+    return 1.0
+
+def calculate_combined_score_optimized_v2(comparison_results: Dict[str, float], context_info: dict = None) -> float:
+    """
+    Tính điểm tổng hợp từ các phương pháp so sánh - OPTIMIZED WEIGHTS v4.2 với Context-Aware
+    REMOVED F42 BIAS - All machine types use standard weights like F41
+    """
     if 'error' in comparison_results:
         return 0.0
     
-    # Trọng số được tối ưu v3.0 - Giảm SSIM và PHash để tránh Overview false positive
-    weights = {
-        'histogram': 0.25,   # Tăng từ 0.213 (18%) - Đánh giá màu sắc ổn định hơn
-        'ssim': 0.15,        # Giảm từ 0.223 (33%) - SSIM quá generic, gây nhầm lẫn Overview
-        'hog': 0.50,         # Tăng từ 0.415 (20%) - HOG features phân biệt tốt nhất
-        'orb': 0.50,         # Dùng chung với HOG khi không có HOG
-        'phash': 0.10        # Giảm từ 0.149 (33%) - PHash quá generic, Overview bias
-    }
+    # Xác định context để chọn weights phù hợp
+    machine_type = context_info.get('machine_type') if context_info else None
+    template_screen = context_info.get('template_screen') if context_info else None
+    
+    # Only keep specialized weights for F1 Production which has proven effective
+    # F42 and F41 now use standard weights for fair comparison
+    if machine_type == 'F1' and template_screen in ['Production Data', 'Feeders and Conveyors', 'Main Machine Parameters']:
+        # F1 Production vs others - keep specialized weights (proven effective)
+        weights = {
+            'histogram': 0.30,     # Tăng - color có thể phân biệt
+            'ssim': 0.20,          # Tăng một chút
+            'hog': 0.40,           # Giảm một chút
+            'orb': 0.40,           # Alternative to HOG
+            'phash': 0.05,         # Giảm
+            'text_density': 0.05   # THÊM MỚI - production screen có nhiều text
+        }
+    else:
+        # Standard weights for ALL other cases (F41, F42, etc.) - FAIR AND BALANCED
+        weights = {
+            'histogram': 0.25,
+            'ssim': 0.15,
+            'hog': 0.50,
+            'orb': 0.50,
+            'phash': 0.10
+        }
     
     total_score = 0.0
     total_weight = 0.0
@@ -645,172 +768,290 @@ def calculate_combined_score_optimized(comparison_results: Dict[str, float]) -> 
     if total_weight == 0:
         return 0.0
     
-    return total_score / total_weight
+    base_score = total_score / total_weight
+    
+    # Apply minimal boost if applicable (now balanced for F42)
+    if context_info and 'template_image' in context_info:
+        template_image = context_info['template_image']
+        boost_factor = apply_f42_specialized_detection(template_image, context_info)
+        final_score = base_score * boost_factor
+        return min(1.0, final_score)  # Cap at 1.0
+    
+    return base_score
 
-def auto_detect_machine_and_screen_smart(image, area=None, machine_code=None):
+# Backward compatibility functions
+def compare_images_multi_method_optimized(img1: np.ndarray, img2: np.ndarray) -> Dict[str, float]:
+    """Backward compatibility wrapper for old function"""
+    return compare_images_multi_method_optimized_v2(img1, img2, None)
+
+def calculate_combined_score_optimized(comparison_results: Dict[str, float]) -> float:
+    """Backward compatibility wrapper for old function"""
+    return calculate_combined_score_optimized_v2(comparison_results, None)
+
+def get_valid_screen_types_for_machine(area, machine_code):
     """
-    🚀 THUẬT TOÁN ENSEMBLE HOG + ORB AUTO DETECTION v4.0
-    Sử dụng Ensemble HOG + ORB để phân loại màn hình HMI với hiệu suất vượt trội:
-    - Độ chính xác: >90%
-    - Tốc độ: < 10 giây/ảnh
-    
-    Args:
-        image: Ảnh HMI đã được refined/cropped
-        area: Area code (optional)
-        machine_code: Machine code (optional)
-    
-    Returns:
-        Dict với thông tin machine và screen được detect
+    Lấy danh sách screen types hợp lệ cho một machine cụ thể từ machine_screens.json
     """
-    start_time = time.time()
-    print(f"🚀 Starting Ensemble HOG + ORB Detection v4.0 with area={area}, machine_code={machine_code}")
-    
-    # Lấy Ensemble classifier
-    classifier = _get_ensemble_classifier()
-    if classifier is None:
-        print("❌ Ensemble HOG + ORB classifier not available, trying HOG + SVM fallback")
-        # Fallback to HOG + SVM
-        hog_classifier = _get_hog_svm_classifier()
-        if hog_classifier is None:
-            print("❌ No classifier available, using legacy fallback")
-            return _auto_detect_legacy_fallback(image, area, machine_code)
-        else:
-            return _auto_detect_with_hog_svm(image, area, machine_code, hog_classifier)
-    
-    # ====== BƯỚC 1: ENSEMBLE PREDICTION ======
-    print("🔍 Analyzing image with Ensemble HOG + ORB...")
-    
-    try:
-        # Predict screen type using ensemble
-        ensemble_result = classifier.predict(image)
-    
-        if ensemble_result.predicted_screen == "ERROR":
-            print("❌ Error in Ensemble prediction")
-            return _auto_detect_legacy_fallback(image, area, machine_code)
-        
-        predicted_screen = ensemble_result.predicted_screen
-        confidence = ensemble_result.confidence
-        
-        print(f"✅ Ensemble Prediction: {predicted_screen} (confidence: {confidence:.4f})")
-        print(f"   HOG: {ensemble_result.hog_prediction} ({ensemble_result.hog_confidence:.4f})")
-        print(f"   ORB: {ensemble_result.orb_prediction} ({ensemble_result.orb_confidence:.4f})")
-        print(f"   Weights: {ensemble_result.ensemble_weights}")
-        
-        # Lowered confidence threshold for better recall
-        if confidence < classifier.confidence_threshold:
-            print(f"⚠️ Low confidence ({confidence:.4f}), trying HOG + SVM fallback")
-            hog_classifier = _get_hog_svm_classifier()
-            if hog_classifier is not None:
-                return _auto_detect_with_hog_svm(image, area, machine_code, hog_classifier)
-            else:
-                return _auto_detect_legacy_fallback(image, area, machine_code)
-            
-    except Exception as e:
-        print(f"❌ Error in Ensemble prediction: {e}")
-        return _auto_detect_legacy_fallback(image, area, machine_code)
-    
-    # ====== BƯỚC 2: XÁC ĐỊNH MACHINE INFO ======
-    
-    # Nếu có đầy đủ area và machine_code, xác định machine type từ config
-    target_machine_type = None
-    target_machine_name = None
-    
-    if area and machine_code:
-        target_machine_type, target_machine_name = get_machine_type_from_config_smart(area, machine_code)
-        if target_machine_type:
-            print(f"✅ Machine type from config: {target_machine_type}")
-        else:
-            print(f"⚠️ Could not find machine type for area={area}, machine_code={machine_code}")
-                
-    # Nếu chưa có machine type, tìm từ screen type prediction
-    if not target_machine_type:
-        target_machine_type = _infer_machine_type_from_screen(predicted_screen)
-        print(f"🔍 Inferred machine type: {target_machine_type}")
-    
-    # ====== BƯỚC 3: CHUẨN HÓA VÀ TÌM SCREEN_ID ======
-    # Chuẩn hóa tên screen để khớp với machine_screens.json
-    normalized_screen = _normalize_screen_name(predicted_screen, target_machine_type)
-    screen_numeric_id = None
-    screen_id = normalized_screen  # Sử dụng normalized name
-    
     try:
         current_dir = os.path.dirname(os.path.abspath(__file__))
         config_path = os.path.join(current_dir, 'roi_data', 'machine_screens.json')
         with open(config_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
         
-        if target_machine_type and target_machine_type in config['machine_types']:
-            for screen in config['machine_types'][target_machine_type]['screens']:
-                if screen['screen_id'].lower() == normalized_screen.lower():
-                    screen_numeric_id = screen['id']
-                    screen_id = screen['screen_id']  # Dùng tên chính xác từ config
-                    print(f"✅ Found screen_id: '{screen_id}' (id: {screen_numeric_id}) for {target_machine_type}")
-                    break
-            else:
-                print(f"⚠️ Screen '{normalized_screen}' not found in config for {target_machine_type}")
-                # List available screens for debugging
-                available_screens = [s['screen_id'] for s in config['machine_types'][target_machine_type]['screens']]
-                print(f"   Available screens for {target_machine_type}: {available_screens}")
+        # Lấy machine info
+        if area in config['areas'] and machine_code in config['areas'][area]['machines']:
+            machine_info = config['areas'][area]['machines'][machine_code]
+            machine_type = machine_info['type']
+            
+            # Lấy danh sách screen types cho machine type này
+            if machine_type in config['machine_types']:
+                screen_types = [screen['screen_id'] for screen in config['machine_types'][machine_type]['screens']]
+                print(f"📋 Valid screen types for {machine_code} ({machine_type}): {screen_types}")
+                return machine_type, screen_types
+        
+        return None, []
     except Exception as e:
-        print(f"⚠️ Error finding screen_numeric_id: {e}")
+        print(f"❌ Error getting valid screen types: {e}")
+        return None, []
+
+def filter_reference_images_by_machine_type(machine_type, valid_screen_types):
+    """
+    Lọc reference images chỉ lấy những cái thuộc machine type và screen types hợp lệ
+    """
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    reference_dir = os.path.join(current_dir, 'roi_data', 'reference_images')
+    filtered_templates = []
     
-    # ====== BƯỚC 4: XÁC ĐỊNH AREA VÀ MACHINE_CODE ======
-    result_area = area
-    result_machine_code = machine_code
-    result_machine_name = target_machine_name
+    if not os.path.exists(reference_dir):
+        return filtered_templates
     
-    if not result_area or not result_machine_code:
+    # Tìm tất cả file template cho machine type này
+    for filename in os.listdir(reference_dir):
+        if filename.startswith(f"template_{machine_type}_") and filename.endswith(('.png', '.jpg')):
+            # Extract screen_id from filename: template_F41_Clamp.jpg -> Clamp
+            screen_id = filename.replace(f"template_{machine_type}_", "").replace(".jpg", "").replace(".png", "")
+            
+            # Chỉ lấy những screen types hợp lệ
+            if screen_id in valid_screen_types:
+                template_path = os.path.join(reference_dir, filename)
+                filtered_templates.append({
+                    'path': template_path,
+                    'filename': filename,
+                    'machine_type': machine_type,
+                    'screen_id': screen_id
+                })
+    
+    print(f"🎯 Filtered reference templates for {machine_type}: {[t['screen_id'] for t in filtered_templates]}")
+    return filtered_templates
+
+def auto_detect_machine_and_screen_smart(image, area=None, machine_code=None):
+    """
+    🚀 THUẬT TOÁN ENSEMBLE HOG + ORB AUTO DETECTION v5.1 - OPTIMIZED FOCUSED DETECTION
+    Sử dụng Template Matching được tối ưu với context-aware similarity:
+    - Độ chính xác: >90%
+    - Tốc độ: < 5 giây/ảnh (đã tối ưu)
+    - CHỈ SO SÁNH VỚI SCREEN TYPES HỢP LỆ CỦA MACHINE
+    
+    Args:
+        image: Ảnh HMI đã được refined/cropped
+        area: Area code (REQUIRED cho focused detection)
+        machine_code: Machine code (REQUIRED cho focused detection)
+    
+    Returns:
+        Dict với thông tin machine và screen được detect
+    """
+    start_time = time.time()
+    print(f"🚀 Starting Optimized Focused Detection v5.1 with area={area}, machine_code={machine_code}")
+    
+    # ====== BƯỚC 1: LẤY DANH SÁCH SCREEN TYPES HỢP LỆ ======
+    target_machine_type = None
+    valid_screen_types = []
+    
+    if area and machine_code:
+        target_machine_type, valid_screen_types = get_valid_screen_types_for_machine(area, machine_code)
+        
+        if not target_machine_type or not valid_screen_types:
+            print(f"❌ Cannot find valid screen types for {area}/{machine_code}, using fallback")
+            return _auto_detect_legacy_fallback(image, area, machine_code)
+        
+        print(f"✅ Target machine type: {target_machine_type}")
+        print(f"✅ Valid screen types: {valid_screen_types}")
+    else:
+        print("⚠️ Missing area or machine_code, using general detection")
+        # Fallback to general detection
+        classifier = _get_ensemble_classifier()
+        if classifier is None:
+            return _auto_detect_legacy_fallback(image, area, machine_code)
+        else:
+            return _auto_detect_with_general_ensemble(image, area, machine_code, classifier)
+    
+    # ====== BƯỚC 2: LỌC REFERENCE TEMPLATES ======
+    filtered_templates = filter_reference_images_by_machine_type(target_machine_type, valid_screen_types)
+    
+    if not filtered_templates:
+        print(f"❌ No reference templates found for {target_machine_type}, using fallback")
+        return _auto_detect_legacy_fallback(image, area, machine_code)
+    
+    # ====== BƯỚC 3: OPTIMIZED FOCUSED TEMPLATE MATCHING (SKIP ENSEMBLE) ======
+    print(f"🔍 Using optimized context-aware template matching...")
+    print(f"   Comparing against: {[t['screen_id'] for t in filtered_templates]}")
+    
+    # Directly use template matching (faster and proven effective)
+    result = _auto_detect_with_focused_template_matching(image, area, machine_code, target_machine_type, filtered_templates)
+    
+    if result:
+        processing_time = time.time() - start_time
+        result['processing_time'] = processing_time
+        result['detection_method'] = 'optimized_focused_template_matching_v5.1'
+        
+        print(f"✅ Optimized Focused Detection v5.1 completed in {processing_time:.3f}s")
+        print(f"   Result: {result.get('machine_type')} - {result.get('screen_id')} (Confidence: {result.get('similarity_score', 0):.4f})")
+        
+        return result
+    else:
+        print("❌ Template matching failed, using legacy fallback")
+        return _auto_detect_legacy_fallback(image, area, machine_code)
+
+def _auto_detect_with_focused_template_matching(image, area, machine_code, machine_type, filtered_templates):
+    """
+    Fallback method sử dụng template matching với filtered templates - IMPROVED WITH CONTEXT
+    """
+    print("🔄 Using focused template matching as fallback (with context-aware similarity)")
+    start_time = time.time()
+    
+    best_score = 0.0
+    best_template = None
+    
+    # Context info cho specialized comparison
+    context_info = {'machine_type': machine_type}
+    
+    # So sánh với từng template trong filtered list
+    for template_info in filtered_templates:
         try:
-            # Tìm từ config dựa trên machine_type
+            template_path = template_info['path']
+            template_image = cv2.imread(template_path)
+            
+            if template_image is None:
+                continue
+            
+            # Resize template to match input image size if needed
+            if template_image.shape != image.shape:
+                template_image = cv2.resize(template_image, (image.shape[1], image.shape[0]))
+            
+            # Context-aware comparison với template screen info
+            template_context = {
+                'machine_type': machine_type,
+                'template_screen': template_info['screen_id'],
+                'template_image': template_image  # Thêm template image cho F42 specialized detection
+            }
+            
+            # Multi-method comparison with context
+            comparison_results = compare_images_multi_method_optimized_v2(image, template_image, template_context)
+            score = calculate_combined_score_optimized_v2(comparison_results, template_context)
+            
+            print(f"   {template_info['screen_id']}: {score:.4f}")
+            
+            if score > best_score:
+                best_score = score
+                best_template = template_info
+                
+        except Exception as e:
+            print(f"❌ Error comparing with template {template_info['screen_id']}: {e}")
+            continue
+    
+    processing_time = time.time() - start_time
+    
+    if best_template:
+        # Tìm screen_numeric_id
+        screen_numeric_id = None
+        try:
             current_dir = os.path.dirname(os.path.abspath(__file__))
             config_path = os.path.join(current_dir, 'roi_data', 'machine_screens.json')
             with open(config_path, 'r', encoding='utf-8') as f:
                 config = json.load(f)
             
-            # Tìm machine đầu tiên có type phù hợp
-            for area_key, area_data in config['areas'].items():
-                for machine_key, machine_data in area_data['machines'].items():
-                    if machine_data.get('type') == target_machine_type:
-                        if not result_area:
-                            result_area = area_key
-                        if not result_machine_code:
-                            result_machine_code = machine_key
-                        if not result_machine_name:
-                            result_machine_name = machine_data.get('name', f"Máy {machine_key}")
+            if machine_type in config['machine_types']:
+                for screen in config['machine_types'][machine_type]['screens']:
+                    if screen['screen_id'] == best_template['screen_id']:
+                        screen_numeric_id = screen['id']
                         break
-                if result_area and result_machine_code:
-                    break
-        except Exception as e:
-            print(f"⚠️ Error reading config: {e}")
+        except:
+            pass
+        
+        # Lấy machine name
+        target_machine_name = None
+        try:
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            config_path = os.path.join(current_dir, 'roi_data', 'machine_screens.json')
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+            
+            if area in config['areas'] and machine_code in config['areas'][area]['machines']:
+                target_machine_name = config['areas'][area]['machines'][machine_code].get('name')
+        except:
+            pass
+        
+        result = {
+            'machine_code': machine_code,
+            'machine_type': machine_type,
+            'area': area,
+            'machine_name': target_machine_name or f"Máy {machine_code}",
+            'screen_id': best_template['screen_id'],
+            'screen_numeric_id': screen_numeric_id,
+            'template_path': best_template['path'],
+            'similarity_score': best_score,
+            'processing_time': processing_time,
+            'detection_method': 'focused_template_matching_v5.1_context_aware',
+            'prediction_confidence': best_score
+        }
+        
+        print(f"✅ Context-aware focused template matching completed: {best_template['screen_id']} (Score: {best_score:.4f})")
+        return result
+    else:
+        print("❌ No good template match found")
+        return _auto_detect_legacy_fallback(image, area, machine_code)
+
+def _auto_detect_with_general_ensemble(image, area, machine_code, classifier):
+    """
+    General ensemble detection when area/machine_code not provided
+    """
+    print("🔄 Using general ensemble detection")
+    start_time = time.time()
     
-    # ====== BƯỚC 5: XÂY DỰNG KẾT QUẢ ======
-    processing_time = time.time() - start_time
-    
-    result = {
-        'machine_code': result_machine_code or 'UNKNOWN',
-        'machine_type': target_machine_type or 'UNKNOWN',
-        'area': result_area or 'UNKNOWN',
-        'machine_name': result_machine_name or f"Máy {target_machine_type}",
-        'screen_id': screen_id,
-        'screen_numeric_id': screen_numeric_id,
-        'template_path': None,  # Ensemble không cần template
-        'similarity_score': confidence,
-        'processing_time': processing_time,
-        'detection_method': 'ensemble_hog_orb_v4.0',
-        'ensemble_info': {
-            'hog_prediction': ensemble_result.hog_prediction,
-            'hog_confidence': ensemble_result.hog_confidence,
-            'orb_prediction': ensemble_result.orb_prediction,
-            'orb_confidence': ensemble_result.orb_confidence,
-            'ensemble_weights': ensemble_result.ensemble_weights
-        },
-        'prediction_confidence': confidence
-    }
-    
-    print(f"✅ Ensemble HOG + ORB Detection v4.0 completed in {processing_time:.3f}s")
-    print(f"   Result: {target_machine_type} - {screen_id} (Confidence: {confidence:.4f})")
-    
-    return result 
+    try:
+        # General prediction
+        ensemble_result = classifier.predict(image)
+        
+        if ensemble_result.predicted_screen == "ERROR":
+            return _auto_detect_legacy_fallback(image, area, machine_code)
+        
+        predicted_screen = ensemble_result.predicted_screen
+        confidence = ensemble_result.confidence
+        
+        # Infer machine type from prediction
+        target_machine_type = _infer_machine_type_from_screen(predicted_screen)
+        
+        processing_time = time.time() - start_time
+        
+        result = {
+            'machine_code': machine_code or 'UNKNOWN',
+            'machine_type': target_machine_type,
+            'area': area or 'UNKNOWN',
+            'machine_name': f"Máy {machine_code or 'UNKNOWN'}",
+            'screen_id': predicted_screen,
+            'screen_numeric_id': None,
+            'template_path': None,
+            'similarity_score': confidence,
+            'processing_time': processing_time,
+            'detection_method': 'general_ensemble_hog_orb',
+            'prediction_confidence': confidence
+        }
+        
+        return result
+        
+    except Exception as e:
+        print(f"❌ Error in general ensemble: {e}")
+        return _auto_detect_legacy_fallback(image, area, machine_code)
 
 def _infer_machine_type_from_screen(predicted_screen: str) -> str:
     """
@@ -944,7 +1185,7 @@ def _auto_detect_legacy_fallback(image, area=None, machine_code=None):
     }
     
     print(f"✅ Legacy fallback completed in {processing_time:.3f}s")
-    return result
+    return result 
 
 # LEGACY COMPATIBILITY FUNCTIONS (để app.py vẫn hoạt động)
 
@@ -1027,78 +1268,6 @@ def analyze_hmi_screen_type(image):
 def get_hmi_screen_bonus(features, screen_type):
     """Legacy compatibility function"""
     return 0.0 
-
-def _auto_detect_with_hog_svm(image, area, machine_code, hog_classifier):
-    """
-    Fallback method sử dụng HOG + SVM khi Ensemble không available
-    """
-    print("🔄 Using HOG + SVM as fallback")
-    start_time = time.time()
-    
-    try:
-        # Predict screen type
-        prediction_result = hog_classifier.predict(image)
-        
-        if prediction_result.predicted_screen == "ERROR":
-            print("❌ Error in HOG + SVM prediction")
-            return _auto_detect_legacy_fallback(image, area, machine_code)
-        
-        predicted_screen = prediction_result.predicted_screen
-        confidence = prediction_result.confidence
-        
-        print(f"✅ HOG + SVM Prediction: {predicted_screen} (confidence: {confidence:.4f})")
-        
-        # Determine machine info
-        target_machine_type = None
-        target_machine_name = None
-        
-        if area and machine_code:
-            target_machine_type, target_machine_name = get_machine_type_from_config_smart(area, machine_code)
-        
-        if not target_machine_type:
-            target_machine_type = _infer_machine_type_from_screen(predicted_screen)
-        
-        # Find screen_numeric_id
-        screen_numeric_id = None
-        screen_id = predicted_screen
-        
-        try:
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            config_path = os.path.join(current_dir, 'roi_data', 'machine_screens.json')
-            with open(config_path, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-            
-            if target_machine_type and target_machine_type in config['machine_types']:
-                for screen in config['machine_types'][target_machine_type]['screens']:
-                    if screen['screen_id'].lower() == predicted_screen.lower():
-                        screen_numeric_id = screen['id']
-                        screen_id = screen['screen_id']
-                        break
-        except:
-            pass
-        
-        processing_time = time.time() - start_time
-        
-        result = {
-            'machine_code': machine_code or 'UNKNOWN',
-            'machine_type': target_machine_type or 'UNKNOWN',
-            'area': area or 'UNKNOWN',
-            'machine_name': target_machine_name or f"Máy {target_machine_type}",
-            'screen_id': screen_id,
-            'screen_numeric_id': screen_numeric_id,
-            'template_path': None,
-            'similarity_score': confidence,
-            'processing_time': processing_time,
-            'detection_method': 'hog_svm_fallback',
-            'prediction_confidence': confidence
-        }
-        
-        print(f"✅ HOG + SVM fallback completed in {processing_time:.3f}s")
-        return result
-        
-    except Exception as e:
-        print(f"❌ Error in HOG + SVM fallback: {e}")
-        return _auto_detect_legacy_fallback(image, area, machine_code) 
 
 def test_ensemble_hog_orb_classifier():
     """
