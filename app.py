@@ -1329,7 +1329,7 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                             # Chấp nhận retry result nếu confidence > 0.3 (theo yêu cầu user)
                             # hoặc nếu retry confidence tốt hơn original
                             if retry_confidence > 0.3 or retry_confidence > best_confidence:
-                                print(f"✅ Accepting retry result: confidence {retry_confidence:.4f} (threshold: 0.3, original: {best_confidence:.4f})")
+                                print(f"✅ Accepting re0812try result: confidence {retry_confidence:.4f} (threshold: 0.3, original: {best_confidence:.4f})")
                                 
                                 # Áp dụng định dạng theo decimal_places nếu kết quả là số và có cấu hình
                                 formatted_retry_text = retry_text
