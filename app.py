@@ -679,7 +679,7 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                     pass
                 
                 # Nếu là trường hợp đặc biệt ON/OFF, phân tích màu sắc thay vì OCR
-                if is_special_on_off_case:
+                if is_special_on_off_case and machine_type != "F1":
                     # Tách các kênh màu BGR
                     b, g, r = cv2.split(roi)
                     # Tính giá trị trung bình của kênh xanh dương và đỏ
@@ -690,6 +690,35 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                         best_text = "OFF"
                     else:
                         best_text = "ON"
+                    
+                    # Lưu ảnh ROI với kết quả color detection
+                    save_roi_image_with_result(roi, roi_name, original_filename, best_text, 1.0, best_text, is_text_result=True)
+                    
+                    results.append({
+                        "roi_index": roi_name,
+                        "text": best_text,
+                        "confidence": 1.0,  # Đặt độ tin cậy là 100% vì dựa trên phân tích màu sắc
+                        "has_text": True
+                    })
+                    
+                    continue  # Chuyển sang ROI tiếp theo
+                
+                # Nếu là trường hợp đặc biệt ON/OFF và không phải machine_type F1, phân tích màu sắc thay vì OCR
+                if is_special_on_off_case and machine_type != "F1":
+                    # Tách các kênh màu BGR
+                    b, g, r = cv2.split(roi)
+                    # Tính giá trị trung bình của kênh xanh dương và đỏ
+                    avg_blue = np.mean(b)
+                    avg_red = np.mean(r)
+                    # Xác định kết quả dựa trên màu sắc chủ đạo
+                    if avg_blue > avg_red:
+                        best_text = "OFF"
+                    else:
+                        best_text = "ON"
+                    
+                    # Lưu ảnh ROI với kết quả color detection
+                    save_roi_image_with_result(roi, roi_name, original_filename, best_text, 1.0, best_text, is_text_result=True)
+                    
                     results.append({
                         "roi_index": roi_name,
                         "text": best_text,
@@ -898,6 +927,10 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                         "original_value": original_value
                     })
                     print(f"Added text result for ROI {i} ({roi_name}): '{best_text}'")
+                    
+                    # Lưu ảnh ROI với kết quả text detection
+                    save_roi_image_with_result(roi, roi_name, original_filename, best_text, best_confidence, original_value, is_text_result=True)
+                    
                     continue  # Bỏ qua phần xử lý định dạng số tiếp theo
                 
                 # Nếu kết quả chủ yếu là số, xử lý theo định dạng decimal_places
@@ -905,6 +938,7 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                 best_text = best_text.upper()
                 print(best_text)
                 best_text = best_text.replace('O', '0').replace('I', '1').replace('C','0').replace('S','5').replace('G','6').replace('B','8').replace('T','7').replace('L','1').replace('H','8').replace('A','4').replace('E','3').replace('Z','2').replace('U','0')
+                
                 
                 # Xử lý kết quả OCR có khoảng trắng giữa các số (ví dụ: "1 3")
                 if ' ' in best_text and all(c.isdigit() or c == ' ' or c == '.' or c == '-' for c in best_text):
@@ -1064,6 +1098,9 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                     "original_value": original_value
                 })
                 print(f"Added result for ROI {i} ({roi_name}): Original: '{best_text}', Formatted: '{formatted_text}'")
+                
+                # Lưu ảnh ROI với kết quả numeric detection sử dụng hàm mới
+                save_roi_image_with_result(roi, roi_name, original_filename, formatted_text, best_confidence, original_value, is_text_result=False)
                 
                 # Lưu ảnh kết quả cuối cùng
                 processed_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'processed_roi')
@@ -1629,6 +1666,37 @@ def upload_image():
                 "machine_type": machine_type
             }
         }
+        
+        # Lưu kết quả vào file JSON trong folder ocr_results
+        try:
+            # Tạo timestamp cho tên file
+            timestamp_str = time.strftime("%Y%m%d_%H%M%S")
+            
+            # Tạo tên file theo format: ocr_result_{timestamp}_{machine_type}_{screen_id}_{original_filename}_{machine_code}_{screen_id}.json
+            # Lấy tên file gốc không có extension
+            base_filename = os.path.splitext(filename)[0]
+            json_filename = f"ocr_result_{timestamp_str}_{machine_type}_{screen_id}_{base_filename}_{machine_code}_{screen_id}.json"
+            
+            # Đường dẫn đầy đủ đến file JSON
+            json_file_path = os.path.join(app.config['OCR_RESULTS_FOLDER'], json_filename)
+            
+            # Tạo thư mục ocr_results nếu chưa tồn tại
+            os.makedirs(app.config['OCR_RESULTS_FOLDER'], exist_ok=True)
+            
+            # Lưu dữ liệu JSON vào file
+            with open(json_file_path, 'w', encoding='utf-8') as json_file:
+                json.dump(result_data, json_file, ensure_ascii=False, indent=2)
+            
+            print(f"📁 OCR result saved to: {json_file_path}")
+            
+            # Thêm thông tin về file đã lưu vào response
+            result_data["saved_json_file"] = json_filename
+            result_data["saved_json_path"] = json_file_path
+            
+        except Exception as e:
+            print(f"❌ Error saving OCR result to JSON file: {str(e)}")
+            # Không làm gián đoạn API response nếu việc lưu file thất bại
+            traceback.print_exc()
         
         # Trả về kết quả (không lưu file để tăng tốc)
         return jsonify(result_data), 201
@@ -4580,6 +4648,71 @@ def are_similar_chars(char1, char2):
         if char1 in group and char2 in group:
             return True
     return False
+
+def save_roi_image_with_result(roi, roi_name, original_filename, detected_text, confidence, original_value, is_text_result=False):
+    """
+    Lưu ảnh ROI với kết quả OCR được overlay lên ảnh
+    
+    Args:
+        roi: Ảnh ROI đã cắt
+        roi_name: Tên của ROI
+        original_filename: Tên file gốc
+        detected_text: Text đã được detect
+        confidence: Độ tin cậy của kết quả OCR
+        original_value: Giá trị gốc trước khi xử lý
+        is_text_result: True nếu kết quả là text, False nếu là số
+    """
+    try:
+        processed_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'processed_roi')
+        os.makedirs(processed_folder, exist_ok=True)
+        
+        base_filename = os.path.splitext(original_filename)[0]
+        result_type = "text" if is_text_result else "number"
+        roi_result_filename = f"{base_filename}_{roi_name}_{result_type}_detected.png"
+        roi_result_path = os.path.join(processed_folder, roi_result_filename)
+        
+        # Tạo ảnh kết quả với overlay text
+        result_img = roi.copy()
+        if len(result_img.shape) == 2:  # Nếu là grayscale, chuyển sang BGR
+            result_img = cv2.cvtColor(result_img, cv2.COLOR_GRAY2BGR)
+        
+        # Vẽ bounding box quanh ROI
+        cv2.rectangle(result_img, (2, 2), (result_img.shape[1]-2, result_img.shape[0]-2), 
+                     (0, 255, 0) if is_text_result else (255, 0, 0), 2)
+        
+        # Tính toán kích thước font phù hợp với ảnh
+        font_scale = max(0.4, min(result_img.shape[0], result_img.shape[1]) / 120)
+        
+        # Vẽ kết quả detected lên ảnh (màu đỏ cho kết quả chính)
+        cv2.putText(result_img, f"Detected: '{detected_text}'", 
+                  (5, 25), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 255), 1)
+        
+        # Vẽ confidence (màu trắng)
+        cv2.putText(result_img, f"Confidence: {confidence:.3f}", 
+                  (5, 50), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 255, 255), 1)
+        
+        # Vẽ giá trị gốc nếu khác với kết quả đã xử lý (màu xanh lá)
+        if original_value and original_value != detected_text:
+            cv2.putText(result_img, f"Original: '{original_value}'", 
+                      (5, int(result_img.shape[0] - 10)), cv2.FONT_HERSHEY_SIMPLEX, 
+                      font_scale, (0, 255, 0), 1)
+        
+        # Vẽ loại kết quả (màu vàng)
+        cv2.putText(result_img, f"Type: {result_type.upper()}", 
+                  (5, 75), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 255, 255), 1)
+        
+        # Lưu ảnh kết quả
+        cv2.imwrite(roi_result_path, result_img)
+        print(f"💾 Saved {result_type} detection image to: {roi_result_path}")
+        
+        return roi_result_path
+        
+    except Exception as e:
+        print(f"❌ Error saving ROI image with result: {str(e)}")
+        return None
+
+# Sửa lại hàm perform_ocr_on_roi để sử dụng ảnh đã căn chỉnh
+auto_detect_machine_and_screen = auto_detect_machine_and_screen_smart
 
 if __name__ == '__main__':
     print("DEBUG INFO:")

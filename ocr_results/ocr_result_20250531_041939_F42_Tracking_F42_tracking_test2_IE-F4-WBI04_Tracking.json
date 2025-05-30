@@ -1,0 +1,184 @@
+{
+  "filename": "F42_tracking_test2.jpg",
+  "machine_code": "IE-F4-WBI04",
+  "area": "F4",
+  "machine_name": "Máy IE-F4-WBI04",
+  "screen_id": "Tracking",
+  "timestamp": "2025-05-31 04:19:39",
+  "template_path": "d:\\Wrembly\\python_api_test\\roi_data\\reference_images\\template_F42_Tracking.jpg",
+  "results": [
+    {
+      "roi_index": "so_lan_bom-chdo",
+      "text": "BAT",
+      "confidence": 0.9859517216682434,
+      "has_text": true,
+      "original_value": "BAT"
+    },
+    {
+      "roi_index": "so_lan_bom",
+      "text": "279",
+      "confidence": 0.9999848584019675,
+      "has_text": true,
+      "original_value": "279"
+    },
+    {
+      "roi_index": "bo_dem_san_xuat-chdo",
+      "text": "BAT",
+      "confidence": 0.9539112256245436,
+      "has_text": true,
+      "original_value": "BAT"
+    },
+    {
+      "roi_index": "so_coc",
+      "text": "28",
+      "confidence": 0.9490640506488556,
+      "has_text": true,
+      "original_value": "28"
+    },
+    {
+      "roi_index": "sp_khong_loi",
+      "text": "278",
+      "confidence": 0.9995788685533962,
+      "has_text": true,
+      "original_value": "278"
+    },
+    {
+      "roi_index": "sp_khong_loi-con_lai",
+      "text": "-278",
+      "confidence": 0.8857233347292008,
+      "has_text": true,
+      "original_value": "-278"
+    },
+    {
+      "roi_index": "sp_khong_loi-du_dinh",
+      "text": "0",
+      "confidence": 0.18194229168239748,
+      "has_text": true,
+      "original_value": "U"
+    },
+    {
+      "roi_index": "cau_kien_san_pham",
+      "text": "7784",
+      "confidence": 0.8113212420593962,
+      "has_text": true,
+      "original_value": "7784"
+    },
+    {
+      "roi_index": "cau_kien_san_pham-con_lai",
+      "text": "-7784",
+      "confidence": 0.9996893477659903,
+      "has_text": true,
+      "original_value": "-7784"
+    },
+    {
+      "roi_index": "cau_kien_san_pham-du_dinh",
+      "text": "0",
+      "confidence": 0.9510732509469478,
+      "has_text": true,
+      "original_value": "0"
+    },
+    {
+      "roi_index": "hoan_thanh",
+      "text": "27800",
+      "confidence": 0.9997667330083764,
+      "has_text": true,
+      "original_value": "27800"
+    },
+    {
+      "roi_index": "t_gian_con_lai-hour",
+      "text": "0",
+      "confidence": 0.9999518400268812,
+      "has_text": true,
+      "original_value": "0"
+    },
+    {
+      "roi_index": "t_gian_con_lai-min",
+      "text": "00",
+      "confidence": 0.9719749805840445,
+      "has_text": true,
+      "original_value": "00"
+    },
+    {
+      "roi_index": "dem_khoang_sp-chdo",
+      "text": "BAT",
+      "confidence": 0.9994562982345386,
+      "has_text": true,
+      "original_value": "BAT"
+    },
+    {
+      "roi_index": "so_lan_bom_moi_lo",
+      "text": "2308",
+      "confidence": 0.86753503755927,
+      "has_text": true,
+      "original_value": "2308"
+    },
+    {
+      "roi_index": "so_lan_bom_moi_lo-so_con_lai",
+      "text": "7067",
+      "confidence": 0.9999998211860657,
+      "has_text": true,
+      "original_value": "7067"
+    },
+    {
+      "roi_index": "so_lan_bom_moi_lo-du_dinh",
+      "text": "9375",
+      "confidence": 0.589994846481695,
+      "has_text": true,
+      "original_value": "9375"
+    },
+    {
+      "roi_index": "lan_bom_san_xuat",
+      "text": "64624",
+      "confidence": 0.870797020222638,
+      "has_text": true,
+      "original_value": "64624"
+    },
+    {
+      "roi_index": "lan_bom_san_xuat-so_con_lai",
+      "text": "197876",
+      "confidence": 0.7189174456103128,
+      "has_text": true,
+      "original_value": "197876"
+    },
+    {
+      "roi_index": "lan_bom_san_xuat-so_du_dinh",
+      "text": "262500",
+      "confidence": 0.9724536225936333,
+      "has_text": true,
+      "original_value": "262500"
+    },
+    {
+      "roi_index": "toc_do_hoan_thanh",
+      "text": "25",
+      "confidence": 0.9999976397772992,
+      "has_text": true,
+      "original_value": "25"
+    },
+    {
+      "roi_index": "tgian_nap_khoang_sp_con_lai-hour",
+      "text": "53",
+      "confidence": 0.9910214231391027,
+      "has_text": true,
+      "original_value": "53"
+    },
+    {
+      "roi_index": "tgian_nap_khoang_sp_con_lai-min",
+      "text": "32",
+      "confidence": 0.9998256850847745,
+      "has_text": true,
+      "original_value": "32"
+    }
+  ],
+  "hmi_detection": {
+    "hmi_detected": true,
+    "hmi_image": null,
+    "hmi_refined_filename": "hmi_refined_F42_tracking_test2.jpg",
+    "visualization": null
+  },
+  "detected_screen": {
+    "screen_id": "Tracking",
+    "screen_numeric_id": 5,
+    "similarity_score": 0.5973906124898533,
+    "machine_type": "F42"
+  }
+}
