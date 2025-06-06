@@ -256,9 +256,9 @@ def preprocess_hmi_image_with_alignment(image, template_path, roi_coordinates, o
     aligned_image = aligner.align_images()
     
     # Lưu ảnh đã căn chỉnh
-    aligned_filename = f"aligned_{original_filename}"
-    aligned_path = os.path.join(aligned_folder, aligned_filename)
-    cv2.imwrite(aligned_path, aligned_image)
+    # aligned_filename = f"aligned_{original_filename}"
+    # aligned_path = os.path.join(aligned_folder, aligned_filename)
+    # cv2.imwrite(aligned_path, aligned_image)
     
     # Sử dụng ảnh đã căn chỉnh với các tọa độ ROI gốc
     # Vì ảnh nguồn đã được căn chỉnh theo template, nên các tọa độ ROI gốc sẽ hoạt động
@@ -692,7 +692,7 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                         best_text = "ON"
                     
                     # Lưu ảnh ROI với kết quả color detection
-                    save_roi_image_with_result(roi, roi_name, original_filename, best_text, 1.0, best_text, is_text_result=True)
+                    # save_roi_image_with_result(roi, roi_name, original_filename, best_text, 1.0, best_text, is_text_result=True)
                     
                     results.append({
                         "roi_index": roi_name,
@@ -717,7 +717,7 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                         best_text = "ON"
                     
                     # Lưu ảnh ROI với kết quả color detection
-                    save_roi_image_with_result(roi, roi_name, original_filename, best_text, 1.0, best_text, is_text_result=True)
+                    # save_roi_image_with_result(roi, roi_name, original_filename, best_text, 1.0, best_text, is_text_result=True)
                     
                     results.append({
                         "roi_index": roi_name,
@@ -929,7 +929,7 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                     print(f"Added text result for ROI {i} ({roi_name}): '{best_text}'")
                     
                     # Lưu ảnh ROI với kết quả text detection
-                    save_roi_image_with_result(roi, roi_name, original_filename, best_text, best_confidence, original_value, is_text_result=True)
+                    # save_roi_image_with_result(roi, roi_name, original_filename, best_text, best_confidence, original_value, is_text_result=True)
                     
                     continue  # Bỏ qua phần xử lý định dạng số tiếp theo
                 
@@ -1100,40 +1100,7 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                 print(f"Added result for ROI {i} ({roi_name}): Original: '{best_text}', Formatted: '{formatted_text}'")
                 
                 # Lưu ảnh ROI với kết quả numeric detection sử dụng hàm mới
-                save_roi_image_with_result(roi, roi_name, original_filename, formatted_text, best_confidence, original_value, is_text_result=False)
-                
-                # Lưu ảnh kết quả cuối cùng
-                processed_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'processed_roi')
-                base_filename = os.path.splitext(original_filename)[0]
-                final_result_filename = f"{base_filename}_{roi_name}_step7_final_result.png"
-                final_result_path = os.path.join(processed_folder, final_result_filename)
-                
-                # Tạo ảnh tổng hợp với kết quả cuối cùng
-                final_img = roi.copy()
-                if len(final_img.shape) == 2:  # Grayscale
-                    final_img = cv2.cvtColor(final_img, cv2.COLOR_GRAY2BGR)
-                
-                # Vẽ bounding box cho ROI
-                cv2.rectangle(final_img, (2, 2), (final_img.shape[1]-2, final_img.shape[0]-2), (255, 0, 0), 2)
-                
-                # Vẽ text kết quả cuối cùng
-                font_scale = max(0.4, min(final_img.shape[0], final_img.shape[1]) / 120)
-                
-                # Kết quả gốc (màu xanh lá)
-                cv2.putText(final_img, f"Original: '{best_text}'", 
-                          (5, 25), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 255, 0), 1)
-                
-                # Kết quả đã format (màu đỏ)
-                cv2.putText(final_img, f"Final: '{formatted_text}'", 
-                          (5, int(final_img.shape[0] - 10)), cv2.FONT_HERSHEY_SIMPLEX, 
-                          font_scale, (0, 0, 255), 2)
-                
-                # Confidence (màu trắng)
-                cv2.putText(final_img, f"Conf: {best_confidence:.2f}", 
-                          (5, 50), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 255, 255), 1)
-                
-                cv2.imwrite(final_result_path, final_img)
-                print(f"Saved final result image to: {final_result_path}")
+                # save_roi_image_with_result(roi, roi_name, original_filename, formatted_text, best_confidence, original_value, is_text_result=False)
                 
                 if best_confidence < 0.3 or (roi_quality_info is not None and ('low_contrast' in roi_quality_info['issues'] or roi_quality_info.get('has_moire', False))):
                     print(f"Confidence is below threshold or image has low contrast. Trying alternative approach with connected component analysis...")
@@ -1193,8 +1160,8 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                     base_filename = os.path.splitext(original_filename)[0]
                     digit_mask_filename = f"{base_filename}_{roi_name}_digit_mask.png"
                     digit_mask_path = os.path.join(processed_folder, digit_mask_filename)
-                    cv2.imwrite(digit_mask_path, digit_mask)
-                    print(f"Saved digit mask to: {digit_mask_path}")
+                    # cv2.imwrite(digit_mask_path, digit_mask)
+                    # print(f"Saved digit mask to: {digit_mask_path}")
                     
                     # 5. Thực hiện OCR trên mask đã tạo với thông số tối ưu
                     retry_results = reader.readtext(digit_mask, 
@@ -1261,12 +1228,13 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                             retry_result_img = cv2.cvtColor(retry_result_img, cv2.COLOR_GRAY2BGR)
                         
                         # Vẽ retry text lên ảnh
-                        font_scale = max(0.5, min(retry_result_img.shape[0], retry_result_img.shape[1]) / 100)
-                        cv2.putText(retry_result_img, f"RETRY: '{retry_text}' ({retry_confidence:.2f})", 
-                                  (5, int(retry_result_img.shape[0] - 10)), cv2.FONT_HERSHEY_SIMPLEX, 
-                                  font_scale, (0, 255, 255), 2)  # Yellow color for retry
-                        cv2.imwrite(retry_result_path, retry_result_img)
-                        print(f"Saved retry OCR result image to: {retry_result_path}")
+                        # font_scale = max(0.5, min(retry_result_img.shape[0], retry_result_img.shape[1]) / 100)
+                        # cv2.putText(retry_result_img, f"RETRY: '{retry_text}' ({retry_confidence:.2f})", 
+                        #           (5, int(retry_result_img.shape[0] - 10)), cv2.FONT_HERSHEY_SIMPLEX, 
+                        #           font_scale, (0, 255, 255), 2)  # Yellow color for retry
+                        # # cv2.imwrite(retry_result_path, retry_result_img)
+                        # cv2.imwrite(retry_result_path, retry_result_img)
+                        # print(f"Saved retry OCR result image to: {retry_result_path}")
                         
                         # Xử lý khoảng trắng giữa các số (tương tự như xử lý trên best_text)
                         retry_text = retry_text.upper()
@@ -1599,9 +1567,9 @@ def upload_image():
             uploaded_image = hmi_screen
             
             # Lưu ảnh HMI refined
-            hmi_refined_filename = f"hmi_refined_{filename}"
-            hmi_refined_path = os.path.join(app.config['HMI_REFINED_FOLDER'], hmi_refined_filename)
-            cv2.imwrite(hmi_refined_path, hmi_screen)
+            # hmi_refined_filename = f"hmi_refined_{filename}"
+            # hmi_refined_path = os.path.join(app.config['HMI_REFINED_FOLDER'], hmi_refined_filename)
+            # cv2.imwrite(hmi_refined_path, hmi_screen)
             
             # Cập nhật thông tin phát hiện HMI
             hmi_detection_info = {
@@ -2566,9 +2534,9 @@ def preprocess_hmi_image(image, roi_coordinates, original_filename):
         })
         
         # Lưu ảnh đã xử lý vào thư mục processed_roi
-        processed_filename = f"{base_filename}_roi_{i}_processed.png"
-        processed_path = os.path.join(processed_folder, processed_filename)
-        cv2.imwrite(processed_path, closing)  # Save the processed image directly
+        # processed_filename = f"{base_filename}_roi_{i}_processed.png"
+        # processed_path = os.path.join(processed_folder, processed_filename)
+        # cv2.imwrite(processed_path, closing)  # Save the processed image directly
         
     return results
 
@@ -4698,12 +4666,12 @@ def save_roi_image_with_result(roi, roi_name, original_filename, detected_text, 
                       font_scale, (0, 255, 0), 1)
         
         # Vẽ loại kết quả (màu vàng)
-        cv2.putText(result_img, f"Type: {result_type.upper()}", 
-                  (5, 75), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 255, 255), 1)
+        # cv2.putText(result_img, f"Type: {result_type.upper()}", 
+        #           (5, 75), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 255, 255), 1)
         
         # Lưu ảnh kết quả
-        cv2.imwrite(roi_result_path, result_img)
-        print(f"💾 Saved {result_type} detection image to: {roi_result_path}")
+        # cv2.imwrite(roi_result_path, result_img)
+        # print(f"💾 Saved {result_type} detection image to: {roi_result_path}")
         
         return roi_result_path
         

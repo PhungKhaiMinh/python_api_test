@@ -1,0 +1,22 @@
+{
+  "filename": "cropped_image.png",
+  "machine_code": "IE-F4-WBI06",
+  "area": "F4",
+  "machine_name": "Máy IE-F4-WBI06",
+  "screen_id": "Temp",
+  "timestamp": "2025-06-06 22:14:50",
+  "template_path": "d:\\Wrembly\\python_api_test\\roi_data\\reference_images\\template_F41_Temp.jpg",
+  "results": [],
+  "hmi_detection": {
+    "hmi_detected": true,
+    "hmi_image": null,
+    "hmi_refined_filename": null,
+    "visualization": null
+  },
+  "detected_screen": {
+    "screen_id": "Temp",
+    "screen_numeric_id": 4,
+    "similarity_score": 0.5662089137003424,
+    "machine_type": "F41"
+  }
+}

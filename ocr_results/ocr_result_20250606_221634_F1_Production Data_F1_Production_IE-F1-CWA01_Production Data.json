@@ -1,0 +1,212 @@
+{
+  "filename": "F1_Production.jpg",
+  "machine_code": "IE-F1-CWA01",
+  "area": "F1",
+  "machine_name": "Máy IE-F1-CWA01",
+  "screen_id": "Production Data",
+  "timestamp": "2025-06-06 22:16:34",
+  "template_path": "d:\\Wrembly\\python_api_test\\roi_data\\reference_images\\template_F1_Production Data.jpg",
+  "results": [
+    {
+      "roi_index": "Total_time hour",
+      "text": "108",
+      "confidence": 0.9999726074951304,
+      "has_text": true,
+      "original_value": "108"
+    },
+    {
+      "roi_index": "Total_time minute",
+      "text": "15",
+      "confidence": 0.999835125509854,
+      "has_text": true,
+      "original_value": "15"
+    },
+    {
+      "roi_index": "Total_time second",
+      "text": "47",
+      "confidence": 0.999993087923841,
+      "has_text": true,
+      "original_value": "47"
+    },
+    {
+      "roi_index": "Run_time hour",
+      "text": "1",
+      "confidence": 0.999999880790714,
+      "has_text": true,
+      "original_value": "1"
+    },
+    {
+      "roi_index": "Run_time minute",
+      "text": "1",
+      "confidence": 1.0,
+      "has_text": true,
+      "original_value": "1"
+    },
+    {
+      "roi_index": "Run_time second",
+      "text": "39",
+      "confidence": 0.9999776622433632,
+      "has_text": true,
+      "original_value": "39"
+    },
+    {
+      "roi_index": "Fault_time hour",
+      "text": "100",
+      "confidence": 0.9925881624221802,
+      "has_text": true,
+      "original_value": "100"
+    },
+    {
+      "roi_index": "Fault_time minute",
+      "text": "17",
+      "confidence": 0.9987122353023533,
+      "has_text": true,
+      "original_value": "17"
+    },
+    {
+      "roi_index": "Fault_time second",
+      "text": "21",
+      "confidence": 0.7383768815504937,
+      "has_text": true,
+      "original_value": "21"
+    },
+    {
+      "roi_index": "Restart_time hour",
+      "text": "0",
+      "confidence": 0.9998506363379853,
+      "has_text": true,
+      "original_value": "0"
+    },
+    {
+      "roi_index": "Restart_time minute",
+      "text": "11",
+      "confidence": 0.9458059537741382,
+      "has_text": true,
+      "original_value": "11"
+    },
+    {
+      "roi_index": "Restart_time second",
+      "text": "50",
+      "confidence": 0.9775545981284826,
+      "has_text": true,
+      "original_value": "50"
+    },
+    {
+      "roi_index": "Ready_time hour",
+      "text": "6",
+      "confidence": 0.9991826297840731,
+      "has_text": true,
+      "original_value": "6"
+    },
+    {
+      "roi_index": "Ready_time minute",
+      "text": "44",
+      "confidence": 0.9999748805706943,
+      "has_text": true,
+      "original_value": "44"
+    },
+    {
+      "roi_index": "Ready_time second",
+      "text": "51",
+      "confidence": 0.9999482440623205,
+      "has_text": true,
+      "original_value": "51"
+    },
+    {
+      "roi_index": "MC Speed",
+      "text": "0.00",
+      "confidence": 0.32515323524802603,
+      "has_text": true,
+      "original_value": "0.00"
+    },
+    {
+      "roi_index": "Machine",
+      "text": "39.19",
+      "confidence": 0.9935840964317322,
+      "has_text": true,
+      "original_value": "3919"
+    },
+    {
+      "roi_index": "Waiting_time hour",
+      "text": "0",
+      "confidence": 0.9393211714495919,
+      "has_text": true,
+      "original_value": "U"
+    },
+    {
+      "roi_index": "Waiting_time minute",
+      "text": "0",
+      "confidence": 0.9994739985927801,
+      "has_text": true,
+      "original_value": "0"
+    },
+    {
+      "roi_index": "Waiting_time second",
+      "text": "0",
+      "confidence": 0.9999663832628727,
+      "has_text": true,
+      "original_value": "0"
+    },
+    {
+      "roi_index": "Total parts",
+      "text": "2298",
+      "confidence": 0.9999982118606567,
+      "has_text": true,
+      "original_value": "2298"
+    },
+    {
+      "roi_index": "Good parts",
+      "text": "1229",
+      "confidence": 0.9562801122665405,
+      "has_text": true,
+      "original_value": "1229"
+    },
+    {
+      "roi_index": "Rejected parts",
+      "text": "1069",
+      "confidence": 0.7817028164863586,
+      "has_text": true,
+      "original_value": "1069"
+    },
+    {
+      "roi_index": "Time efficency",
+      "text": "0.95",
+      "confidence": 0.9950898851099872,
+      "has_text": true,
+      "original_value": "095"
+    },
+    {
+      "roi_index": "Yield",
+      "text": "53.48",
+      "confidence": 0.5528578766864095,
+      "has_text": true,
+      "original_value": "53.48"
+    },
+    {
+      "roi_index": "Line OEE",
+      "text": "0.47",
+      "confidence": 0.9999684091552787,
+      "has_text": true,
+      "original_value": "047"
+    },
+    {
+      "roi_index": "Machine OEE",
+      "text": "0.47",
+      "confidence": 0.9999322760000824,
+      "has_text": true,
+      "original_value": "047"
+    }
+  ],
+  "hmi_detection": {
+    "hmi_detected": true,
+    "hmi_image": null,
+    "hmi_refined_filename": null,
+    "visualization": null
+  },
+  "detected_screen": {
+    "screen_id": "Production Data",
+    "screen_numeric_id": 2,
+    "similarity_score": 0.5170235001194359,
+    "machine_type": "F1"
+  }
+}
