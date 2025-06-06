@@ -18,6 +18,9 @@ import Levenshtein
 import concurrent.futures
 from threading import Lock
 from smart_detection_functions import auto_detect_machine_and_screen_smart
+from functools import lru_cache
+from multiprocessing import Pool, cpu_count
+import threading
 
 # Thêm try-except khi import EasyOCR
 try:
@@ -30,6 +33,120 @@ except ImportError:
     print("EasyOCR not installed. OCR functionality will be limited.")
     HAS_EASYOCR = False
     reader = None
+
+# Khởi tạo các detector OpenCV ở cấp độ global để tối ưu hiệu suất
+try:
+    # SIFT detector cho image alignment
+    sift_detector = cv2.SIFT_create()
+    print("SIFT detector initialized successfully")
+except Exception as e:
+    print(f"Error initializing SIFT detector: {e}")
+    sift_detector = None
+
+try:
+    # ORB detector cho feature comparison  
+    orb_detector = cv2.ORB_create(nfeatures=500)
+    print("ORB detector initialized successfully")
+except Exception as e:
+    print(f"Error initializing ORB detector: {e}")
+    orb_detector = None
+
+try:
+    # BFMatcher cho ORB matching
+    bf_matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+    print("BFMatcher initialized successfully")
+except Exception as e:
+    print(f"Error initializing BFMatcher: {e}")
+    bf_matcher = None
+
+try:
+    # FLANN matcher cho SIFT matching
+    FLANN_INDEX_KDTREE = 1
+    flann_index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=5)
+    flann_search_params = dict(checks=50)
+    flann_matcher = cv2.FlannBasedMatcher(flann_index_params, flann_search_params)
+    print("FLANN matcher initialized successfully")
+except Exception as e:
+    print(f"Error initializing FLANN matcher: {e}")
+    flann_matcher = None
+
+# Global cache cho config data để tối ưu I/O
+_roi_info_cache = None
+_roi_info_cache_lock = threading.Lock()
+_decimal_places_cache = None
+_decimal_places_cache_lock = threading.Lock()
+_machine_info_cache = None
+_machine_info_cache_lock = threading.Lock()
+
+# Thread pool để xử lý OCR song song
+_ocr_thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=max(4, cpu_count()))
+print(f"OCR Thread pool initialized with {max(4, cpu_count())} workers")
+
+# Template image cache để tránh đọc lại ảnh template
+_template_image_cache = {}
+_template_cache_lock = threading.Lock()
+
+def initialize_all_caches():
+    """Khởi tạo tất cả cache ngay khi chương trình bắt đầu để tránh delay lần đầu gọi API"""
+    print("\n🚀 Initializing all caches at startup...")
+    
+    try:
+        # Cache ROI info
+        roi_info = get_roi_info_cached()
+        print(f"✅ ROI info cached: {len(roi_info)} items")
+    except Exception as e:
+        print(f"❌ Error caching ROI info: {e}")
+    
+    try:
+        # Cache decimal places config
+        decimal_config = get_decimal_places_config_cached()
+        print(f"✅ Decimal places config cached: {len(decimal_config)} items")
+    except Exception as e:
+        print(f"❌ Error caching decimal places config: {e}")
+    
+    try:
+        # Cache machine info
+        machine_info = get_machine_info_cached()
+        print(f"✅ Machine info cached: {machine_info}")
+    except Exception as e:
+        print(f"❌ Error caching machine info: {e}")
+    
+    try:
+        # Pre-cache common template images từ reference_images folder
+        reference_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'roi_data', 'reference_images')
+        if os.path.exists(reference_folder):
+            template_files = [f for f in os.listdir(reference_folder) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+            cached_count = 0
+            for template_file in template_files[:]:  # Cache tối đa 10 template đầu tiên
+                template_path = os.path.join(reference_folder, template_file)
+                if get_template_image_cached(template_path) is not None:
+                    cached_count += 1
+            print(f"✅ Template images pre-cached: {cached_count}/{len(template_files)} files")
+        else:
+            print("ℹ️  Reference images folder not found - skipping template pre-caching")
+    except Exception as e:
+        print(f"❌ Error pre-caching template images: {e}")
+    
+    print("🎯 Cache initialization completed!\n")
+
+def get_template_image_cached(template_path):
+    """Cache template images để tránh đọc lại từ disk"""
+    if not template_path or not os.path.exists(template_path):
+        return None
+        
+    with _template_cache_lock:
+        if template_path not in _template_image_cache:
+            try:
+                template_img = cv2.imread(template_path)
+                if template_img is not None:
+                    _template_image_cache[template_path] = template_img
+                    print(f"✅ Template image cached: {os.path.basename(template_path)}")
+                return template_img
+            except Exception as e:
+                print(f"❌ Error caching template image: {e}")
+                return None
+        
+        return _template_image_cache[template_path]
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
@@ -121,6 +238,626 @@ def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
+# Cached functions để tối ưu I/O operations
+def get_roi_info_cached():
+    """Cache ROI info để tránh đọc file JSON nhiều lần"""
+    global _roi_info_cache
+    
+    with _roi_info_cache_lock:
+        if _roi_info_cache is None:
+            try:
+                roi_json_path = 'roi_data/roi_info.json'
+                if not os.path.exists(roi_json_path):
+                    roi_json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'roi_data/roi_info.json')
+                
+                with open(roi_json_path, 'r', encoding='utf-8') as f:
+                    _roi_info_cache = json.load(f)
+                print("✅ ROI info cached successfully")
+            except Exception as e:
+                print(f"❌ Error caching ROI info: {e}")
+                _roi_info_cache = {}
+        
+        return _roi_info_cache
+
+def get_decimal_places_config_cached():
+    """Cache decimal places config để tránh đọc file nhiều lần"""
+    global _decimal_places_cache
+    
+    with _decimal_places_cache_lock:
+        if _decimal_places_cache is None:
+            try:
+                config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'roi_data', 'decimal_places.json')
+                if os.path.exists(config_path):
+                    with open(config_path, 'r', encoding='utf-8') as f:
+                        _decimal_places_cache = json.load(f)
+                else:
+                    _decimal_places_cache = {}
+                print("✅ Decimal places config cached successfully")
+            except Exception as e:
+                print(f"❌ Error caching decimal places config: {e}")
+                _decimal_places_cache = {}
+        
+        return _decimal_places_cache
+
+def get_machine_info_cached():
+    """Cache machine info để tránh gọi hàm nặng nhiều lần"""
+    global _machine_info_cache
+    
+    with _machine_info_cache_lock:
+        if _machine_info_cache is None:
+            try:
+                # Đọc từ current machine screen file
+                current_machine_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'current_machine_screen.json')
+                if os.path.exists(current_machine_file):
+                    with open(current_machine_file, 'r', encoding='utf-8') as f:
+                        _machine_info_cache = json.load(f)
+                else:
+                    _machine_info_cache = {"machine_code": "F41", "screen_id": "Main"}
+                print("✅ Machine info cached successfully")
+            except Exception as e:
+                print(f"❌ Error caching machine info: {e}")
+                _machine_info_cache = {"machine_code": "F41", "screen_id": "Main"}
+        
+        return _machine_info_cache
+
+def process_single_roi_optimized(args):
+    """Xử lý OCR cho một ROI đơn lẻ - được tối ưu cho parallel processing"""
+    (roi_image, roi_name, machine_type, allowed_values, is_special_on_off_case, screen_id) = args
+    
+    try:
+        # Nếu là trường hợp đặc biệt ON/OFF, phân tích màu sắc thay vì OCR
+        if is_special_on_off_case and machine_type != "F1":
+            # Tách các kênh màu BGR
+            b, g, r = cv2.split(roi_image)
+            # Tính giá trị trung bình của kênh xanh dương và đỏ
+            avg_blue = np.mean(b)
+            avg_red = np.mean(r)
+            # Xác định kết quả dựa trên màu sắc chủ đạo
+            if avg_blue > avg_red:
+                best_text = "OFF"
+            else:
+                best_text = "ON"
+            
+            return {
+                "roi_index": roi_name,
+                "text": best_text,
+                "confidence": 1.0,
+                "has_text": True
+            }
+        
+        # Kiểm tra EasyOCR có khả dụng không
+        if not HAS_EASYOCR or reader is None:
+            return {
+                "roi_index": roi_name,
+                "text": "OCR_NOT_AVAILABLE",
+                "confidence": 0,
+                "has_text": False,
+                "original_value": ""
+            }
+        
+        # Tiền xử lý ROI nhanh
+        # Resize nếu ROI quá nhỏ
+        height, width = roi_image.shape[:2]
+        if height < 30 or width < 30:
+            scale_factor = max(30/height, 30/width)
+            new_height = int(height * scale_factor)
+            new_width = int(width * scale_factor)
+            roi_image = cv2.resize(roi_image, (new_width, new_height), interpolation=cv2.INTER_CUBIC)
+        
+        # Convert to grayscale nếu cần
+        if len(roi_image.shape) == 3:
+            roi_processed = cv2.cvtColor(roi_image, cv2.COLOR_BGR2GRAY)
+        else:
+            roi_processed = roi_image.copy()
+        
+        # Gaussian Blur để cải thiện OCR
+        roi_processed = cv2.GaussianBlur(roi_processed, (3, 3), 0)
+        
+                # Thực hiện OCR với parameters tối ưu
+        ocr_results = reader.readtext(roi_processed, 
+                                    allowlist='0123456789.-ABCDEFGHIKLNORTUabcdefghiklnortu', 
+                                    detail=1, 
+                                    paragraph=False, 
+                                    batch_size=1, 
+                                    text_threshold=0.4,
+                                    link_threshold=0.2, 
+                                    low_text=0.3, 
+                                    mag_ratio=2, 
+                                    slope_ths=0.05,
+                                    decoder='beamsearch'
+                                    )
+        
+        if ocr_results and len(ocr_results) > 0:
+            # Lấy kết quả có confidence cao nhất
+            best_result = max(ocr_results, key=lambda x: x[2])
+            best_text = best_result[1]
+            best_confidence = best_result[2]
+            original_value = best_text
+            has_text = True
+            
+            # Kiểm tra nếu kết quả ban đầu có dấu trừ ở đầu
+            has_negative_sign = best_text.startswith('-')
+            
+            # Post-processing cơ bản - chuyển đổi 'O' thành '0' nếu chỉ 1 ký tự
+            if len(best_text) == 1 and best_text.upper() == 'O':
+                best_text = '0'
+            
+            # Kiểm tra và chuyển đổi chuỗi kết quả nếu có dạng số (giống logic cũ)
+            if len(best_text) >= 2:
+                # Đếm số lượng các ký tự dễ nhầm lẫn
+                chars_to_check = '01OUouIilC'
+                suspicious_chars_count = sum(1 for char in best_text if char in chars_to_check)
+                # Nếu có ít nhất 2 ký tự đáng ngờ và chiếm >= 30% chuỗi
+                if suspicious_chars_count >= 2 and suspicious_chars_count / len(best_text) >= 0.3:
+                    # Kiểm tra các mẫu đặc biệt, như chuỗi "uuuu" hoặc "iuuu" có thể là "1000"
+                    upper_text = best_text.upper()
+                    
+                    # Trường hợp đặc biệt: chuỗi chứa nhiều U liên tiếp (có thể là số 0 lặp lại)
+                    upper_text_no_dot = upper_text.replace('.', '')
+                    if re.search(r'[IUO0Q]{2}', upper_text_no_dot):
+                        temp_text = upper_text.replace('U', '0').replace('I', '1').replace('O', '0').replace('C','0').replace('Q','0')
+                        if temp_text.replace('.', '').isdigit():
+                            best_text = temp_text
+                            is_text_result = False
+                    # Trường hợp đặc biệt khác
+                    else:
+                        # Kiểm tra xem có ít nhất 60% ký tự là chữ cái đáng ngờ I, U, O
+                        digit_like_chars_count = sum(1 for char in upper_text if char in 'OUICL')
+                        if digit_like_chars_count / len(best_text) >= 0.7:
+                            # Chuyển đổi tất cả ký tự dễ nhầm lẫn thành số tương ứng
+                            cleaned_text = upper_text
+                            cleaned_text = cleaned_text.replace('O', '0').replace('U', '0').replace('Q', '0')
+                            cleaned_text = cleaned_text.replace('I', '1').replace('L', '1')
+                            cleaned_text = cleaned_text.replace('C', '0').replace('D', '0')
+                            
+                            # Loại bỏ khoảng trắng nếu kết quả là số
+                            cleaned_text = cleaned_text.replace(' ', '')
+                            
+                            # Kiểm tra nếu kết quả chỉ chứa chữ số
+                            if cleaned_text.isdigit():
+                                best_text = cleaned_text
+                                # Đánh dấu là kết quả số để không bị xử lý như text
+                                is_text_result = False
+            
+            # Đếm số lượng chữ số và chữ cái (loại trừ số 0 và chữ O)
+            digit_count = sum(1 for char in best_text if char.isdigit() and char != '0')
+            letter_count = sum(1 for char in best_text if char.isalpha() and char.upper() != 'O')
+            
+            # Kiểm tra nếu có nhiều chữ cái hơn chữ số
+            is_text_result = letter_count > digit_count
+            
+            # Thêm lại dấu trừ ở đầu nếu kết quả ban đầu có
+            if has_negative_sign and not best_text.startswith('-'):
+                best_text = '-' + best_text
+                
+            # Kiểm tra xem ROI có allowed_values không
+            has_allowed_values = allowed_values and len(allowed_values) > 0
+            
+            # Nếu là kết quả chủ yếu là chữ hoặc ROI có allowed_values, xử lý như text
+            if has_text and (is_text_result or has_allowed_values):
+                best_text = best_text.replace('0', 'O').replace('1', 'I').replace('2', 'Z').replace('3', 'E').replace('4', 'A').replace('5', 'S').replace('6', 'G').replace('7', 'T').replace('8', 'B').replace('9', 'P')
+                best_text = best_text.upper()
+                
+                # Thêm kết quả cho ROI này (không có original_value cho kết quả text)
+                if len(best_text) == 1:
+                    best_text = best_text.replace('O', '0').replace('I', '1').replace('C','0').replace('S','5').replace('G','6').replace('A','4').replace('H','8').replace('L','1').replace('T','7').replace('U','0').replace('E','3').replace('Z','2').replace('Q','0')
+                
+                # Sử dụng hàm tối ưu để tìm best match với allowed_values
+                if has_allowed_values:
+                    best_match, match_score, match_method = find_best_allowed_value_match(
+                        best_text, allowed_values, roi_name
+                    )
+                    
+                    if best_match:
+                        best_text = best_match
+                    else:
+                        best_text = allowed_values[0]
+                
+                return {
+                    "roi_index": roi_name,
+                    "text": best_text,
+                    "confidence": best_confidence,
+                    "has_text": has_text,
+                    "original_value": original_value
+                }
+            
+            # Nếu kết quả chủ yếu là số, xử lý theo định dạng decimal_places
+            is_negative = best_text.startswith('-')
+            best_text = best_text.upper()
+            best_text = best_text.replace('O', '0').replace('I', '1').replace('C','0').replace('S','5').replace('G','6').replace('B','8').replace('T','7').replace('L','1').replace('H','8').replace('A','4').replace('E','3').replace('Z','2').replace('U','0')
+            
+            # Xử lý kết quả OCR có khoảng trắng giữa các số (ví dụ: "1 3")
+            if ' ' in best_text and all(c.isdigit() or c == ' ' or c == '.' or c == '-' for c in best_text):
+                best_text = best_text.replace(' ', '')
+            
+            if '-' in best_text[1:]:
+                best_text = best_text[:-1] + best_text[-1].replace('-', '')
+            
+            # Kiểm tra lại sau khi đã xóa khoảng trắng - xử lý decimal_places cho số
+            if has_text and re.match(r'^-?\d+\.?\d*$', best_text):
+                try:
+                    # Lấy decimal_places config từ cache
+                    decimal_places_config = get_decimal_places_config_cached()
+                    
+                    # Kiểm tra xem có cấu hình cho ROI này không
+                    best_text_clean = best_text[1:] if is_negative else best_text
+                    
+                    # Áp dụng decimal_places trước khi chuyển sang ROI tiếp theo
+                    if (machine_type in decimal_places_config and 
+                        screen_id in decimal_places_config[machine_type] and 
+                        roi_name in decimal_places_config[machine_type][screen_id]):
+                        
+                        decimal_places = int(decimal_places_config[machine_type][screen_id][roi_name])
+                        
+                        # Xử lý các trường hợp khác nhau dựa trên decimal_places
+                        if decimal_places == 0:
+                            # Nếu decimal_places là 0, giữ lại tất cả các chữ số nhưng bỏ dấu chấm
+                            formatted_text = str(best_text_clean).replace('.', '')
+                            formatted_text = '-' + str(formatted_text) if is_negative else str(formatted_text)
+                        else:
+                            # Đếm số chữ số thập phân hiện tại
+                            current_decimal_places = 0
+                            if '.' in best_text_clean:
+                                dec_part = best_text_clean.split('.')[1]
+                                current_decimal_places = len(dec_part)
+                            
+                            # Nếu số chữ số thập phân hiện tại bằng đúng số chữ số thập phân cần có
+                            if current_decimal_places == decimal_places:
+                                # Giữ nguyên số
+                                formatted_text = best_text_clean
+                                formatted_text = '-' + str(formatted_text) if is_negative else str(formatted_text)
+                            else:
+                                # Xử lý khi có dấu thập phân
+                                if '.' in best_text_clean:
+                                    int_part, dec_part = best_text_clean.split('.')
+                                    
+                                    # Kết hợp phần nguyên và phần thập phân thành một chuỗi không có dấu chấm
+                                    all_digits = int_part + dec_part
+                                    
+                                    # Đặt dấu chấm vào vị trí thích hợp theo decimal_places
+                                    if decimal_places > 0:
+                                        if len(all_digits) <= decimal_places:
+                                            # Thêm số 0 phía trước và đặt dấu chấm sau số 0 đầu tiên
+                                            padded_str = all_digits.zfill(decimal_places)
+                                            formatted_text = f"0.{padded_str}"
+                                            formatted_text = '-' + str(formatted_text) if is_negative else str(formatted_text)
+                                        else:
+                                            # Đặt dấu chấm vào vị trí thích hợp: (độ dài - decimal_places)
+                                            insert_pos = len(all_digits) - decimal_places
+                                            formatted_text = f"{all_digits[:insert_pos]}.{all_digits[insert_pos:]}"
+                                            formatted_text = '-' + str(formatted_text) if is_negative else str(formatted_text)
+                                    else:
+                                        # Nếu decimal_places = 0, bỏ dấu chấm
+                                        formatted_text = all_digits
+                                        formatted_text = '-' + str(formatted_text) if is_negative else str(formatted_text)
+                                else:
+                                    # Không có dấu chấm (số nguyên)
+                                    num_str = str(best_text_clean)
+                                    
+                                    # Thêm phần thập phân nếu cần
+                                    if decimal_places > 0:
+                                        # Đặt dấu chấm vào vị trí thích hợp: (độ dài - decimal_places)
+                                        if len(num_str) <= decimal_places:
+                                            # Nếu số chữ số ít hơn hoặc bằng decimal_places, thêm số 0 ở đầu
+                                            padded_str = num_str.zfill(decimal_places)
+                                            formatted_text = f"0.{padded_str}"
+                                        else:
+                                            # Đặt dấu chấm vào vị trí thích hợp
+                                            insert_pos = len(num_str) - decimal_places
+                                            formatted_text = f"{num_str[:insert_pos]}.{num_str[insert_pos:]}"
+                                        
+                                        formatted_text = '-' + str(formatted_text) if is_negative else str(formatted_text)
+                                    else:
+                                        # Giữ nguyên số nguyên nếu không cần thập phân
+                                        formatted_text = num_str
+                                        formatted_text = '-' + str(formatted_text) if is_negative else str(formatted_text)
+                        
+                        # Cập nhật best_text cho các bước xử lý tiếp theo
+                        best_text = formatted_text
+                    else:
+                        # Thêm xử lý đặc biệt cho "Machine OEE" nếu không tìm thấy trong cấu hình
+                        if roi_name == "Machine OEE":
+                            decimal_places = 2  # Áp dụng 2 chữ số thập phân cho Machine OEE theo yêu cầu
+                            
+                            # Xử lý định dạng số như các trường hợp khác
+                            num_str = str(best_text_clean)
+                            if len(num_str) <= decimal_places:
+                                padded_str = num_str.zfill(decimal_places)
+                                formatted_text = f"0.{padded_str}"
+                            else:
+                                insert_pos = len(num_str) - decimal_places
+                                formatted_text = f"{num_str[:insert_pos]}.{num_str[insert_pos:]}"
+                            
+                            formatted_text = '-' + str(formatted_text) if is_negative else str(formatted_text)
+                            best_text = formatted_text
+                        else:
+                            # Nếu không có cấu hình decimal_places, giữ nguyên giá trị
+                            formatted_text = best_text
+                            formatted_text = '-' + str(formatted_text) if is_negative else str(formatted_text)
+                except Exception as e:
+                    print(f"Error applying decimal places format for ROI {roi_name}: {str(e)}")
+                    formatted_text = best_text
+                    formatted_text = '-' + str(formatted_text) if is_negative else str(formatted_text)
+            else:
+                # Nếu không phải là số, giữ nguyên text
+                formatted_text = best_text
+            
+            # Kiểm tra nếu ROI có chứa "working hours" trong tên 
+            if "working hours" in roi_name.lower():
+                # Loại bỏ tất cả các ký tự không phải số
+                digits_only = re.sub(r'[^0-9]', '', formatted_text)
+                
+                # Kiểm tra xem chuỗi có đủ số để định dạng không
+                if len(digits_only) >= 2:
+                    # Thêm dấu ":" sau mỗi 2 ký tự từ phải sang trái
+                    result = ""
+                    for i in range(len(digits_only) - 1, -1, -1):
+                        result = digits_only[i] + result
+                        if i > 0 and (len(digits_only) - i) % 2 == 0:
+                            result = ":" + result
+                    
+                    formatted_text = result
+            
+            # Xử lý dấu "-" không ở vị trí đầu tiên
+            if "-" in formatted_text[1:]:
+                formatted_text = formatted_text[0] + formatted_text[1:].replace('-', '.')
+            
+            return {
+                "roi_index": roi_name,
+                "text": formatted_text,
+                "confidence": best_confidence,
+                "has_text": True,
+                "original_value": original_value
+            }
+        else:
+            return {
+                "roi_index": roi_name,
+                "text": "",
+                "confidence": 0,
+                "has_text": False,
+                "original_value": ""
+            }
+            
+    except Exception as e:
+        print(f"Error processing ROI {roi_name}: {e}")
+        return {
+            "roi_index": roi_name,
+            "text": "ERROR",
+            "confidence": 0,
+            "has_text": False,
+            "original_value": ""
+        }
+
+def process_roi_with_retry_logic_optimized(roi_args, original_filename):
+    """
+    Thêm retry logic cho ROI với confidence thấp hoặc chất lượng ảnh kém
+    Dựa trên logic từ app_old.py
+    """
+    (roi_image, roi_name, machine_type, allowed_values, is_special_on_off_case, screen_id) = roi_args
+    
+    # Thực hiện OCR ban đầu
+    result = process_single_roi_optimized(roi_args)
+    
+    # Kiểm tra nếu cần retry
+    best_confidence = result.get('confidence', 0)
+    
+    if best_confidence < 0.3:  # Threshold để retry
+        print(f"Confidence is below threshold for ROI {roi_name}. Trying alternative approach with connected component analysis...")
+        
+        try:
+            # Thực hiện phân tích thành phần liên kết như trong app_old.py
+            # 1. Chuyển ảnh ROI sang grayscale nếu chưa phải
+            if len(roi_image.shape) > 2:
+                roi_gray = cv2.cvtColor(roi_image, cv2.COLOR_BGR2GRAY)
+            else:
+                roi_gray = roi_image.copy()
+            
+            # 2. Làm mờ nhẹ để giảm nhiễu bề mặt
+            roi_blur = cv2.GaussianBlur(roi_gray, (7,7), 0)
+            
+            # 3. Áp dụng adaptive threshold để tách nền thay đổi độ sáng
+            roi_th = cv2.adaptiveThreshold(
+                roi_blur, 255,
+                cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                cv2.THRESH_BINARY_INV,  # Đảo ngược để số là màu trắng, nền đen
+                blockSize=11, C=2
+            )
+            
+            # 4. Sử dụng connected component analysis để lọc dựa trên kích thước
+            num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(roi_th, connectivity=8)
+            
+            # Tạo một mask trống để giữ lại các số
+            digit_mask = np.zeros_like(roi_th)
+            
+            # Lọc các thành phần dựa trên kích thước
+            min_area = 50      # Diện tích tối thiểu của số
+            max_area = 2000    # Diện tích tối đa của số
+            min_width = 5      # Chiều rộng tối thiểu
+            min_height = 10    # Chiều cao tối thiểu
+            max_width = 100    # Chiều rộng tối đa
+            max_height = 100   # Chiều cao tối đa
+            aspect_ratio_min = 0.2  # Tỷ lệ chiều rộng/chiều cao tối thiểu
+            aspect_ratio_max = 5.0  # Tỷ lệ chiều rộng/chiều cao tối đa
+            
+            # Bỏ qua label 0 vì đó là nền (background)
+            for label in range(1, num_labels):
+                # Lấy thông tin của component
+                x, y, w, h, area = stats[label]
+                
+                # Tính toán tỷ lệ khung hình
+                aspect_ratio = w / h if h > 0 else 0
+                
+                # Kiểm tra các điều kiện để xác định là số
+                if (min_area < area < max_area and 
+                    min_width < w < max_width and 
+                    min_height < h < max_height and
+                    aspect_ratio_min < aspect_ratio < aspect_ratio_max):
+                    # Đây có khả năng là số, giữ lại trong mask
+                    digit_mask[labels == label] = 255
+            
+            # 5. Thực hiện OCR trên mask đã tạo với thông số tối ưu
+            retry_results = reader.readtext(digit_mask, 
+                                                      allowlist='0123456789.-ABCDEFGHIKLNORTUabcdefghiklnortu', 
+                                                      detail=1, 
+                                                      paragraph=False, 
+                                                      batch_size=1, 
+                                                      text_threshold=0.4,
+                                                      link_threshold=0.2, 
+                                                      low_text=0.3, 
+                                                      mag_ratio=2, 
+                                                      slope_ths=0.05,
+                                                      decoder='beamsearch'
+                                                      )
+            
+            # Kiểm tra nếu có kết quả OCR
+            if retry_results and len(retry_results) > 0:
+                # Tìm kết quả có confidence cao nhất
+                best_retry_result = max(retry_results, key=lambda x: x[2])
+                retry_text = best_retry_result[1]  # Text
+                retry_confidence = best_retry_result[2]  # Confidence
+                
+                # Xử lý retry text tương tự như original
+                upper_text = retry_text.upper()
+                upper_text_no_dot = upper_text.replace('.', '')
+                
+                if re.search(r'[IUO0Q]{2}', upper_text_no_dot):
+                    temp_text = upper_text.replace('U', '0').replace('I', '1').replace('O', '0').replace('C','0').replace('Q','0')
+                    if temp_text.replace('.', '').isdigit():
+                        retry_text = temp_text
+                else:
+                    # Kiểm tra xem có ít nhất 60% ký tự là chữ cái đáng ngờ I, U, O
+                    digit_like_chars_count = sum(1 for char in upper_text if char in 'OUICL')
+                    if digit_like_chars_count / len(retry_text) >= 0.7:
+                        # Chuyển đổi tất cả ký tự dễ nhầm lẫn thành số tương ứng
+                        cleaned_text = upper_text
+                        cleaned_text = cleaned_text.replace('O', '0').replace('U', '0').replace('Q', '0')
+                        cleaned_text = cleaned_text.replace('I', '1').replace('L', '1')
+                        cleaned_text = cleaned_text.replace('C', '0').replace('D', '0')
+                        
+                        # Loại bỏ khoảng trắng nếu kết quả là số
+                        cleaned_text = cleaned_text.replace(' ', '')
+                        
+                        # Kiểm tra nếu kết quả chỉ chứa chữ số
+                        if cleaned_text.isdigit():
+                            retry_text = cleaned_text
+                
+                # Kiểm tra với allowed_values trước nếu có
+                retry_matched_with_allowed_values = False
+                if allowed_values and len(allowed_values) > 0:
+                    best_match, match_score, match_method = find_best_allowed_value_match(
+                        retry_text, allowed_values, f"{roi_name}_retry"
+                    )
+                    
+                    if best_match:
+                        retry_text = best_match
+                        retry_matched_with_allowed_values = True
+                    else:
+                        retry_text = allowed_values[0]
+                        retry_matched_with_allowed_values = True
+                
+                # Nếu chưa match với allowed_values, xử lý format decimal
+                if not retry_matched_with_allowed_values:
+                    # Chấp nhận retry result nếu confidence > 0.3 hoặc tốt hơn original
+                    if retry_confidence > 0.3 or retry_confidence > best_confidence:
+                        # Áp dụng định dạng theo decimal_places nếu kết quả là số và có cấu hình
+                        formatted_retry_text = retry_text
+                        
+                        # Xử lý trường hợp retry_text chỉ có các ký tự số nhưng không có dấu chấm thập phân
+                        is_numeric = re.match(r'^-?\d+$', retry_text) is not None
+                        
+                        if (is_numeric or re.match(r'^-?\d+\.?\d*$', retry_text)):
+                            try:
+                                decimal_places_config = get_decimal_places_config_cached()
+                                
+                                if (machine_type in decimal_places_config and 
+                                    screen_id in decimal_places_config[machine_type] and 
+                                    roi_name in decimal_places_config[machine_type][screen_id]):
+                                    
+                                    is_negative = retry_text.startswith('-')
+                                    clean_text = retry_text[1:] if is_negative else retry_text
+                                    decimal_places = int(decimal_places_config[machine_type][screen_id][roi_name])
+                                    
+                                    # Xử lý tương tự như phần xử lý decimal_places ở trên
+                                    if decimal_places == 0:
+                                        # Nếu decimal_places là 0, bỏ dấu chấm
+                                        formatted_retry_text = clean_text.replace('.', '')
+                                    else:
+                                        # Xử lý vị trí dấu thập phân
+                                        if '.' in clean_text:
+                                            int_part, dec_part = clean_text.split('.')
+                                            # Kết hợp phần nguyên và phần thập phân thành một chuỗi không có dấu chấm
+                                            all_digits = int_part + dec_part
+                                            
+                                            # Đặt dấu chấm vào vị trí thích hợp theo decimal_places
+                                            if decimal_places > 0:
+                                                if len(all_digits) <= decimal_places:
+                                                    # Thêm số 0 phía trước và đặt dấu chấm sau số 0 đầu tiên
+                                                    padded_str = all_digits.zfill(decimal_places)
+                                                    formatted_retry_text = f"0.{padded_str}"
+                                                else:
+                                                    # Đặt dấu chấm vào vị trí thích hợp: (độ dài - decimal_places)
+                                                    insert_pos = len(all_digits) - decimal_places
+                                                    formatted_retry_text = f"{all_digits[:insert_pos]}.{all_digits[insert_pos:]}"
+                                            else:
+                                                # Nếu decimal_places = 0, bỏ dấu chấm
+                                                formatted_retry_text = all_digits
+                                        else:
+                                            # Không có dấu chấm (số nguyên)
+                                            num_str = clean_text
+                                            
+                                            # Thêm phần thập phân nếu cần
+                                            if decimal_places > 0:
+                                                # Đặt dấu chấm vào vị trí thích hợp: (độ dài - decimal_places)
+                                                if len(num_str) <= decimal_places:
+                                                    # Nếu số chữ số ít hơn hoặc bằng decimal_places, thêm số 0 ở đầu
+                                                    padded_str = num_str.zfill(decimal_places)
+                                                    formatted_retry_text = f"0.{padded_str}"
+                                                else:
+                                                    # Đặt dấu chấm vào vị trí thích hợp
+                                                    insert_pos = len(num_str) - decimal_places
+                                                    formatted_retry_text = f"{num_str[:insert_pos]}.{num_str[insert_pos:]}"
+                                            else:
+                                                # Giữ nguyên số nguyên nếu không cần thập phân
+                                                formatted_retry_text = num_str
+                                    
+                                    # Thêm dấu âm nếu cần
+                                    if is_negative:
+                                        formatted_retry_text = f"-{formatted_retry_text}"
+                            except Exception as e:
+                                print(f"Error formatting retry text: {str(e)}")
+                        
+                        # Kiểm tra nếu ROI có chứa "working hours" trong tên 
+                        if "working hours" in roi_name.lower() and re.match(r'^\d+\.\d+\.\d+$', formatted_retry_text):
+                            # Chuyển đổi từ định dạng số.số.số sang số:số:số
+                            formatted_retry_text = formatted_retry_text.replace('.', ':').replace(' ', ':').replace('-', ':')
+                        
+                        # Xử lý dấu "-" không ở vị trí đầu tiên
+                        if "-" in formatted_retry_text[1:]:
+                            formatted_retry_text = formatted_retry_text[0] + formatted_retry_text[1:].replace('-', '.')
+                        
+                        # Cập nhật kết quả với retry result
+                        result["text"] = formatted_retry_text.replace('C','0')
+                        result["confidence"] = retry_confidence
+                        result["has_text"] = True
+                        result["original_value"] = retry_text
+                        print(f"✅ Updated result with retry OCR: '{formatted_retry_text}' (confidence: {retry_confidence:.4f})")
+                    else:
+                        print(f"Keeping original result: retry confidence {retry_confidence:.4f} not meeting threshold 0.3")
+                else:
+                    # Nếu đã match với allowed_values, cập nhật result
+                    result["text"] = retry_text
+                    result["confidence"] = retry_confidence
+                    result["has_text"] = True
+                    result["original_value"] = retry_text
+                    print(f"✅ Updated result with allowed value match: '{retry_text}'")
+            else:
+                print(f"❌ No retry OCR results found on digit mask")
+        
+        except Exception as e:
+            print(f"Error in retry logic for ROI {roi_name}: {e}")
+    
+    return result
+
 # Thêm hàm căn chỉnh ảnh từ wrap_perspective.py
 class ImageAligner:
     def __init__(self, template_img, source_img):
@@ -131,11 +868,16 @@ class ImageAligner:
         # Store warped image
         self.warped_img = None
         
-        # Initialize feature detector (SIFT works well for this type of image)
-        self.detector = cv2.SIFT_create()
+        # Sử dụng SIFT detector global để tối ưu hiệu suất
+        self.detector = sift_detector
         
     def align_images(self):
         """Căn chỉnh ảnh nguồn để khớp với ảnh mẫu bằng feature matching và homography."""
+        # Kiểm tra SIFT detector có khả dụng không
+        if self.detector is None:
+            print("Warning: SIFT detector not available, returning original image")
+            return self.source_img.copy()
+            
         # Convert images to grayscale for feature detection
         template_gray = cv2.cvtColor(self.template_img, cv2.COLOR_BGR2GRAY)
         source_gray = cv2.cvtColor(self.source_img, cv2.COLOR_BGR2GRAY)
@@ -144,13 +886,13 @@ class ImageAligner:
         template_keypoints, template_descriptors = self.detector.detectAndCompute(template_gray, None)
         source_keypoints, source_descriptors = self.detector.detectAndCompute(source_gray, None)
         
-        # Match features using FLANN matcher
-        FLANN_INDEX_KDTREE = 1
-        index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=5)
-        search_params = dict(checks=50)
-        flann = cv2.FlannBasedMatcher(index_params, search_params)
-        
-        matches = flann.knnMatch(source_descriptors, template_descriptors, k=2)
+        # Kiểm tra FLANN matcher có khả dụng không
+        if flann_matcher is None:
+            print("Warning: FLANN matcher not available, returning original image")
+            return self.source_img.copy()
+            
+        # Sử dụng FLANN matcher global để tối ưu hiệu suất
+        matches = flann_matcher.knnMatch(source_descriptors, template_descriptors, k=2)
         
         # Filter good matches using Lowe's ratio test
         good_matches = []
@@ -539,6 +1281,273 @@ def auto_detect_machine_and_screen_original(image):
 # Replace main function with fast version
 auto_detect_machine_and_screen = auto_detect_machine_and_screen_smart
 
+def perform_ocr_on_roi_optimized(image, roi_coordinates, original_filename, template_path=None, roi_names=None, machine_code=None, screen_id=None):
+    """
+    Phiên bản tối ưu của perform_ocr_on_roi với parallel processing và caching
+    """
+    try:
+        # Kiểm tra tham số đầu vào
+        if roi_coordinates is None or len(roi_coordinates) == 0:
+            return []
+        
+        # Tạo tên ROI mặc định nếu cần
+        if roi_names is None or len(roi_names) != len(roi_coordinates):
+            roi_names = [f"ROI_{i}" for i in range(len(roi_coordinates))]
+        
+        # Kiểm tra EasyOCR
+        if not HAS_EASYOCR or reader is None:
+            return [{"roi_index": roi_names[i], "text": "OCR_NOT_AVAILABLE", "confidence": 0, "has_text": False, "original_value": ""} 
+                   for i in range(len(roi_coordinates))]
+        
+        # Lấy kích thước ảnh
+        img_height, img_width = image.shape[:2]
+        
+        # Sử dụng cached machine info
+        machine_info = get_machine_info_cached()
+        machine_code = machine_info.get('machine_code', 'F41') if machine_code is None else machine_code
+        screen_id = machine_info.get('screen_id', 'Main') if screen_id is None else screen_id
+        
+        # Sử dụng cached ROI info
+        roi_info = get_roi_info_cached()
+        machine_type = get_machine_type(machine_code)
+        
+        # Chuẩn bị dữ liệu cho parallel processing
+        roi_args = []
+        
+        for i, coords in enumerate(roi_coordinates):
+            try:
+                # Chuyển đổi tọa độ
+                if len(coords) != 4:
+                    continue
+                
+                # Kiểm tra normalized coordinates
+                is_normalized = any(isinstance(value, float) and 0 <= value <= 1 for value in coords)
+                
+                if is_normalized:
+                    x1, y1, x2, y2 = coords
+                    x1, x2 = int(x1 * img_width), int(x2 * img_width)
+                    y1, y2 = int(y1 * img_height), int(y2 * img_height)
+                else:
+                    x1, y1, x2, y2 = [int(float(c)) for c in coords]
+                
+                # Đảm bảo thứ tự tọa độ
+                x1, x2 = min(x1, x2), max(x1, x2)
+                y1, y2 = min(y1, y2), max(y1, y2)
+                
+                # Kiểm tra tọa độ hợp lệ
+                if x1 < 0 or y1 < 0 or x2 >= img_width or y2 >= img_height or x1 >= x2 or y1 >= y2:
+                    continue
+                
+                # Cắt ROI
+                roi_image = image[y1:y2, x1:x2]
+                roi_name = roi_names[i] if i < len(roi_names) else f"ROI_{i}"
+                
+                # Kiểm tra allowed_values từ cache
+                allowed_values = []
+                is_special_on_off_case = False
+                
+                # Tìm allowed_values nhanh từ cache (thử với machine_code trước)
+                if machine_code in roi_info.get("machines", {}):
+                    screens = roi_info["machines"][machine_code].get("screens", {})
+                    if screen_id in screens:
+                        roi_list = screens[screen_id]
+                        for roi_item in roi_list:
+                            if isinstance(roi_item, dict) and roi_item.get("name") == roi_name:
+                                allowed_values = roi_item.get("allowed_values", [])
+                                if "ON" in allowed_values and "OFF" in allowed_values:
+                                    is_special_on_off_case = True
+                                break
+                
+                # Nếu không tìm thấy với machine_code, thử với machine_type
+                if not allowed_values and machine_type in roi_info.get("machines", {}):
+                    screens = roi_info["machines"][machine_type].get("screens", {})
+                    if screen_id in screens:
+                        roi_list = screens[screen_id]
+                        for roi_item in roi_list:
+                            if isinstance(roi_item, dict) and roi_item.get("name") == roi_name:
+                                allowed_values = roi_item.get("allowed_values", [])
+                                if "ON" in allowed_values and "OFF" in allowed_values:
+                                    is_special_on_off_case = True
+                                break
+                
+                # Thêm vào danh sách args cho parallel processing
+                roi_args.append((roi_image, roi_name, machine_type, allowed_values, is_special_on_off_case, screen_id))
+                
+            except Exception as e:
+                print(f"Error preparing ROI {i}: {e}")
+                continue
+        
+        # Xử lý ROIs song song
+        if len(roi_args) <= 2:
+            # Nếu ít ROI, xử lý tuần tự để tránh overhead
+            results = [process_single_roi_optimized(args) for args in roi_args]
+        else:
+            # Xử lý song song cho nhiều ROI
+            with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(roi_args), 4)) as executor:
+                results = list(executor.map(process_single_roi_optimized, roi_args))
+        
+        # Post-process: Kiểm tra kết quả có confidence thấp không và thực hiện retry nếu cần
+        final_results = []
+        for i, result in enumerate(results):
+            if result.get('confidence', 0) < 0.3:
+                # Confidence thấp, thực hiện retry với connected component analysis
+                try:
+                    roi_args_item = roi_args[i]
+                    retry_result = process_roi_with_retry_logic_optimized(roi_args_item, original_filename)
+                    if retry_result and retry_result.get('confidence', 0) > result.get('confidence', 0):
+                        final_results.append(retry_result)
+                    else:
+                        final_results.append(result)
+                except:
+                    final_results.append(result)
+            else:
+                final_results.append(result)
+        
+        return final_results
+        
+    except Exception as e:
+        print(f"Error in perform_ocr_on_roi_optimized: {e}")
+        traceback.print_exc()
+        return []
+
+def process_roi_with_retry_logic(roi_args, original_filename):
+    """
+    Xử lý retry logic với connected component analysis cho ROI có confidence thấp
+    """
+    try:
+        (roi_image, roi_name, machine_type, allowed_values, is_special_on_off_case, screen_id) = roi_args
+        
+        # Kiểm tra EasyOCR có khả dụng không
+        if not HAS_EASYOCR or reader is None:
+            return None
+        
+        print(f"Processing retry logic for ROI: {roi_name}")
+        
+        # 1. Chuyển ảnh ROI sang grayscale nếu chưa phải
+        if len(roi_image.shape) > 2:
+            roi_gray = cv2.cvtColor(roi_image, cv2.COLOR_BGR2GRAY)
+        else:
+            roi_gray = roi_image.copy()
+        
+        # 2. Làm mờ nhẹ để giảm nhiễu bề mặt
+        roi_blur = cv2.GaussianBlur(roi_gray, (7,7), 0)
+        
+        # 3. Áp dụng adaptive threshold để tách nền thay đổi độ sáng
+        roi_th = cv2.adaptiveThreshold(
+            roi_blur, 255,
+            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY_INV,  # Đảo ngược để số là màu trắng, nền đen
+            blockSize=11, C=2
+        )
+        
+        # 4. Sử dụng connected component analysis để lọc dựa trên kích thước
+        num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(roi_th, connectivity=8)
+        
+        # Tạo một mask trống để giữ lại các số
+        digit_mask = np.zeros_like(roi_th)
+        
+        # Lọc các thành phần dựa trên kích thước (có thể điều chỉnh các giá trị này)
+        min_area = 50      # Diện tích tối thiểu của số
+        max_area = 2000    # Diện tích tối đa của số
+        min_width = 5      # Chiều rộng tối thiểu
+        min_height = 10    # Chiều cao tối thiểu
+        max_width = 100    # Chiều rộng tối đa
+        max_height = 100   # Chiều cao tối đa
+        aspect_ratio_min = 0.2  # Tỷ lệ chiều rộng/chiều cao tối thiểu
+        aspect_ratio_max = 5.0  # Tỷ lệ chiều rộng/chiều cao tối đa
+        
+        # Bỏ qua label 0 vì đó là nền (background)
+        for label in range(1, num_labels):
+            # Lấy thông tin của component
+            x, y, w, h, area = stats[label]
+            
+            # Tính toán tỷ lệ khung hình
+            aspect_ratio = w / h if h > 0 else 0
+            
+            # Kiểm tra các điều kiện để xác định là số
+            if (min_area < area < max_area and 
+                min_width < w < max_width and 
+                min_height < h < max_height and
+                aspect_ratio_min < aspect_ratio < aspect_ratio_max):
+                # Đây có khả năng là số, giữ lại trong mask
+                digit_mask[labels == label] = 255
+        
+            # 5. Thực hiện OCR trên mask đã tạo với thông số tối ưu
+            retry_results = reader.readtext(digit_mask, 
+                                          allowlist='0123456789.-ABCDEFGHIKLNORTUabcdefghiklnortu', 
+                                          detail=1, 
+                                          paragraph=False, 
+                                          batch_size=1, 
+                                          text_threshold=0.4,
+                                          link_threshold=0.2, 
+                                          low_text=0.3, 
+                                          mag_ratio=2, 
+                                          slope_ths=0.05,
+                                          decoder='beamsearch'
+                                          )
+        
+        # Kiểm tra nếu có kết quả OCR
+        if retry_results and len(retry_results) > 0:
+            # Tìm kết quả có confidence cao nhất
+            best_retry_result = max(retry_results, key=lambda x: x[2])
+            retry_text = best_retry_result[1]  # Text
+            retry_confidence = best_retry_result[2]  # Confidence
+            
+            # Chuyển đổi sang chữ hoa và kiểm tra pattern
+            upper_text = retry_text.upper()
+            upper_text_no_dot = upper_text.replace('.', '')
+            
+            if re.search(r'[IUO0Q]{2}', upper_text_no_dot):
+                temp_text = upper_text.replace('U', '0').replace('I', '1').replace('O', '0').replace('C','0').replace('Q','0')
+                if temp_text.replace('.', '').isdigit():
+                    retry_text = temp_text
+            # Trường hợp đặc biệt khác
+            else:
+                # Kiểm tra xem có ít nhất 60% ký tự là chữ cái đáng ngờ I, U, O
+                digit_like_chars_count = sum(1 for char in upper_text if char in 'OUICL')
+                if digit_like_chars_count / len(retry_text) >= 0.7:
+                    # Chuyển đổi tất cả ký tự dễ nhầm lẫn thành số tương ứng
+                    cleaned_text = upper_text
+                    cleaned_text = cleaned_text.replace('O', '0').replace('U', '0').replace('Q', '0')
+                    cleaned_text = cleaned_text.replace('I', '1').replace('L', '1')
+                    cleaned_text = cleaned_text.replace('C', '0').replace('D', '0')
+                    
+                    # Loại bỏ khoảng trắng nếu kết quả là số
+                    cleaned_text = cleaned_text.replace(' ', '')
+                    
+                    # Kiểm tra nếu kết quả chỉ chứa chữ số
+                    if cleaned_text.isdigit():
+                        retry_text = cleaned_text
+            
+            # Xử lý khoảng trắng giữa các số (tương tự như xử lý trên best_text)
+            retry_text = retry_text.upper()
+            retry_text = retry_text.replace('O', '0').replace('I', '1').replace('C','0').replace('S','5').replace('G','6').replace('B','8')
+            
+            # Kiểm tra allowed_values cho retry_text
+            if allowed_values and len(allowed_values) > 0:
+                retry_best_match, retry_match_score, retry_match_method = find_best_allowed_value_match(
+                    retry_text, allowed_values, f"{roi_name}_retry"
+                )
+                
+                if retry_best_match:
+                    retry_text = retry_best_match
+                else:
+                    retry_text = allowed_values[0]
+            
+            return {
+                "roi_index": roi_name,
+                "text": retry_text,
+                "confidence": retry_confidence,
+                "has_text": True,
+                "original_value": retry_text
+            }
+        
+        return None
+        
+    except Exception as e:
+        print(f"Error in retry logic for ROI {roi_name}: {e}")
+        return None
+
 # Sửa lại hàm perform_ocr_on_roi để sử dụng ảnh đã căn chỉnh
 def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=None, roi_names=None, machine_code=None, screen_id=None):
     """
@@ -748,18 +1757,19 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                 
                 # Thử OCR trên toàn bộ ROI
                 try:
-                    # Specify the characters to read (digits only)
-                    ocr_results = reader.readtext(roi_processed, allowlist='0123456789.-ABCDEFGHIKLNORTUabcdefghiklnortu', 
-                    detail=1, 
-                    paragraph=False, 
-                    batch_size=1, 
-                    text_threshold=0.6,    # Tăng từ 0.4 → 0.6 để giảm nhiễu, tăng độ chính xác
-                    link_threshold=0.2,    # Giảm từ 0.8 → 0.2 để kết nối tốt hơn số và dấu chấm (04.12)
-                    low_text=0.2,          # Giảm từ 0.3 → 0.2 để detect text nhỏ tốt hơn
-                    mag_ratio=2,           # Giữ nguyên - tỷ lệ phóng đại ảnh
-                    slope_ths=0.05,        # Giữ nguyên - threshold góc nghiêng
-                    decoder='beamsearch'   # Giữ nguyên - phương pháp decode
-                    )
+                                        # Specify the characters to read (digits only)
+                    ocr_results = reader.readtext(roi_processed, 
+                                                allowlist='0123456789.-ABCDEFGHIKLNORTUabcdefghiklnortu', 
+                                                detail=1, 
+                                                paragraph=False, 
+                                                batch_size=1, 
+                                                text_threshold=0.4,
+                                                link_threshold=0.2, 
+                                                low_text=0.3, 
+                                                mag_ratio=2, 
+                                                slope_ths=0.05,
+                                                decoder='beamsearch'
+                                                )
                     if ocr_results and len(ocr_results) > 0:
                         # Lấy kết quả có confidence cao nhất
                         best_result = max(ocr_results, key=lambda x: x[2])
@@ -1163,19 +2173,19 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                     # cv2.imwrite(digit_mask_path, digit_mask)
                     # print(f"Saved digit mask to: {digit_mask_path}")
                     
-                    # 5. Thực hiện OCR trên mask đã tạo với thông số tối ưu
+                                        # 5. Thực hiện OCR trên mask đã tạo với thông số tối ưu
                     retry_results = reader.readtext(digit_mask, 
-                                            allowlist='0123456789.-ABCDEFGHIKLNORTUabcdefghiklnortu', 
-                                            detail=1, 
-                                            paragraph=False, 
-                                            batch_size=1, 
-                                            text_threshold=0.1,    # OPTIMIZED: Giảm từ 0.6 → 0.1 (Very Relaxed)
-                                            link_threshold=0.05,   # OPTIMIZED: Giảm từ 0.2 → 0.05 (Very Relaxed)  
-                                            low_text=0.05,         # OPTIMIZED: Giảm từ 0.2 → 0.05 (Very Relaxed)
-                                            mag_ratio=4,           # OPTIMIZED: Tăng từ 2 → 4 (Very Relaxed)
-                                            slope_ths=0.2,         # OPTIMIZED: Tăng từ 0.05 → 0.2 (Very Relaxed)
-                                            decoder='greedy'       # OPTIMIZED: Chuyển từ 'beamsearch' → 'greedy' (Very Relaxed)
-                                            )
+                                                  allowlist='0123456789.-ABCDEFGHIKLNORTUabcdefghiklnortu', 
+                                                  detail=1, 
+                                                  paragraph=False, 
+                                                  batch_size=1, 
+                                                  text_threshold=0.4,
+                                                  link_threshold=0.2, 
+                                                  low_text=0.3, 
+                                                  mag_ratio=2, 
+                                                  slope_ths=0.05,
+                                                  decoder='beamsearch'
+                                                  )
                     
                     # Kiểm tra nếu có kết quả OCR
                     if retry_results and len(retry_results) > 0:
@@ -1489,36 +2499,27 @@ def clear_processed_roi_folder():
 # Sửa lại route upload_image để sử dụng template reference từ thư mục mới
 @app.route('/api/images', methods=['POST'])
 def upload_image():
-    """API để tải lên ảnh và thực hiện OCR trên các vùng ROI được định nghĩa"""
-    # Xóa tất cả files cũ trong processed_roi trước khi xử lý ảnh mới
-    clear_processed_roi_folder()
+    """API để tải lên ảnh và thực hiện OCR trên các vùng ROI được định nghĩa - OPTIMIZED VERSION"""
     
-    # Kiểm tra xem có file trong request không
+    # Kiểm tra request nhanh
     if 'file' not in request.files:
         return jsonify({"error": "No file part in the request"}), 400
     
     file = request.files['file']
-    
-    # Kiểm tra xem có chọn file chưa
     if file.filename == '':
         return jsonify({"error": "No file selected"}), 400
     
-    # Tạo thư mục processed_roi nếu chưa tồn tại (không xóa file cũ để tăng tốc)
-    processed_folder = os.path.join(app.config['UPLOAD_FOLDER'], 'processed_roi')
-    os.makedirs(processed_folder, exist_ok=True)
-    
-    # Lưu file tạm thời
+    # Đọc ảnh trực tiếp từ memory thay vì lưu file
     filename = secure_filename(file.filename)
-    temp_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    file.save(temp_path)
+    
+    # Đọc ảnh trực tiếp từ stream để tránh I/O
+    file_bytes = np.frombuffer(file.read(), np.uint8)
+    uploaded_image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+    
+    if uploaded_image is None:
+        return jsonify({"error": "Could not read uploaded image"}), 400
     
     try:
-        # Đọc ảnh đã upload
-        uploaded_image = cv2.imread(temp_path)
-        if uploaded_image is None:
-            return jsonify({"error": "Could not read uploaded image"}), 400
-        
-        # Tự động detect machine_code, area và screen từ hình ảnh
         # Lấy area và machine_code từ form data nếu có
         area = request.form.get('area', None)
         machine_code = request.form.get('machine_code', None)
@@ -1597,16 +2598,16 @@ def upload_image():
         # Tiền xử lý ảnh với căn chỉnh nếu có template
         image = uploaded_image  # Sử dụng ảnh gốc hoặc ảnh HMI đã phát hiện
         if template_path:
-            # Đọc ảnh template
-            template_img = cv2.imread(template_path)
+            # Sử dụng cached template image
+            template_img = get_template_image_cached(template_path)
             if template_img is not None:
-                # Căn chỉnh ảnh (không lưu file để tăng tốc)
+                # Căn chỉnh ảnh nhanh
                 aligner = ImageAligner(template_img, image)
                 aligned_image = aligner.align_images()
                 image = aligned_image
         
-        # Thực hiện OCR trên các vùng ROI
-        ocr_results = perform_ocr_on_roi(
+        # Thực hiện OCR trên các vùng ROI với phiên bản tối ưu
+        ocr_results = perform_ocr_on_roi_optimized(
             image, 
             roi_coordinates, 
             filename, 
@@ -1635,50 +2636,30 @@ def upload_image():
             }
         }
         
-        # Lưu kết quả vào file JSON trong folder ocr_results
-        try:
-            # Tạo timestamp cho tên file
-            timestamp_str = time.strftime("%Y%m%d_%H%M%S")
-            
-            # Tạo tên file theo format: ocr_result_{timestamp}_{machine_type}_{screen_id}_{original_filename}_{machine_code}_{screen_id}.json
-            # Lấy tên file gốc không có extension
-            base_filename = os.path.splitext(filename)[0]
-            json_filename = f"ocr_result_{timestamp_str}_{machine_type}_{screen_id}_{base_filename}_{machine_code}_{screen_id}.json"
-            
-            # Đường dẫn đầy đủ đến file JSON
-            json_file_path = os.path.join(app.config['OCR_RESULTS_FOLDER'], json_filename)
-            
-            # Tạo thư mục ocr_results nếu chưa tồn tại
-            os.makedirs(app.config['OCR_RESULTS_FOLDER'], exist_ok=True)
-            
-            # Lưu dữ liệu JSON vào file
-            with open(json_file_path, 'w', encoding='utf-8') as json_file:
-                json.dump(result_data, json_file, ensure_ascii=False, indent=2)
-            
-            print(f"📁 OCR result saved to: {json_file_path}")
-            
-            # Thêm thông tin về file đã lưu vào response
-            result_data["saved_json_file"] = json_filename
-            result_data["saved_json_path"] = json_file_path
-            
-        except Exception as e:
-            print(f"❌ Error saving OCR result to JSON file: {str(e)}")
-            # Không làm gián đoạn API response nếu việc lưu file thất bại
-            traceback.print_exc()
+        # Lưu kết quả vào file JSON bất đồng bộ để không chặn response
+        def save_json_async():
+            try:
+                timestamp_str = time.strftime("%Y%m%d_%H%M%S")
+                base_filename = os.path.splitext(filename)[0]
+                json_filename = f"ocr_result_{timestamp_str}_{machine_type}_{screen_id}_{base_filename}_{machine_code}_{screen_id}.json"
+                json_file_path = os.path.join(app.config['OCR_RESULTS_FOLDER'], json_filename)
+                os.makedirs(app.config['OCR_RESULTS_FOLDER'], exist_ok=True)
+                
+                with open(json_file_path, 'w', encoding='utf-8') as json_file:
+                    json.dump(result_data, json_file, ensure_ascii=False, indent=2)
+                print(f"📁 OCR result saved to: {json_file_path}")
+            except Exception as e:
+                print(f"❌ Error saving OCR result: {str(e)}")
         
-        # Trả về kết quả (không lưu file để tăng tốc)
+        # Submit to thread pool để save async
+        _ocr_thread_pool.submit(save_json_async)
+        
+        # Trả về kết quả ngay lập tức
         return jsonify(result_data), 201
             
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": f"Error processing image: {str(e)}"}), 500
-    finally:
-        # Dọn dẹp file tạm thời
-        try:
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
-        except:
-            pass
 
 # API 2: Lấy danh sách hình ảnh
 @app.route('/api/images', methods=['GET'])
@@ -1995,49 +2976,10 @@ def get_current_machine_screen():
     except Exception as e:
         return jsonify({"error": f"Failed to get current machine and screen: {str(e)}"}), 500
 
-# Hàm helper để lấy thông tin máy hiện tại
+# Hàm helper để lấy thông tin máy hiện tại - OPTIMIZED VERSION
 def get_current_machine_info():
-    """Lấy thông tin máy hiện tại từ machine_screens.json và parameter_order_value.txt"""
-    try:
-        parameter_order_file_path = os.path.join(app.config['ROI_DATA_FOLDER'], 'parameter_order_value.txt')
-        if not os.path.exists(parameter_order_file_path):
-            return None
-        
-        with open(parameter_order_file_path, 'r', encoding='utf-8') as f:
-            screen_numeric_id = int(f.read().strip())
-        
-        machine_screens_path = os.path.join(app.config['ROI_DATA_FOLDER'], 'machine_screens.json')
-        if not os.path.exists(machine_screens_path):
-            return None
-        
-        with open(machine_screens_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        
-        # Tìm máy và màn hình dựa trên screen_numeric_id
-        # Cần tìm trong cấu trúc mới: areas -> machines -> type -> machine_types -> screens
-        for area_code, area_info in data.get('areas', {}).items():
-            for machine_code, machine_info in area_info.get('machines', {}).items():
-                machine_type = machine_info.get('type')
-                if not machine_type:
-                    continue
-                
-                # Kiểm tra trong machine_types
-                if machine_type in data.get('machine_types', {}):
-                    for screen in data['machine_types'][machine_type].get('screens', []):
-                        if screen['id'] == screen_numeric_id:
-                            return {
-                                'area': area_code,
-                                'machine_code': machine_code,
-                                'machine_type': machine_type,
-                                'screen_id': screen['screen_id'],  # Trả về tên màn hình
-                                'screen_numeric_id': screen_numeric_id,
-                                'description': screen.get('description', '')
-                            }
-        
-        return None
-    except Exception as e:
-        print(f"Error getting current machine info: {str(e)}")
-        return None
+    """Lấy thông tin máy hiện tại từ cache - tối ưu I/O"""
+    return get_machine_info_cached()
 
 # API mới: Lấy thông tin máy theo ID
 @app.route('/api/machines', methods=['GET'])
@@ -4092,22 +5034,26 @@ def compare_features_orb(img1, img2, max_features=500):
     img1_gray = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
     img2_gray = cv2.cvtColor(img2, cv2.COLOR_BGR2GRAY)
     
-    # Khởi tạo ORB detector
-    orb = cv2.ORB_create(max_features)
+    # Kiểm tra ORB detector global có khả dụng không
+    if orb_detector is None:
+        print("ORB detector not available")
+        return 0
     
-    # Tìm keypoints và descriptors
-    kp1, des1 = orb.detectAndCompute(img1_gray, None)
-    kp2, des2 = orb.detectAndCompute(img2_gray, None)
+    # Tìm keypoints và descriptors sử dụng ORB detector global
+    kp1, des1 = orb_detector.detectAndCompute(img1_gray, None)
+    kp2, des2 = orb_detector.detectAndCompute(img2_gray, None)
     
     # Kiểm tra nếu không tìm thấy đặc trưng
     if des1 is None or des2 is None or len(des1) < 2 or len(des2) < 2:
         return 0
     
-    # Khởi tạo BFMatcher
-    bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+    # Kiểm tra BFMatcher global có khả dụng không
+    if bf_matcher is None:
+        print("BFMatcher not available")
+        return 0
     
-    # Tìm các matches
-    matches = bf.match(des1, des2)
+    # Tìm các matches sử dụng BFMatcher global
+    matches = bf_matcher.match(des1, des2)
     
     # Sắp xếp các matches theo khoảng cách (thấp hơn = tốt hơn)
     matches = sorted(matches, key=lambda x: x.distance)
@@ -4683,6 +5629,9 @@ def save_roi_image_with_result(roi, roi_name, original_filename, detected_text, 
 auto_detect_machine_and_screen = auto_detect_machine_and_screen_smart
 
 if __name__ == '__main__':
+    # Khởi tạo tất cả cache trước khi start server để tăng tốc độ API response
+    initialize_all_caches()
+    
     print("DEBUG INFO:")
     print(f"UPLOAD_FOLDER: {UPLOAD_FOLDER}")
     print(f"API Routes configured:")

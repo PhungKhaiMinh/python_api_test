@@ -105,6 +105,21 @@ _hog_svm_classifier = None
 # Global Ensemble classifier instance
 _ensemble_classifier = None
 
+# Global OpenCV detectors để tối ưu hiệu suất
+try:
+    _global_orb_detector = cv2.ORB_create(nfeatures=500, scaleFactor=1.2, nlevels=8)
+    print("✅ Global ORB detector initialized successfully")
+except Exception as e:
+    print(f"❌ Error initializing global ORB detector: {e}")
+    _global_orb_detector = None
+
+try:
+    _global_bf_matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+    print("✅ Global BFMatcher initialized successfully")
+except Exception as e:
+    print(f"❌ Error initializing global BFMatcher: {e}")
+    _global_bf_matcher = None
+
 def _get_hog_svm_classifier() -> Optional[HOGSVMClassifier]:
     """Lấy singleton instance của HOG + SVM classifier"""
     global _hog_svm_classifier
@@ -651,19 +666,24 @@ def _compare_orb_enhanced(img1: np.ndarray, img2: np.ndarray) -> float:
         if gray1.shape != gray2.shape:
             gray2 = cv2.resize(gray2, (gray1.shape[1], gray1.shape[0]))
         
-        # Enhanced ORB với more features
-        orb = cv2.ORB_create(nfeatures=500, scaleFactor=1.2, nlevels=8)
+        # Sử dụng global ORB detector để tối ưu hiệu suất
+        if _global_orb_detector is None:
+            print("❌ Global ORB detector not available")
+            return 0.0
         
         # Find keypoints and descriptors
-        kp1, des1 = orb.detectAndCompute(gray1, None)
-        kp2, des2 = orb.detectAndCompute(gray2, None)
+        kp1, des1 = _global_orb_detector.detectAndCompute(gray1, None)
+        kp2, des2 = _global_orb_detector.detectAndCompute(gray2, None)
         
         if des1 is None or des2 is None or len(des1) < 10 or len(des2) < 10:
             return 0.0
         
-        # Match features với better parameters
-        bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
-        matches = bf.match(des1, des2)
+        # Sử dụng global BFMatcher để tối ưu hiệu suất
+        if _global_bf_matcher is None:
+            print("❌ Global BFMatcher not available")
+            return 0.0
+        
+        matches = _global_bf_matcher.match(des1, des2)
         
         if len(matches) == 0:
             return 0.0
