@@ -2817,19 +2817,37 @@ def get_decimal_places():
 # API mới: Lấy cấu hình số chữ số thập phân cho một máy cụ thể
 @app.route('/api/decimal_places/<machine_code>', methods=['GET'])
 def get_decimal_places_for_machine(machine_code):
-    """Lấy cấu hình số chữ số thập phân cho một máy cụ thể"""
+    """Lấy cấu hình số chữ số thập phân cho một máy cụ thể bằng machine_code"""
     try:
+        # Chuyển đổi machine_code thành machine_type
+        machine_type = get_machine_type(machine_code)
+        if not machine_type:
+            return jsonify({"error": f"Machine code '{machine_code}' not found in machine configuration"}), 404
+        
         decimal_config_path = os.path.join(app.config['ROI_DATA_FOLDER'], 'decimal_places.json')
         if os.path.exists(decimal_config_path):
             with open(decimal_config_path, 'r', encoding='utf-8') as f:
                 config = json.load(f)
             
-            if machine_code in config:
-                return jsonify(config[machine_code]), 200
+            # Tìm kiếm theo machine_type thay vì machine_code
+            if machine_type in config:
+                return jsonify({
+                    "machine_code": machine_code,
+                    "machine_type": machine_type, 
+                    "decimal_places": config[machine_type]
+                }), 200
             else:
-                return jsonify({}), 200
+                return jsonify({
+                    "machine_code": machine_code,
+                    "machine_type": machine_type,
+                    "decimal_places": {}
+                }), 200
         else:
-            return jsonify({}), 200
+            return jsonify({
+                "machine_code": machine_code,
+                "machine_type": machine_type,
+                "decimal_places": {}
+            }), 200
     
     except Exception as e:
         return jsonify({"error": f"Failed to get decimal places configuration: {str(e)}"}), 500
@@ -2837,19 +2855,40 @@ def get_decimal_places_for_machine(machine_code):
 # API mới: Lấy cấu hình số chữ số thập phân cho một màn hình cụ thể của một máy
 @app.route('/api/decimal_places/<machine_code>/<screen_name>', methods=['GET'])
 def get_decimal_places_for_screen(machine_code, screen_name):
-    """Lấy cấu hình số chữ số thập phân cho một màn hình cụ thể của một máy"""
+    """Lấy cấu hình số chữ số thập phân cho một màn hình cụ thể của một máy bằng machine_code"""
     try:
+        # Chuyển đổi machine_code thành machine_type
+        machine_type = get_machine_type(machine_code)
+        if not machine_type:
+            return jsonify({"error": f"Machine code '{machine_code}' not found in machine configuration"}), 404
+        
         decimal_config_path = os.path.join(app.config['ROI_DATA_FOLDER'], 'decimal_places.json')
         if os.path.exists(decimal_config_path):
             with open(decimal_config_path, 'r', encoding='utf-8') as f:
                 config = json.load(f)
             
-            if machine_code in config and screen_name in config[machine_code]:
-                return jsonify(config[machine_code][screen_name]), 200
+            # Tìm kiếm theo machine_type thay vì machine_code
+            if machine_type in config and screen_name in config[machine_type]:
+                return jsonify({
+                    "machine_code": machine_code,
+                    "machine_type": machine_type,
+                    "screen_name": screen_name,
+                    "decimal_places": config[machine_type][screen_name]
+                }), 200
             else:
-                return jsonify({}), 200
+                return jsonify({
+                    "machine_code": machine_code,
+                    "machine_type": machine_type,
+                    "screen_name": screen_name,
+                    "decimal_places": {}
+                }), 200
         else:
-            return jsonify({}), 200
+            return jsonify({
+                "machine_code": machine_code,
+                "machine_type": machine_type,
+                "screen_name": screen_name,
+                "decimal_places": {}
+            }), 200
     
     except Exception as e:
         return jsonify({"error": f"Failed to get decimal places configuration: {str(e)}"}), 500
@@ -3936,10 +3975,10 @@ def get_machines_by_area(area_code):
 @app.route('/api/decimal_places/<machine_code>/<screen_name>', methods=['POST'])
 def update_decimal_places_for_screen(machine_code, screen_name):
     """
-    Cập nhật cấu hình số chữ số thập phân cho một màn hình cụ thể
+    Cập nhật cấu hình số chữ số thập phân cho một màn hình cụ thể bằng machine_code
     
     Path Parameters:
-    - machine_code: Mã máy (ví dụ: F1)
+    - machine_code: Mã máy (ví dụ: IE-F1-CWA01)
     - screen_name: Tên màn hình (ví dụ: Faults)
     
     Request Body (JSON):
@@ -3951,6 +3990,11 @@ def update_decimal_places_for_screen(machine_code, screen_name):
     Chỉ cập nhật các key được gửi trong request, các key khác giữ nguyên giá trị
     """
     try:
+        # Chuyển đổi machine_code thành machine_type
+        machine_type = get_machine_type(machine_code)
+        if not machine_type:
+            return jsonify({"error": f"Machine code '{machine_code}' not found in machine configuration"}), 404
+        
         if not request.is_json:
             return jsonify({"error": "Request must be JSON"}), 400
         
@@ -3965,19 +4009,19 @@ def update_decimal_places_for_screen(machine_code, screen_name):
         else:
             config = {}
         
-        # Tạo cấu trúc nếu chưa tồn tại
-        if machine_code not in config:
-            config[machine_code] = {}
+        # Tạo cấu trúc nếu chưa tồn tại (dùng machine_type thay vì machine_code)
+        if machine_type not in config:
+            config[machine_type] = {}
         
-        if screen_name not in config[machine_code]:
-            config[machine_code][screen_name] = {}
+        if screen_name not in config[machine_type]:
+            config[machine_type][screen_name] = {}
         
         # Lưu lại cấu hình hiện tại để so sánh
-        original_config = config[machine_code][screen_name].copy() if screen_name in config[machine_code] else {}
+        original_config = config[machine_type][screen_name].copy() if screen_name in config[machine_type] else {}
         
         # Cập nhật các giá trị mới (chỉ ghi đè các key được gửi trong request)
         for key, value in new_values.items():
-            config[machine_code][screen_name][key] = value
+            config[machine_type][screen_name][key] = value
         
         # Lưu cấu hình mới
         with open(decimal_config_path, 'w', encoding='utf-8') as f:
@@ -4002,9 +4046,10 @@ def update_decimal_places_for_screen(machine_code, screen_name):
         return jsonify({
             "message": "Decimal places configuration updated successfully",
             "machine_code": machine_code,
+            "machine_type": machine_type,
             "screen_name": screen_name,
             "changes": changes,
-            "config": config[machine_code][screen_name]
+            "config": config[machine_type][screen_name]
         }), 200
     
     except Exception as e:
