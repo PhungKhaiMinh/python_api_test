@@ -483,11 +483,11 @@ def process_single_roi_optimized(args):
                     best_text_clean = best_text[1:] if is_negative else best_text
                     
                     # Áp dụng decimal_places trước khi chuyển sang ROI tiếp theo
-                    if (machine_type in decimal_places_config and 
-                        screen_id in decimal_places_config[machine_type] and 
-                        roi_name in decimal_places_config[machine_type][screen_id]):
+                    if (machine_code in decimal_places_config and 
+                        screen_id in decimal_places_config[machine_code] and 
+                        roi_name in decimal_places_config[machine_code][screen_id]):
                         
-                        decimal_places = int(decimal_places_config[machine_type][screen_id][roi_name])
+                        decimal_places = int(decimal_places_config[machine_code][screen_id][roi_name])
                         
                         # Xử lý các trường hợp khác nhau dựa trên decimal_places
                         if decimal_places == 0:
@@ -769,13 +769,13 @@ def process_roi_with_retry_logic_optimized(roi_args, original_filename):
                             try:
                                 decimal_places_config = get_decimal_places_config_cached()
                                 
-                                if (machine_type in decimal_places_config and 
-                                    screen_id in decimal_places_config[machine_type] and 
-                                    roi_name in decimal_places_config[machine_type][screen_id]):
+                                if (machine_code in decimal_places_config and 
+                                    screen_id in decimal_places_config[machine_code] and 
+                                    roi_name in decimal_places_config[machine_code][screen_id]):
                                     
                                     is_negative = retry_text.startswith('-')
                                     clean_text = retry_text[1:] if is_negative else retry_text
-                                    decimal_places = int(decimal_places_config[machine_type][screen_id][roi_name])
+                                    decimal_places = int(decimal_places_config[machine_code][screen_id][roi_name])
                                     
                                     # Xử lý tương tự như phần xử lý decimal_places ở trên
                                     if decimal_places == 0:
@@ -1040,14 +1040,6 @@ def get_roi_coordinates(machine_code, screen_id=None, machine_type=None):
             is_normalized = roi_data["metadata"]["coordinate_format"].lower() == "normalized"
             print(f"Coordinate format is {'normalized' if is_normalized else 'pixel-based'}")
         
-        # Nếu machine_type không được cung cấp, lấy từ machine_screens.json
-        if not machine_type:
-            machine_type = get_machine_type(machine_code)
-            if not machine_type:
-                print(f"Could not determine machine_type for machine_code: {machine_code}")
-                return [], []
-            print(f"Determined machine_type: {machine_type} for machine_code: {machine_code}")
-        
         screen_name = None
         
         # Kiểm tra xem screen_id có phải là tên màn hình không
@@ -1076,11 +1068,11 @@ def get_roi_coordinates(machine_code, screen_id=None, machine_type=None):
                             print(f"Found screen_name: {screen_name} for screen_id: {screen_id} in machine_code: {machine_code}")
                             break
         
-        print(f"Looking for ROIs in machine_type: {machine_type}, screen: {screen_name} (id: {screen_id})")
+        print(f"Looking for ROIs in machine_code: {machine_code}, screen: {screen_name} (id: {screen_id})")
         
-        # Tìm trong machines
-        if machine_type in roi_data.get("machines", {}):
-            screens_data = roi_data["machines"][machine_type].get("screens", {})
+        # Tìm trong machines - sử dụng machine_code thay vì machine_type
+        if machine_code in roi_data.get("machines", {}):
+            screens_data = roi_data["machines"][machine_code].get("screens", {})
             
             if screen_name and screen_name in screens_data:
                 roi_list = screens_data[screen_name]
@@ -1100,13 +1092,13 @@ def get_roi_coordinates(machine_code, screen_id=None, machine_type=None):
                 print(f"Found {len(roi_coordinates)} ROIs for {screen_name}")
                 return roi_coordinates, roi_names
             else:
-                print(f"Screen '{screen_name}' not found in roi_info.json for machine_type {machine_type}")
+                print(f"Screen '{screen_name}' not found in roi_info.json for machine_code {machine_code}")
                 print(f"Available screens: {list(screens_data.keys())}")
         else:
-            print(f"Machine type '{machine_type}' not found in roi_info.json")
-            print(f"Available machine types: {list(roi_data.get('machines', {}).keys())}")
+            print(f"Machine code '{machine_code}' not found in roi_info.json")
+            print(f"Available machine codes: {list(roi_data.get('machines', {}).keys())}")
         
-        print(f"No ROI coordinates found for machine_code={machine_code}, screen_id={screen_id}, machine_type={machine_type}")
+        print(f"No ROI coordinates found for machine_code={machine_code}, screen_id={screen_id}")
         return [], []
     except Exception as e:
         print(f"Error reading ROI coordinates: {str(e)}")
@@ -1857,15 +1849,14 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                     with open(roi_json_path, 'r', encoding='utf-8') as f:
                         roi_info = json.load(f)
                     
-                    # *** FIX: Sử dụng machine_type thay vì machine_code để lookup ***
-                    machine_type_for_lookup = get_machine_type(machine_code)
+                    # *** FIX: Sử dụng machine_code trực tiếp để lookup ***
                     
                     # Tìm allowed_values cho ROI hiện tại từ roi_info.json
-                    if (machine_type_for_lookup in roi_info.get("machines", {}) and 
-                        "screens" in roi_info["machines"][machine_type_for_lookup] and 
-                        screen_id in roi_info["machines"][machine_type_for_lookup]["screens"]):
+                    if (machine_code in roi_info.get("machines", {}) and 
+                        "screens" in roi_info["machines"][machine_code] and 
+                        screen_id in roi_info["machines"][machine_code]["screens"]):
                         
-                        roi_list = roi_info["machines"][machine_type_for_lookup]["screens"][screen_id]
+                        roi_list = roi_info["machines"][machine_code]["screens"][screen_id]
                         
                         for roi_item in roi_list:
                             if isinstance(roi_item, dict) and roi_item.get("name") == roi_name and "allowed_values" in roi_item:
@@ -1898,17 +1889,16 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                         with open(roi_json_path, 'r', encoding='utf-8') as f:
                             roi_info = json.load(f)
                         
-                        # *** FIX: Sử dụng machine_type thay vì machine_code để lookup ***
-                        machine_type_for_lookup = get_machine_type(machine_code)
+                        # *** FIX: Sử dụng machine_code trực tiếp để lookup ***
                         
                         # Tìm allowed_values cho ROI hiện tại
                         allowed_values = None
                         
-                        if (machine_type_for_lookup in roi_info.get("machines", {}) and 
-                            "screens" in roi_info["machines"][machine_type_for_lookup] and 
-                            screen_id in roi_info["machines"][machine_type_for_lookup]["screens"]):
+                        if (machine_code in roi_info.get("machines", {}) and 
+                            "screens" in roi_info["machines"][machine_code] and 
+                            screen_id in roi_info["machines"][machine_code]["screens"]):
                             
-                            roi_list = roi_info["machines"][machine_type_for_lookup]["screens"][screen_id]
+                            roi_list = roi_info["machines"][machine_code]["screens"][screen_id]
                             
                             for roi_item in roi_list:
                                 if isinstance(roi_item, dict) and roi_item.get("name") == roi_name and "allowed_values" in roi_item:
@@ -1970,11 +1960,11 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                         print(f"Getting decimal places config for machine_type={machine_type}, screen_id={screen_id}, roi_name={roi_name}")
                         
                         # Áp dụng decimal_places trước khi chuyển sang ROI tiếp theo
-                        if (machine_type in decimal_places_config and 
-                            screen_id in decimal_places_config[machine_type] and 
-                            roi_name in decimal_places_config[machine_type][screen_id]):
+                        if (machine_code in decimal_places_config and 
+                            screen_id in decimal_places_config[machine_code] and 
+                            roi_name in decimal_places_config[machine_code][screen_id]):
                             
-                            decimal_places = int(decimal_places_config[machine_type][screen_id][roi_name])
+                            decimal_places = int(decimal_places_config[machine_code][screen_id][roi_name])
                             print(f"Found decimal places config for ROI {roi_name}: {decimal_places}")
                             
                             # Xử lý các trường hợp khác nhau dựa trên decimal_places
@@ -2068,7 +2058,7 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                                 # Nếu không có cấu hình decimal_places, giữ nguyên giá trị
                                 formatted_text = best_text
                                 formatted_text = '-' + str(formatted_text) if is_negative else str(formatted_text)
-                                print(f"No decimal places config found for {machine_type}/{screen_id}/{roi_name}. Keeping original value.")
+                                print(f"No decimal places config found for {machine_code}/{screen_id}/{roi_name}. Keeping original value.")
                     except Exception as e:
                         print(f"Error applying decimal places format for ROI {roi_name}: {str(e)}")
                         formatted_text = best_text
@@ -2361,8 +2351,8 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                                     try:
                                         is_negative = retry_text.startswith('-')
                                         clean_text = retry_text[1:] if is_negative else retry_text
-                                        decimal_places = int(decimal_places_config[machine_type][screen_id][roi_name])
-                                        print(f"Getting decimal places config for machine_type={machine_type}, screen_id={screen_id}, roi_name={roi_name}")
+                                        decimal_places = int(decimal_places_config[machine_code][screen_id][roi_name])
+                                        print(f"Getting decimal places config for machine_code={machine_code}, screen_id={screen_id}, roi_name={roi_name}")
                                         print(f"Found decimal places config for ROI {roi_name}: {decimal_places}")
                                         
                                         # Xử lý tương tự như phần xử lý decimal_places ở trên
@@ -2544,7 +2534,7 @@ def upload_image():
         
         # THIẾT LẬP TEMPLATE PATH - Đây là điều thiếu!
         if template_path is None:
-            template_path = get_reference_template_path(machine_type, screen_id)
+            template_path = get_reference_template_path(machine_type, screen_id, machine_code)
             print(f"🔧 DEBUG: Auto-detected template_path: {template_path}")
         else:
             print(f"🔧 DEBUG: Using provided template_path: {template_path}")
@@ -2819,33 +2809,25 @@ def get_decimal_places():
 def get_decimal_places_for_machine(machine_code):
     """Lấy cấu hình số chữ số thập phân cho một máy cụ thể bằng machine_code"""
     try:
-        # Chuyển đổi machine_code thành machine_type
-        machine_type = get_machine_type(machine_code)
-        if not machine_type:
-            return jsonify({"error": f"Machine code '{machine_code}' not found in machine configuration"}), 404
-        
         decimal_config_path = os.path.join(app.config['ROI_DATA_FOLDER'], 'decimal_places.json')
         if os.path.exists(decimal_config_path):
             with open(decimal_config_path, 'r', encoding='utf-8') as f:
                 config = json.load(f)
             
-            # Tìm kiếm theo machine_type thay vì machine_code
-            if machine_type in config:
+            # Tìm kiếm theo machine_code trực tiếp
+            if machine_code in config:
                 return jsonify({
                     "machine_code": machine_code,
-                    "machine_type": machine_type, 
-                    "decimal_places": config[machine_type]
+                    "decimal_places": config[machine_code]
                 }), 200
             else:
                 return jsonify({
                     "machine_code": machine_code,
-                    "machine_type": machine_type,
                     "decimal_places": {}
                 }), 200
         else:
             return jsonify({
                 "machine_code": machine_code,
-                "machine_type": machine_type,
                 "decimal_places": {}
             }), 200
     
@@ -2857,35 +2839,27 @@ def get_decimal_places_for_machine(machine_code):
 def get_decimal_places_for_screen(machine_code, screen_name):
     """Lấy cấu hình số chữ số thập phân cho một màn hình cụ thể của một máy bằng machine_code"""
     try:
-        # Chuyển đổi machine_code thành machine_type
-        machine_type = get_machine_type(machine_code)
-        if not machine_type:
-            return jsonify({"error": f"Machine code '{machine_code}' not found in machine configuration"}), 404
-        
         decimal_config_path = os.path.join(app.config['ROI_DATA_FOLDER'], 'decimal_places.json')
         if os.path.exists(decimal_config_path):
             with open(decimal_config_path, 'r', encoding='utf-8') as f:
                 config = json.load(f)
             
-            # Tìm kiếm theo machine_type thay vì machine_code
-            if machine_type in config and screen_name in config[machine_type]:
+            # Tìm kiếm theo machine_code trực tiếp
+            if machine_code in config and screen_name in config[machine_code]:
                 return jsonify({
                     "machine_code": machine_code,
-                    "machine_type": machine_type,
                     "screen_name": screen_name,
-                    "decimal_places": config[machine_type][screen_name]
+                    "decimal_places": config[machine_code][screen_name]
                 }), 200
             else:
                 return jsonify({
                     "machine_code": machine_code,
-                    "machine_type": machine_type,
                     "screen_name": screen_name,
                     "decimal_places": {}
                 }), 200
         else:
             return jsonify({
                 "machine_code": machine_code,
-                "machine_type": machine_type,
                 "screen_name": screen_name,
                 "decimal_places": {}
             }), 200
@@ -3254,11 +3228,11 @@ def check_machine_screen_status():
         has_roi = roi_coordinates is not None and len(roi_coordinates) > 0
         roi_count = len(roi_coordinates) if has_roi else 0
         
-        # Kiểm tra cấu hình decimal places
+        # Kiểm tra cấu hình decimal places - sử dụng screen_name thay vì screen_id
         decimal_config = get_decimal_places_config()
         has_decimal_config = (machine_code in decimal_config and 
-                             screen_id in decimal_config[machine_code] and 
-                             len(decimal_config[machine_code][screen_id]) > 0)
+                             screen_name in decimal_config[machine_code] and 
+                             len(decimal_config[machine_code][screen_name]) > 0)
         
         # Kiểm tra từng ROI có cấu hình decimal places không
         roi_status = []
@@ -3266,16 +3240,16 @@ def check_machine_screen_status():
             for i in range(roi_count):
                 roi_name = roi_names[i] if i < len(roi_names) else f"ROI_{i}"
                 has_decimal = (machine_code in decimal_config and 
-                              screen_id in decimal_config[machine_code] and 
-                              (roi_name in decimal_config[machine_code][screen_id] or 
-                               str(i) in decimal_config[machine_code][screen_id]))
+                              screen_name in decimal_config[machine_code] and 
+                              (roi_name in decimal_config[machine_code][screen_name] or 
+                               str(i) in decimal_config[machine_code][screen_name]))
                 
                 decimal_value = None
                 if has_decimal:
-                    if roi_name in decimal_config[machine_code][screen_id]:
-                        decimal_value = decimal_config[machine_code][screen_id][roi_name]
-                    elif str(i) in decimal_config[machine_code][screen_id]:
-                        decimal_value = decimal_config[machine_code][screen_id][str(i)]
+                    if roi_name in decimal_config[machine_code][screen_name]:
+                        decimal_value = decimal_config[machine_code][screen_name][roi_name]
+                    elif str(i) in decimal_config[machine_code][screen_name]:
+                        decimal_value = decimal_config[machine_code][screen_name][str(i)]
                 
                 roi_status.append({
                     "roi_index": i,
@@ -3692,23 +3666,39 @@ def get_hmi_refined_image(filename):
         abort(404)
 
 # Hàm mới: Lấy đường dẫn đến ảnh template mẫu dựa trên machine_code và screen_id
-def get_reference_template_path(machine_type, screen_id):
+def get_reference_template_path(machine_type, screen_id, machine_code=None):
     """
-    Tìm kiếm ảnh template mẫu dựa trên machine_type và screen_id
+    Tìm kiếm ảnh template mẫu dựa trên machine_type, screen_id và machine_code
+    Hỗ trợ cả format cũ và mới:
+    - Format mới: {machine_code}_{screen_id}.ext (ưu tiên)
+    - Format cũ: template_{machine_type}_{screen_id}.ext (fallback)
     
     Returns:
         str: Đường dẫn đến file template nếu tìm thấy, None nếu không tìm thấy
     """
     reference_folder = app.config['REFERENCE_IMAGES_FOLDER']
     
-    # Tạo pattern tên file
-    file_pattern = f"template_{machine_type}_{screen_id}.*"
+    if not os.path.exists(reference_folder):
+        return None
     
-    # Tìm kiếm file theo pattern
+    # Ưu tiên format mới với machine_code nếu có
+    if machine_code:
+        new_format_pattern = f"{machine_code}_{screen_id}.*"
+        for filename in os.listdir(reference_folder):
+            if fnmatch.fnmatch(filename, new_format_pattern):
+                template_path = os.path.join(reference_folder, filename)
+                print(f"✅ Found template (new format): {filename}")
+                return template_path
+    
+    # Fallback sang format cũ với machine_type
+    old_format_pattern = f"template_{machine_type}_{screen_id}.*"
     for filename in os.listdir(reference_folder):
-        if fnmatch.fnmatch(filename, file_pattern):
-            return os.path.join(reference_folder, filename)
+        if fnmatch.fnmatch(filename, old_format_pattern):
+            template_path = os.path.join(reference_folder, filename)
+            print(f"✅ Found template (old format): {filename}")
+            return template_path
     
+    print(f"❌ No template found for machine_code={machine_code}, machine_type={machine_type}, screen_id={screen_id}")
     return None
 
 def preprocess_roi_for_ocr(roi, roi_index, original_filename, roi_name=None, image_aligned=None, x1=None, y1=None, x2=None, y2=None):
@@ -3990,11 +3980,6 @@ def update_decimal_places_for_screen(machine_code, screen_name):
     Chỉ cập nhật các key được gửi trong request, các key khác giữ nguyên giá trị
     """
     try:
-        # Chuyển đổi machine_code thành machine_type
-        machine_type = get_machine_type(machine_code)
-        if not machine_type:
-            return jsonify({"error": f"Machine code '{machine_code}' not found in machine configuration"}), 404
-        
         if not request.is_json:
             return jsonify({"error": "Request must be JSON"}), 400
         
@@ -4009,19 +3994,19 @@ def update_decimal_places_for_screen(machine_code, screen_name):
         else:
             config = {}
         
-        # Tạo cấu trúc nếu chưa tồn tại (dùng machine_type thay vì machine_code)
-        if machine_type not in config:
-            config[machine_type] = {}
+        # Tạo cấu trúc nếu chưa tồn tại (dùng machine_code trực tiếp)
+        if machine_code not in config:
+            config[machine_code] = {}
         
-        if screen_name not in config[machine_type]:
-            config[machine_type][screen_name] = {}
+        if screen_name not in config[machine_code]:
+            config[machine_code][screen_name] = {}
         
         # Lưu lại cấu hình hiện tại để so sánh
-        original_config = config[machine_type][screen_name].copy() if screen_name in config[machine_type] else {}
+        original_config = config[machine_code][screen_name].copy() if screen_name in config[machine_code] else {}
         
         # Cập nhật các giá trị mới (chỉ ghi đè các key được gửi trong request)
         for key, value in new_values.items():
-            config[machine_type][screen_name][key] = value
+            config[machine_code][screen_name][key] = value
         
         # Lưu cấu hình mới
         with open(decimal_config_path, 'w', encoding='utf-8') as f:
@@ -4046,10 +4031,9 @@ def update_decimal_places_for_screen(machine_code, screen_name):
         return jsonify({
             "message": "Decimal places configuration updated successfully",
             "machine_code": machine_code,
-            "machine_type": machine_type,
             "screen_name": screen_name,
             "changes": changes,
-            "config": config[machine_type][screen_name]
+            "config": config[machine_code][screen_name]
         }), 200
     
     except Exception as e:
@@ -5186,9 +5170,15 @@ def find_best_matching_template(hmi_image, reference_dir, machine_type=None):
         if not filename.lower().endswith(('.png', '.jpg', '.jpeg')):
             continue
             
-        # Nếu có chỉ định machine_type, chỉ lấy các template tương ứng
-        if machine_type and f"template_{machine_type}_" not in filename:
-            continue
+        # Hỗ trợ cả format cũ và mới
+        if machine_type:
+            # Format mới: {machine_code}_{screen_name}.ext
+            # Format cũ: template_{machine_type}_{screen_name}.ext
+            is_old_format = filename.startswith(f"template_{machine_type}_")
+            is_new_format = not filename.startswith("template_")  # File không bắt đầu bằng "template_"
+            
+            if not (is_old_format or is_new_format):
+                continue
             
         template_files.append(filename)
     
@@ -5236,12 +5226,20 @@ def find_best_matching_template(hmi_image, reference_dir, machine_type=None):
             best_match = template_path
             
             # Trích xuất screen_id từ tên file template
-            # Format: template_{machine_type}_{screen_name}.png
-            parts = template_file.split('_')
-            if len(parts) >= 3:
-                # Lấy tất cả phần từ index 2 trở đi và bỏ phần mở rộng
-                screen_name = '_'.join(parts[2:]).rsplit('.', 1)[0]
-                best_screen_id = screen_name
+            if template_file.startswith("template_"):
+                # Format cũ: template_{machine_type}_{screen_name}.png
+                parts = template_file.split('_')
+                if len(parts) >= 3:
+                    # Lấy tất cả phần từ index 2 trở đi và bỏ phần mở rộng
+                    screen_name = '_'.join(parts[2:]).rsplit('.', 1)[0]
+                    best_screen_id = screen_name
+            else:
+                # Format mới: {machine_code}_{screen_name}.png
+                parts = template_file.split('_')
+                if len(parts) >= 2:
+                    # Lấy tất cả phần từ index 1 trở đi và bỏ phần mở rộng
+                    screen_name = '_'.join(parts[1:]).rsplit('.', 1)[0]
+                    best_screen_id = screen_name
     
     print(f"Best match: {os.path.basename(best_match) if best_match else 'None'} với điểm {best_score:.2f}, screen_id: {best_screen_id}")
     return best_match, best_screen_id, best_score
@@ -5275,12 +5273,12 @@ def detect_screen_by_template_matching(image, machine_type):
     return best_screen_id, screen_numeric_id, best_template
 
 # Thêm hàm get_decimal_places để lấy thông tin số thập phân theo machine_type và screen_id
-def get_decimal_places(machine_type, screen_id):
+def get_decimal_places(machine_code, screen_id):
     """
     Lấy thông tin số chữ số thập phân cho các ROI của một màn hình cụ thể
     
     Args:
-        machine_type: Loại máy (ví dụ: F1, F41, F42)
+        machine_code: Mã máy (ví dụ: IE-F1-CWA01, IE-F1-CTF01)
         screen_id: Tên màn hình (ví dụ: "Faults", "Production Data")
         
     Returns:
@@ -5296,18 +5294,18 @@ def get_decimal_places(machine_type, screen_id):
         with open(decimal_config_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
         
-        # Kiểm tra xem machine_type có trong cấu hình không
-        if machine_type not in config:
-            print(f"Machine type {machine_type} not found in decimal places config")
+        # Kiểm tra xem machine_code có trong cấu hình không
+        if machine_code not in config:
+            print(f"Machine code {machine_code} not found in decimal places config")
             return {}
         
-        # Kiểm tra xem screen_id có trong cấu hình của machine_type không
-        if screen_id not in config[machine_type]:
-            print(f"Screen ID {screen_id} not found in decimal places config for machine type {machine_type}")
+        # Kiểm tra xem screen_id có trong cấu hình của machine_code không
+        if screen_id not in config[machine_code]:
+            print(f"Screen ID {screen_id} not found in decimal places config for machine code {machine_code}")
             return {}
         
         # Trả về cấu hình decimal places cho screen_id
-        return config[machine_type][screen_id]
+        return config[machine_code][screen_id]
     
     except Exception as e:
         print(f"Error getting decimal places: {str(e)}")

@@ -1,1 +1,8 @@
-Bộ khung F42_Setting: 18 vùng
+Bộ khung IE-F1-CWA01_Production Data: 0 vùng
+Bộ khung IE-F1-CWA01_Reject Summary: 0 vùng
+Bộ khung IE-F1-CTF01_Production Data: 0 vùng
+Bộ khung IE-F1-CTF01_Reject Summary: 0 vùng
+Bộ khung IE-F1-CFA01_Production Data: 0 vùng
+Bộ khung IE-F1-CFA01_Reject Summary: 0 vùng
+Bộ khung IE-F1-CSN01_Production Data: 0 vùng
+Bộ khung IE-F1-CSN01_Reject Summary: 0 vùng

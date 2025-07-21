@@ -1038,21 +1038,32 @@ def filter_reference_images_by_machine_type(machine_type, valid_screen_types):
     if not os.path.exists(reference_dir):
         return filtered_templates
     
-    # Tìm tất cả file template cho machine type này
+    # Tìm tất cả file template cho machine type này (hỗ trợ cả format cũ và mới)
     for filename in os.listdir(reference_dir):
-        if filename.startswith(f"template_{machine_type}_") and filename.endswith(('.png', '.jpg')):
-            # Extract screen_id from filename: template_F41_Clamp.jpg -> Clamp
-            screen_id = filename.replace(f"template_{machine_type}_", "").replace(".jpg", "").replace(".png", "")
+        if not filename.endswith(('.png', '.jpg')):
+            continue
             
-            # Chỉ lấy những screen types hợp lệ
-            if screen_id in valid_screen_types:
-                template_path = os.path.join(reference_dir, filename)
-                filtered_templates.append({
-                    'path': template_path,
-                    'filename': filename,
-                    'machine_type': machine_type,
-                    'screen_id': screen_id
-                })
+        screen_id = None
+        
+        # Format cũ: template_{machine_type}_{screen_id}.ext
+        if filename.startswith(f"template_{machine_type}_"):
+            screen_id = filename.replace(f"template_{machine_type}_", "").replace(".jpg", "").replace(".png", "")
+        
+        # Format mới: {machine_code}_{screen_id}.ext (cần mapping machine_code -> machine_type)
+        elif not filename.startswith("template_"):
+            # Tạm thời bỏ qua format mới trong smart_detection_functions
+            # vì cần mapping machine_code -> machine_type
+            continue
+        
+        # Chỉ lấy những screen types hợp lệ
+        if screen_id and screen_id in valid_screen_types:
+            template_path = os.path.join(reference_dir, filename)
+            filtered_templates.append({
+                'path': template_path,
+                'filename': filename,
+                'machine_type': machine_type,
+                'screen_id': screen_id
+            })
     
     print(f"🎯 Filtered reference templates for {machine_type}: {[t['screen_id'] for t in filtered_templates]}")
     return filtered_templates
