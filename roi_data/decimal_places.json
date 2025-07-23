@@ -1,9 +1,23 @@
 {
   "IE-F1-CWA01": {
     "Production Data": {
-      "abc": 1
+      "q": 0,
+      "w": 0,
+      "e": 0
     },
-    "Reject Summary": {}
+    "Reject Summary": {},
+    "Reject Summary_1": {
+      "must_check": 0,
+      "a": 0,
+      "b": 0,
+      "c": 2
+    },
+    "Reject Summary_2": {
+      "must_check": 0,
+      "d": 0,
+      "e": 0,
+      "f": 2
+    }
   },
   "IE-F1-CTF01": {
     "Production Data": {},

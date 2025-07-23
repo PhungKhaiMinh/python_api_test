@@ -1,0 +1,44 @@
+{
+  "filename": "IE-F1-CWA01-Production_Data-2.jpg",
+  "machine_code": "IE-F1-CWA01",
+  "area": "F1",
+  "machine_name": "Máy IE-F1-CWA01",
+  "screen_id": "Production Data",
+  "timestamp": "2025-07-22 14:05:23",
+  "template_path": "d:\\WremblyScanHmi\\python_api_test\\roi_data\\reference_images\\IE-F1-CWA01_Production Data.jpg",
+  "results": [
+    {
+      "roi_index": "q",
+      "text": "21",
+      "confidence": 0.899236339762697,
+      "has_text": true,
+      "original_value": "21"
+    },
+    {
+      "roi_index": "w",
+      "text": "24",
+      "confidence": 0.9984322445425676,
+      "has_text": true,
+      "original_value": "24"
+    },
+    {
+      "roi_index": "e",
+      "text": "20",
+      "confidence": 0.9999763135533013,
+      "has_text": true,
+      "original_value": "20"
+    }
+  ],
+  "hmi_detection": {
+    "hmi_detected": false,
+    "hmi_image": null,
+    "hmi_refined_filename": null,
+    "visualization": null
+  },
+  "detected_screen": {
+    "screen_id": "Production Data",
+    "screen_numeric_id": 1,
+    "similarity_score": 0.4878176479223821,
+    "machine_type": "F1"
+  }
+}

@@ -235,9 +235,10 @@ def get_machine_type_from_config_smart(area, machine_code):
         print(f"Error reading machine config: {e}")
         return None, None
 
-def get_reference_templates_for_type_smart(machine_type):
+def get_reference_templates_for_type_smart(machine_type, machine_code=None):
     """
     Lấy danh sách tất cả reference templates cho một machine type cụ thể
+    Hỗ trợ cả format cũ và mới
     """
     current_dir = os.path.dirname(os.path.abspath(__file__))
     reference_dir = os.path.join(current_dir, 'roi_data', 'reference_images')
@@ -246,12 +247,24 @@ def get_reference_templates_for_type_smart(machine_type):
     if not os.path.exists(reference_dir):
         return templates
     
-    # Tìm tất cả file template cho machine type này
+    # Tìm tất cả file template cho machine type này (hỗ trợ cả format cũ và mới)
     for filename in os.listdir(reference_dir):
-        if filename.startswith(f"template_{machine_type}_") and filename.endswith(('.png', '.jpg')):
-            template_path = os.path.join(reference_dir, filename)
-            # Extract screen_id from filename: template_F41_Clamp.jpg -> Clamp
+        if not filename.endswith(('.png', '.jpg')):
+            continue
+            
+        screen_id = None
+        
+        # Format cũ: template_{machine_type}_{screen_id}.ext
+        if filename.startswith(f"template_{machine_type}_"):
             screen_id = filename.replace(f"template_{machine_type}_", "").replace(".jpg", "").replace(".png", "")
+        
+        # Format mới: {machine_code}_{screen_id}.ext
+        elif not filename.startswith("template_") and machine_code:
+            if filename.startswith(f"{machine_code}_"):
+                screen_id = filename.replace(f"{machine_code}_", "").replace(".jpg", "").replace(".png", "")
+        
+        if screen_id:
+            template_path = os.path.join(reference_dir, filename)
             templates.append({
                 'path': template_path,
                 'filename': filename,
@@ -1011,25 +1024,25 @@ def get_valid_screen_types_for_machine(area, machine_code):
         with open(config_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
         
-        # Lấy machine info
+        # Lấy machine info từ cấu trúc areas
         if area in config['areas'] and machine_code in config['areas'][area]['machines']:
             machine_info = config['areas'][area]['machines'][machine_code]
             machine_type = machine_info['type']
             
-            # Lấy danh sách screen types cho machine type này
-            if machine_type in config['machine_types']:
-                screen_types = [screen['screen_id'] for screen in config['machine_types'][machine_type]['screens']]
-                print(f"📋 Valid screen types for {machine_code} ({machine_type}): {screen_types}")
-                return machine_type, screen_types
+            # Lấy danh sách screen types trực tiếp từ machine info 
+            screen_types = [screen['screen_id'] for screen in machine_info.get('screens', [])]
+            print(f"📋 Valid screen types for {machine_code} ({machine_type}): {screen_types}")
+            return machine_type, screen_types
         
         return None, []
     except Exception as e:
         print(f"❌ Error getting valid screen types: {e}")
         return None, []
 
-def filter_reference_images_by_machine_type(machine_type, valid_screen_types):
+def filter_reference_images_by_machine_type(machine_type, valid_screen_types, machine_code=None):
     """
     Lọc reference images chỉ lấy những cái thuộc machine type và screen types hợp lệ
+    Hỗ trợ cả format cũ và mới
     """
     current_dir = os.path.dirname(os.path.abspath(__file__))
     reference_dir = os.path.join(current_dir, 'roi_data', 'reference_images')
@@ -1048,22 +1061,22 @@ def filter_reference_images_by_machine_type(machine_type, valid_screen_types):
         # Format cũ: template_{machine_type}_{screen_id}.ext
         if filename.startswith(f"template_{machine_type}_"):
             screen_id = filename.replace(f"template_{machine_type}_", "").replace(".jpg", "").replace(".png", "")
+            
+        # Format mới: {machine_code}_{screen_id}.ext
+        elif not filename.startswith("template_") and machine_code:
+            if filename.startswith(f"{machine_code}_"):
+                screen_id = filename.replace(f"{machine_code}_", "").replace(".jpg", "").replace(".png", "")
+                print(f"✅ Found new format template: {filename} -> screen_id: {screen_id}")
         
-        # Format mới: {machine_code}_{screen_id}.ext (cần mapping machine_code -> machine_type)
-        elif not filename.startswith("template_"):
-            # Tạm thời bỏ qua format mới trong smart_detection_functions
-            # vì cần mapping machine_code -> machine_type
-            continue
-        
-        # Chỉ lấy những screen types hợp lệ
+            # Chỉ lấy những screen types hợp lệ
         if screen_id and screen_id in valid_screen_types:
-            template_path = os.path.join(reference_dir, filename)
-            filtered_templates.append({
-                'path': template_path,
-                'filename': filename,
-                'machine_type': machine_type,
-                'screen_id': screen_id
-            })
+                template_path = os.path.join(reference_dir, filename)
+                filtered_templates.append({
+                    'path': template_path,
+                    'filename': filename,
+                    'machine_type': machine_type,
+                    'screen_id': screen_id
+                })
     
     print(f"🎯 Filtered reference templates for {machine_type}: {[t['screen_id'] for t in filtered_templates]}")
     return filtered_templates
@@ -1110,7 +1123,7 @@ def auto_detect_machine_and_screen_smart(image, area=None, machine_code=None):
             return _auto_detect_with_general_ensemble(image, area, machine_code, classifier)
     
     # ====== BƯỚC 2: LỌC REFERENCE TEMPLATES ======
-    filtered_templates = filter_reference_images_by_machine_type(target_machine_type, valid_screen_types)
+    filtered_templates = filter_reference_images_by_machine_type(target_machine_type, valid_screen_types, machine_code)
     
     if not filtered_templates:
         print(f"❌ No reference templates found for {target_machine_type}, using fallback")
@@ -1196,82 +1209,21 @@ def _auto_detect_with_general_ensemble(image, area, machine_code, classifier):
 
 def _infer_machine_type_from_screen(predicted_screen: str) -> str:
     """
-    Suy luận machine type từ predicted screen type
+    Suy luận machine type từ predicted screen type - F1 ONLY
     """
-    screen_to_machine_mapping = {
-        # F41 screens
-        'production': 'F41',
-        'temperature': 'F41',
-        'temp': 'F41',
-        'injection': 'F41',
-        'clamp': 'F41',
-        'ejector': 'F41',
-        
-        # F42 screens  
-        'overview': 'F42',
-        'tracking': 'F42',
-        'plasticizer': 'F42',
-        'setup': 'F42',
-        'setting': 'F42',
-        
-        # F1 screens
-        'main': 'F1',
-        'feeder': 'F1',
-        'data': 'F1',
-        'maintenance': 'F1',
-        
-        # Common fallback
-        'faults': 'F41',
-        'alarms': 'F41'
-    }
-    
-    predicted_lower = predicted_screen.lower()
-    return screen_to_machine_mapping.get(predicted_lower, 'F41')  # Default to F41
+    # Only support F1 machine types now
+    return 'F1'  # All current systems are F1
 
 def _normalize_screen_name(predicted_screen: str, machine_type: str) -> str:
     """
-    Chuẩn hóa tên screen prediction thành tên chính xác trong machine_screens.json
-    
-    Args:
-        predicted_screen: Tên screen được dự đoán bởi classifier
-        machine_type: Type của machine (F1, F41, F42)
-    
-    Returns:
-        Tên screen đã được chuẩn hóa theo config
+    Chuẩn hóa tên screen prediction - F1 ONLY
     """
-    # Screen name mappings để fix inconsistency giữa classifier và config
+    # Only F1 screen mappings
     screen_mappings = {
-        'F1': {
-            'main': 'Main Machine Parameters',
-            'feeder': 'Feeders and Conveyors', 
-            'feeders': 'Feeders and Conveyors',
-            'data': 'Production Data',
-            'production': 'Production Data',
-            'maintenance': 'Selectors and Maintenance',
-            'selectors': 'Selectors and Maintenance',
-            'faults': 'Faults',
-            'fault': 'Faults'
-        },
-        'F41': {
-            'temperature': 'Temp',  # FIX: Temperature -> Temp
-            'temp': 'Temp',
-            'production': 'Production',
-            'clamp': 'Clamp',
-            'ejector': 'Ejector', 
-            'injection': 'Injection',
-            'alarm': 'Alarm',
-            'alarms': 'Alarm',
-            'faults': 'Alarm'  # Map faults to Alarm for F41
-        },
-        'F42': {
-            'temperature': 'Temp',  # FIX: Temperature -> Temp  
-            'temp': 'Temp',
-            'setting': 'Setting',
-            'setup': 'Setting',
-            'plasticizer': 'Plasticizer',
-            'overview': 'Overview',
-            'tracking': 'Tracking'
-        }
+        'production data': 'Production Data',
+        'reject summary': 'Reject Summary', 
+        'reject summary 1': 'Reject Summary_1',
+        'reject summary 2': 'Reject Summary_2'
     }
     
     # Normalize input
@@ -1308,7 +1260,29 @@ def _auto_detect_legacy_fallback(image, area=None, machine_code=None):
         else:
             print(f"⚠️ Could not find machine type for area={area}, machine_code={machine_code}")
     
-    # Simple fallback: classify as Main if no specific detection
+    # Get first available screen for this machine as fallback
+    fallback_screen_id = 'Production Data'  # Default fallback
+    fallback_screen_numeric_id = 1
+    
+    if area and machine_code and target_machine_type:
+        # Try to get first available screen from config
+        try:
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            config_path = os.path.join(current_dir, 'roi_data', 'machine_screens.json')
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+            
+            if area in config['areas'] and machine_code in config['areas'][area]['machines']:
+                machine_info = config['areas'][area]['machines'][machine_code]
+                screens = machine_info.get('screens', [])
+                if screens:
+                    first_screen = screens[0]
+                    fallback_screen_id = first_screen['screen_id']
+                    fallback_screen_numeric_id = first_screen['id']
+                    print(f"✅ Using first available screen as fallback: {fallback_screen_id}")
+        except Exception as e:
+            print(f"⚠️ Could not get screens for fallback: {e}")
+    
     processing_time = time.time() - start_time
     
     result = {
@@ -1316,8 +1290,8 @@ def _auto_detect_legacy_fallback(image, area=None, machine_code=None):
         'machine_type': target_machine_type or 'F41',
         'area': area or 'UNKNOWN', 
         'machine_name': target_machine_name or f"Máy {machine_code}",
-        'screen_id': 'Main',  # Default fallback
-        'screen_numeric_id': 1,
+        'screen_id': fallback_screen_id,  # Use valid screen instead of 'Main'
+        'screen_numeric_id': fallback_screen_numeric_id,
         'template_path': None,
         'similarity_score': 0.5,  # Default fallback score
         'processing_time': processing_time,
@@ -1830,11 +1804,19 @@ def _format_detection_result(candidate, area, machine_code, machine_type, score,
         with open(config_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
         
-        if machine_type in config['machine_types']:
-            for screen in config['machine_types'][machine_type]['screens']:
-                if screen['screen_id'] == candidate['template_info']['screen_id']:
-                    screen_numeric_id = screen['id']
-                    break
+        # Tìm screen_numeric_id từ cấu trúc areas
+        for area_code, area_info in config.get('areas', {}).items():
+            machines = area_info.get('machines', {})
+            for machine_code_key, machine_info in machines.items():
+                if machine_info.get('type') == machine_type:
+                    for screen in machine_info.get('screens', []):
+                        if screen['screen_id'] == candidate['template_info']['screen_id']:
+                            screen_numeric_id = screen['id']
+                            break
+                    if screen_numeric_id:
+                        break
+            if screen_numeric_id:
+                break
     except:
         pass
     

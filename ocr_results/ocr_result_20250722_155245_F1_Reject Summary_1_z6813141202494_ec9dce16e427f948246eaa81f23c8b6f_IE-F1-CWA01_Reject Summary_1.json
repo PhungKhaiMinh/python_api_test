@@ -1,0 +1,44 @@
+{
+  "filename": "z6813141202494_ec9dce16e427f948246eaa81f23c8b6f.jpg",
+  "machine_code": "IE-F1-CWA01",
+  "area": "F1",
+  "machine_name": "Máy IE-F1-CWA01",
+  "screen_id": "Reject Summary_1",
+  "timestamp": "2025-07-22 15:52:45",
+  "template_path": "d:\\WremblyScanHmi\\python_api_test\\roi_data\\reference_images\\IE-F1-CWA01_Reject Summary_1.jpg",
+  "results": [
+    {
+      "roi_index": "a",
+      "text": "17847",
+      "confidence": 0.9999609222028828,
+      "has_text": true,
+      "original_value": "17847"
+    },
+    {
+      "roi_index": "b",
+      "text": "85",
+      "confidence": 0.9999815397302589,
+      "has_text": true,
+      "original_value": "85"
+    },
+    {
+      "roi_index": "c",
+      "text": "04.7",
+      "confidence": 0.6162362206581304,
+      "has_text": true,
+      "original_value": "0.47"
+    }
+  ],
+  "hmi_detection": {
+    "hmi_detected": true,
+    "hmi_image": null,
+    "hmi_refined_filename": null,
+    "visualization": null
+  },
+  "detected_screen": {
+    "screen_id": "Reject Summary_1",
+    "screen_numeric_id": 2,
+    "similarity_score": 0.5310886375726547,
+    "machine_type": "F1"
+  }
+}
