@@ -22,6 +22,20 @@ from functools import lru_cache
 from multiprocessing import Pool, cpu_count
 import threading
 
+# [*] Import GPU Accelerator và Parallel Processor modules
+try:
+    from gpu_accelerator import get_gpu_accelerator, is_gpu_available, get_gpu_info
+    from parallel_processor import (
+        get_ocr_thread_pool, get_image_thread_pool, get_roi_processor,
+        parallel_map, get_system_stats, ParallelROIProcessor
+    )
+    OPTIMIZATION_MODULES_AVAILABLE = True
+    print("[OK] GPU Accelerator và Parallel Processor modules loaded successfully")
+except ImportError as e:
+    OPTIMIZATION_MODULES_AVAILABLE = False
+    print(f"[WARNING] Optimization modules not available: {e}")
+    print("   Server will run in standard mode without GPU acceleration")
+
 # Thêm try-except khi import EasyOCR
 try:
     import easyocr
@@ -78,9 +92,25 @@ _decimal_places_cache_lock = threading.Lock()
 _machine_info_cache = None
 _machine_info_cache_lock = threading.Lock()
 
-# Thread pool để xử lý OCR song song
-_ocr_thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=max(4, cpu_count()))
-print(f"OCR Thread pool initialized with {max(4, cpu_count())} workers")
+# Thread pool để xử lý OCR song song - Enhanced với Parallel Processor
+if OPTIMIZATION_MODULES_AVAILABLE:
+    # Sử dụng adaptive thread pool từ parallel_processor
+    _ocr_thread_pool = get_ocr_thread_pool()
+    _image_thread_pool = get_image_thread_pool()
+    _roi_processor = get_roi_processor()
+    print(f"[OK] Enhanced thread pools initialized with GPU acceleration support")
+else:
+    # Fallback to standard thread pool
+    _ocr_thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=max(4, cpu_count()))
+    _image_thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=max(4, cpu_count()))
+    _roi_processor = None
+    print(f"[WARNING] Standard OCR Thread pool initialized with {max(4, cpu_count())} workers")
+
+# GPU Accelerator instance
+_gpu_accelerator = None
+if OPTIMIZATION_MODULES_AVAILABLE and is_gpu_available():
+    _gpu_accelerator = get_gpu_accelerator()
+    print(f"[OK] GPU Accelerator ready: {get_gpu_info()}")
 
 # Template image cache để tránh đọc lại ảnh template
 _template_image_cache = {}
@@ -88,28 +118,28 @@ _template_cache_lock = threading.Lock()
 
 def initialize_all_caches():
     """Khởi tạo tất cả cache ngay khi chương trình bắt đầu để tránh delay lần đầu gọi API"""
-    print("\n🚀 Initializing all caches at startup...")
+    print("\n[*] Initializing all caches at startup...")
     
     try:
         # Cache ROI info
         roi_info = get_roi_info_cached()
-        print(f"✅ ROI info cached: {len(roi_info)} items")
+        print(f"[OK] ROI info cached: {len(roi_info)} items")
     except Exception as e:
-        print(f"❌ Error caching ROI info: {e}")
+        print(f"[ERROR] Error caching ROI info: {e}")
     
     try:
         # Cache decimal places config
         decimal_config = get_decimal_places_config_cached()
-        print(f"✅ Decimal places config cached: {len(decimal_config)} items")
+        print(f"[OK] Decimal places config cached: {len(decimal_config)} items")
     except Exception as e:
-        print(f"❌ Error caching decimal places config: {e}")
+        print(f"[ERROR] Error caching decimal places config: {e}")
     
     try:
         # Cache machine info
         machine_info = get_machine_info_cached()
-        print(f"✅ Machine info cached: {machine_info}")
+        print(f"[OK] Machine info cached: {machine_info}")
     except Exception as e:
-        print(f"❌ Error caching machine info: {e}")
+        print(f"[ERROR] Error caching machine info: {e}")
     
     try:
         # Pre-cache common template images từ reference_images folder
@@ -121,11 +151,11 @@ def initialize_all_caches():
                 template_path = os.path.join(reference_folder, template_file)
                 if get_template_image_cached(template_path) is not None:
                     cached_count += 1
-            print(f"✅ Template images pre-cached: {cached_count}/{len(template_files)} files")
+            print(f"[OK] Template images pre-cached: {cached_count}/{len(template_files)} files")
         else:
             print("ℹ️  Reference images folder not found - skipping template pre-caching")
     except Exception as e:
-        print(f"❌ Error pre-caching template images: {e}")
+        print(f"[ERROR] Error pre-caching template images: {e}")
     
     print("🎯 Cache initialization completed!\n")
 
@@ -140,10 +170,10 @@ def get_template_image_cached(template_path):
                 template_img = cv2.imread(template_path)
                 if template_img is not None:
                     _template_image_cache[template_path] = template_img
-                    print(f"✅ Template image cached: {os.path.basename(template_path)}")
+                    print(f"[OK] Template image cached: {os.path.basename(template_path)}")
                 return template_img
             except Exception as e:
-                print(f"❌ Error caching template image: {e}")
+                print(f"[ERROR] Error caching template image: {e}")
                 return None
         
         return _template_image_cache[template_path]
@@ -173,6 +203,50 @@ def after_request(response):
 @app.route('/')
 def home():
     return jsonify({"status": "Server is running", "endpoints": ["/api/images"]}), 200
+
+# [*] New: GPU & Performance monitoring endpoint
+@app.route('/api/performance', methods=['GET'])
+def get_performance_stats():
+    """
+    API endpoint để lấy thông tin GPU và system performance
+    
+    Returns:
+        JSON với thông tin GPU, CPU, Memory, và Thread pools
+    """
+    try:
+        stats = {
+            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "gpu_available": False,
+            "optimization_enabled": OPTIMIZATION_MODULES_AVAILABLE
+        }
+        
+        # GPU info
+        if OPTIMIZATION_MODULES_AVAILABLE and is_gpu_available():
+            stats["gpu_available"] = True
+            stats["gpu_info"] = get_gpu_info()
+            
+            if _gpu_accelerator:
+                stats["gpu_memory"] = _gpu_accelerator.get_memory_info()
+        
+        # System stats
+        if OPTIMIZATION_MODULES_AVAILABLE:
+            stats["system"] = get_system_stats()
+        else:
+            stats["system"] = {
+                "cpu_count": cpu_count(),
+                "note": "Running in standard mode"
+            }
+        
+        # EasyOCR status
+        stats["ocr"] = {
+            "easyocr_available": HAS_EASYOCR,
+            "gpu_enabled": HAS_EASYOCR and hasattr(reader, 'gpu') and reader is not None
+        }
+        
+        return jsonify(stats), 200
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # Route debug chi tiết
 @app.route('/debug')
@@ -222,8 +296,8 @@ REFERENCE_IMAGES_FOLDER = os.path.join(ROI_DATA_FOLDER, 'reference_images')
 if not os.path.exists(REFERENCE_IMAGES_FOLDER):
     os.makedirs(REFERENCE_IMAGES_FOLDER)
     print(f"Đã tạo thư mục reference_images tại {REFERENCE_IMAGES_FOLDER}")
-    print("Lưu ý: Tên file tham chiếu theo định dạng: <machine_code>_<screen_name>.jpg")
-    print("Ví dụ: IE-F1-CWA01_Production_Data.jpg, IE-F1-CTF01_Reject_Summary.jpg")
+    print("Lưu ý: Tên file tham chiếu nên theo định dạng: template_<machine_type>_<screen_name>.png")
+    print("Ví dụ: template_F1_Faults.png, template_F42_Production_Data.png")
 
 # Đảm bảo thư mục uploads tồn tại
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -232,7 +306,7 @@ app.config['OCR_RESULTS_FOLDER'] = OCR_RESULTS_FOLDER
 app.config['REFERENCE_IMAGES_FOLDER'] = REFERENCE_IMAGES_FOLDER  # Thêm cấu hình cho thư mục reference_images
 app.config['HMI_REFINED_FOLDER'] = HMI_REFINED_FOLDER  # Thêm cấu hình cho thư mục HMI refined
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # Giới hạn kích thước file 16MB
-app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg'}
+app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'gif'}
 
 def allowed_file(filename):
     return '.' in filename and \
@@ -252,9 +326,9 @@ def get_roi_info_cached():
                 
                 with open(roi_json_path, 'r', encoding='utf-8') as f:
                     _roi_info_cache = json.load(f)
-                print("✅ ROI info cached successfully")
+                print("[OK] ROI info cached successfully")
             except Exception as e:
-                print(f"❌ Error caching ROI info: {e}")
+                print(f"[ERROR] Error caching ROI info: {e}")
                 _roi_info_cache = {}
         
         return _roi_info_cache
@@ -272,9 +346,9 @@ def get_decimal_places_config_cached():
                         _decimal_places_cache = json.load(f)
                 else:
                     _decimal_places_cache = {}
-                print("✅ Decimal places config cached successfully")
+                print("[OK] Decimal places config cached successfully")
             except Exception as e:
-                print(f"❌ Error caching decimal places config: {e}")
+                print(f"[ERROR] Error caching decimal places config: {e}")
                 _decimal_places_cache = {}
         
         return _decimal_places_cache
@@ -292,26 +366,33 @@ def get_machine_info_cached():
                     with open(current_machine_file, 'r', encoding='utf-8') as f:
                         _machine_info_cache = json.load(f)
                 else:
-                    _machine_info_cache = {"machine_code": "IE-F1-CWA01", "screen_id": "Production Data"}
-                print("✅ Machine info cached successfully")
+                    _machine_info_cache = {"machine_code": "F41", "screen_id": "Main"}
+                print("[OK] Machine info cached successfully")
             except Exception as e:
-                print(f"❌ Error caching machine info: {e}")
-                _machine_info_cache = {"machine_code": "IE-F1-CWA01", "screen_id": "Production Data"}
+                print(f"[ERROR] Error caching machine info: {e}")
+                _machine_info_cache = {"machine_code": "F41", "screen_id": "Main"}
         
         return _machine_info_cache
 
 def process_single_roi_optimized(args):
-    """Xử lý OCR cho một ROI đơn lẻ - được tối ưu cho parallel processing"""
-    (roi_image, roi_name, machine_code, machine_type, allowed_values, is_special_on_off_case, screen_id) = args
+    """Xử lý OCR cho một ROI đơn lẻ - được tối ưu cho parallel processing với GPU acceleration"""
+    (roi_image, roi_name, machine_type, allowed_values, is_special_on_off_case, screen_id) = args
     
     try:
         # Nếu là trường hợp đặc biệt ON/OFF, phân tích màu sắc thay vì OCR
-        if False:  # Removed old machine type support
-            # Tách các kênh màu BGR
-            b, g, r = cv2.split(roi_image)
-            # Tính giá trị trung bình của kênh xanh dương và đỏ
-            avg_blue = np.mean(b)
-            avg_red = np.mean(r)
+        if is_special_on_off_case and machine_type != "F1":
+            # Tách các kênh màu BGR và tính mean với GPU acceleration
+            if _gpu_accelerator:
+                # Sử dụng GPU để tính mean nhanh hơn
+                b, g, r = cv2.split(roi_image)
+                avg_blue = _gpu_accelerator.mean(b)
+                avg_red = _gpu_accelerator.mean(r)
+            else:
+                # Fallback to CPU
+                b, g, r = cv2.split(roi_image)
+                avg_blue = np.mean(b)
+                avg_red = np.mean(r)
+            
             # Xác định kết quả dựa trên màu sắc chủ đạo
             if avg_blue > avg_red:
                 best_text = "OFF"
@@ -335,27 +416,38 @@ def process_single_roi_optimized(args):
                 "original_value": ""
             }
         
-        # Tiền xử lý ROI nhanh
+        # Tiền xử lý ROI nhanh với GPU acceleration
         # Resize nếu ROI quá nhỏ
         height, width = roi_image.shape[:2]
         if height < 30 or width < 30:
             scale_factor = max(30/height, 30/width)
             new_height = int(height * scale_factor)
             new_width = int(width * scale_factor)
-            roi_image = cv2.resize(roi_image, (new_width, new_height), interpolation=cv2.INTER_CUBIC)
+            
+            # Sử dụng GPU resize nếu có
+            if _gpu_accelerator:
+                roi_image = _gpu_accelerator.resize_gpu(roi_image, (new_width, new_height), interpolation=cv2.INTER_CUBIC)
+            else:
+                roi_image = cv2.resize(roi_image, (new_width, new_height), interpolation=cv2.INTER_CUBIC)
         
-        # Convert to grayscale nếu cần
+        # Convert to grayscale nếu cần - GPU accelerated
         if len(roi_image.shape) == 3:
-            roi_processed = cv2.cvtColor(roi_image, cv2.COLOR_BGR2GRAY)
+            if _gpu_accelerator:
+                roi_processed = _gpu_accelerator.cvt_color_gpu(roi_image, cv2.COLOR_BGR2GRAY)
+            else:
+                roi_processed = cv2.cvtColor(roi_image, cv2.COLOR_BGR2GRAY)
         else:
             roi_processed = roi_image.copy()
         
-        # Gaussian Blur để cải thiện OCR
-        roi_processed = cv2.GaussianBlur(roi_processed, (3, 3), 0)
+        # Gaussian Blur để cải thiện OCR - GPU accelerated
+        if _gpu_accelerator:
+            roi_processed = _gpu_accelerator.gaussian_blur_gpu(roi_processed, (3, 3), 0)
+        else:
+            roi_processed = cv2.GaussianBlur(roi_processed, (3, 3), 0)
         
                 # Thực hiện OCR với parameters tối ưu
         ocr_results = reader.readtext(roi_processed, 
-                                    allowlist='0123456789.CHEK', 
+                                    allowlist='0123456789.-ABCDEFGHIKLNORTUabcdefghiklnortu', 
                                     detail=1, 
                                     paragraph=False, 
                                     batch_size=1, 
@@ -479,27 +571,15 @@ def process_single_roi_optimized(args):
                     # Lấy decimal_places config từ cache
                     decimal_places_config = get_decimal_places_config_cached()
                     
-                    # Debug: In thông tin lookup decimal places
-                    print(f"🔧 DEBUG Decimal Places (OPTIMIZED):")
-                    print(f"   machine_code: {machine_code}")
-                    print(f"   screen_id: {screen_id}")
-                    print(f"   roi_name: {roi_name}")
-                    print(f"   decimal_places_config keys: {list(decimal_places_config.keys())}")
-                    if machine_code in decimal_places_config:
-                        print(f"   {machine_code} screens: {list(decimal_places_config[machine_code].keys())}")
-                        if screen_id in decimal_places_config[machine_code]:
-                            print(f"   {screen_id} ROIs: {list(decimal_places_config[machine_code][screen_id].keys())}")
-                    
                     # Kiểm tra xem có cấu hình cho ROI này không
                     best_text_clean = best_text[1:] if is_negative else best_text
                     
                     # Áp dụng decimal_places trước khi chuyển sang ROI tiếp theo
-                    if (machine_code in decimal_places_config and 
-                        screen_id in decimal_places_config[machine_code] and 
-                        roi_name in decimal_places_config[machine_code][screen_id]):
+                    if (machine_type in decimal_places_config and 
+                        screen_id in decimal_places_config[machine_type] and 
+                        roi_name in decimal_places_config[machine_type][screen_id]):
                         
-                        decimal_places = int(decimal_places_config[machine_code][screen_id][roi_name])
-                        print(f"✅ Found decimal places config for ROI {roi_name}: {decimal_places}")
+                        decimal_places = int(decimal_places_config[machine_type][screen_id][roi_name])
                         
                         # Xử lý các trường hợp khác nhau dựa trên decimal_places
                         if decimal_places == 0:
@@ -645,7 +725,7 @@ def process_roi_with_retry_logic_optimized(roi_args, original_filename):
     Thêm retry logic cho ROI với confidence thấp hoặc chất lượng ảnh kém
     Dựa trên logic từ app_old.py
     """
-    (roi_image, roi_name, machine_code, machine_type, allowed_values, is_special_on_off_case, screen_id) = roi_args
+    (roi_image, roi_name, machine_type, allowed_values, is_special_on_off_case, screen_id) = roi_args
     
     # Thực hiện OCR ban đầu
     result = process_single_roi_optimized(roi_args)
@@ -709,7 +789,7 @@ def process_roi_with_retry_logic_optimized(roi_args, original_filename):
             
             # 5. Thực hiện OCR trên mask đã tạo với thông số tối ưu
             retry_results = reader.readtext(digit_mask, 
-                                                      allowlist='0123456789.CHEK', 
+                                                      allowlist='0123456789.-ABCDEFGHIKLNORTUabcdefghiklnortu', 
                                                       detail=1, 
                                                       paragraph=False, 
                                                       batch_size=1, 
@@ -781,13 +861,13 @@ def process_roi_with_retry_logic_optimized(roi_args, original_filename):
                             try:
                                 decimal_places_config = get_decimal_places_config_cached()
                                 
-                                if (machine_code in decimal_places_config and 
-                                    screen_id in decimal_places_config[machine_code] and 
-                                    roi_name in decimal_places_config[machine_code][screen_id]):
+                                if (machine_type in decimal_places_config and 
+                                    screen_id in decimal_places_config[machine_type] and 
+                                    roi_name in decimal_places_config[machine_type][screen_id]):
                                     
                                     is_negative = retry_text.startswith('-')
                                     clean_text = retry_text[1:] if is_negative else retry_text
-                                    decimal_places = int(decimal_places_config[machine_code][screen_id][roi_name])
+                                    decimal_places = int(decimal_places_config[machine_type][screen_id][roi_name])
                                     
                                     # Xử lý tương tự như phần xử lý decimal_places ở trên
                                     if decimal_places == 0:
@@ -852,7 +932,7 @@ def process_roi_with_retry_logic_optimized(roi_args, original_filename):
                         result["confidence"] = retry_confidence
                         result["has_text"] = True
                         result["original_value"] = retry_text
-                        print(f"✅ Updated result with retry OCR: '{formatted_retry_text}' (confidence: {retry_confidence:.4f})")
+                        print(f"[OK] Updated result with retry OCR: '{formatted_retry_text}' (confidence: {retry_confidence:.4f})")
                     else:
                         print(f"Keeping original result: retry confidence {retry_confidence:.4f} not meeting threshold 0.3")
                 else:
@@ -861,9 +941,9 @@ def process_roi_with_retry_logic_optimized(roi_args, original_filename):
                     result["confidence"] = retry_confidence
                     result["has_text"] = True
                     result["original_value"] = retry_text
-                    print(f"✅ Updated result with allowed value match: '{retry_text}'")
+                    print(f"[OK] Updated result with allowed value match: '{retry_text}'")
             else:
-                print(f"❌ No retry OCR results found on digit mask")
+                print(f"[ERROR] No retry OCR results found on digit mask")
         
         except Exception as e:
             print(f"Error in retry logic for ROI {roi_name}: {e}")
@@ -1052,14 +1132,23 @@ def get_roi_coordinates(machine_code, screen_id=None, machine_type=None):
             is_normalized = roi_data["metadata"]["coordinate_format"].lower() == "normalized"
             print(f"Coordinate format is {'normalized' if is_normalized else 'pixel-based'}")
         
+        # Nếu machine_type không được cung cấp, lấy từ machine_screens.json
+        if not machine_type:
+            machine_type = get_machine_type(machine_code)
+            if not machine_type:
+                print(f"Could not determine machine_type for machine_code: {machine_code}")
+                return [], []
+            print(f"Determined machine_type: {machine_type} for machine_code: {machine_code}")
+        
         screen_name = None
         
-        # Trước tiên, kiểm tra xem screen_id đã là tên màn hình và có tồn tại trong roi_info.json không
-        if isinstance(screen_id, str) and machine_code in roi_data.get("machines", {}):
-            screens_data = roi_data["machines"][machine_code].get("screens", {})
-            if screen_id in screens_data:
-                screen_name = screen_id
-                print(f"Using screen_id as screen_name: {screen_name}")
+        # Kiểm tra xem screen_id có phải là tên màn hình không
+        if isinstance(screen_id, str) and screen_id in ["Production Data", "Faults", "Feeders and Conveyors", 
+                                                  "Main Machine Parameters", "Selectors and Maintenance",
+                                                  "Setting", "Temp", "Plasticizer", "Overview", "Tracking", "Production", 
+                                                  "Clamp", "Ejector", "Injection"]:
+            screen_name = screen_id
+            print(f"Using screen_id as screen_name: {screen_name}")
         elif screen_id is not None:
             # Lấy tên màn hình từ screen_id (nếu là numeric id)
             machine_screens_path = 'roi_data/machine_screens.json'
@@ -1079,11 +1168,11 @@ def get_roi_coordinates(machine_code, screen_id=None, machine_type=None):
                             print(f"Found screen_name: {screen_name} for screen_id: {screen_id} in machine_code: {machine_code}")
                             break
         
-        print(f"Looking for ROIs in machine_code: {machine_code}, screen: {screen_name} (id: {screen_id})")
+        print(f"Looking for ROIs in machine_type: {machine_type}, screen: {screen_name} (id: {screen_id})")
         
-        # Tìm trong machines - sử dụng machine_code thay vì machine_type
-        if machine_code in roi_data.get("machines", {}):
-            screens_data = roi_data["machines"][machine_code].get("screens", {})
+        # Tìm trong machines
+        if machine_type in roi_data.get("machines", {}):
+            screens_data = roi_data["machines"][machine_type].get("screens", {})
             
             if screen_name and screen_name in screens_data:
                 roi_list = screens_data[screen_name]
@@ -1103,13 +1192,13 @@ def get_roi_coordinates(machine_code, screen_id=None, machine_type=None):
                 print(f"Found {len(roi_coordinates)} ROIs for {screen_name}")
                 return roi_coordinates, roi_names
             else:
-                print(f"Screen '{screen_name}' not found in roi_info.json for machine_code {machine_code}")
+                print(f"Screen '{screen_name}' not found in roi_info.json for machine_type {machine_type}")
                 print(f"Available screens: {list(screens_data.keys())}")
         else:
-            print(f"Machine code '{machine_code}' not found in roi_info.json")
-            print(f"Available machine codes: {list(roi_data.get('machines', {}).keys())}")
+            print(f"Machine type '{machine_type}' not found in roi_info.json")
+            print(f"Available machine types: {list(roi_data.get('machines', {}).keys())}")
         
-        print(f"No ROI coordinates found for machine_code={machine_code}, screen_id={screen_id}")
+        print(f"No ROI coordinates found for machine_code={machine_code}, screen_id={screen_id}, machine_type={machine_type}")
         return [], []
     except Exception as e:
         print(f"Error reading ROI coordinates: {str(e)}")
@@ -1125,7 +1214,7 @@ def get_machine_type(machine_code):
         machine_code: Mã máy (ví dụ: IE-F1-CWA01, IE-F4-WBI01)
         
     Returns:
-        str: Loại máy (F1) hoặc None nếu không tìm thấy
+        str: Loại máy (F1, F41, F42, ...) hoặc None nếu không tìm thấy
     """
     try:
         machine_screens_path = os.path.join(app.config['ROI_DATA_FOLDER'], 'machine_screens.json')
@@ -1243,14 +1332,14 @@ def find_machine_code_from_template(template_filename):
     Tìm machine_code từ template filename và machine_type
     
     Args:
-        template_filename: Tên file template (ví dụ: IE-F1-CWA01_Production_Data.jpg)
+        template_filename: Tên file template (ví dụ: template_F1_Main Machine Parameters.jpg)
         
     Returns:
         tuple: (machine_code, area) hoặc (None, None) nếu không tìm thấy
     """
     try:
         # Trích xuất machine_type từ filename template
-        # Format: {machine_code}_{screen_name}.ext
+        # Format: template_{machine_type}_{screen_name}.ext
         parts = template_filename.split('_')
         if len(parts) < 3:
             return None, None
@@ -1307,7 +1396,7 @@ def perform_ocr_on_roi_optimized(image, roi_coordinates, original_filename, temp
         
         # Sử dụng cached machine info
         machine_info = get_machine_info_cached()
-        machine_code = machine_info.get('machine_code', 'IE-F1-CWA01') if machine_code is None else machine_code
+        machine_code = machine_info.get('machine_code', 'F41') if machine_code is None else machine_code
         screen_id = machine_info.get('screen_id', 'Main') if screen_id is None else screen_id
         
         # Sử dụng cached ROI info
@@ -1373,21 +1462,25 @@ def perform_ocr_on_roi_optimized(image, roi_coordinates, original_filename, temp
                                     is_special_on_off_case = True
                                 break
                 
-                # Thêm vào danh sách args cho parallel processing - FIXED: thêm machine_code
-                roi_args.append((roi_image, roi_name, machine_code, machine_type, allowed_values, is_special_on_off_case, screen_id))
+                # Thêm vào danh sách args cho parallel processing
+                roi_args.append((roi_image, roi_name, machine_type, allowed_values, is_special_on_off_case, screen_id))
                 
             except Exception as e:
                 print(f"Error preparing ROI {i}: {e}")
                 continue
         
-        # Xử lý ROIs song song
+        # Xử lý ROIs song song với Enhanced Parallel Processor
         if len(roi_args) <= 2:
             # Nếu ít ROI, xử lý tuần tự để tránh overhead
             results = [process_single_roi_optimized(args) for args in roi_args]
         else:
-            # Xử lý song song cho nhiều ROI
-            with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(roi_args), 4)) as executor:
-                results = list(executor.map(process_single_roi_optimized, roi_args))
+            # Xử dụng ROI Processor với adaptive threading
+            if OPTIMIZATION_MODULES_AVAILABLE and _roi_processor:
+                results = _roi_processor.process_rois(roi_args, process_single_roi_optimized)
+            else:
+                # Fallback to standard thread pool
+                with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(roi_args), 8)) as executor:
+                    results = list(executor.map(process_single_roi_optimized, roi_args))
         
         # Post-process: Kiểm tra kết quả có confidence thấp không và thực hiện retry nếu cần
         final_results = []
@@ -1477,7 +1570,7 @@ def process_roi_with_retry_logic(roi_args, original_filename):
         
             # 5. Thực hiện OCR trên mask đã tạo với thông số tối ưu
             retry_results = reader.readtext(digit_mask, 
-                                          allowlist='0123456789.CHEK', 
+                                          allowlist='0123456789.-ABCDEFGHIKLNORTUabcdefghiklnortu', 
                                           detail=1, 
                                           paragraph=False, 
                                           batch_size=1, 
@@ -1645,7 +1738,7 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                 roi = image[y1:y2, x1:x2]
                 image_aligned = image
                 
-                # Removed F41 specific logic
+                # Kiểm tra xem có phải là trường hợp đặc biệt của machine_code="F41" với allowed_values chứa "ON" và "OFF" không
                 is_special_on_off_case = False
                 allowed_values = []
                 
@@ -1691,7 +1784,7 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                     pass
                 
                 # Nếu là trường hợp đặc biệt ON/OFF, phân tích màu sắc thay vì OCR
-                if False:  # Removed old machine type support
+                if is_special_on_off_case and machine_type != "F1":
                     # Tách các kênh màu BGR
                     b, g, r = cv2.split(roi)
                     # Tính giá trị trung bình của kênh xanh dương và đỏ
@@ -1716,7 +1809,7 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                     continue  # Chuyển sang ROI tiếp theo
                 
                 # Nếu là trường hợp đặc biệt ON/OFF và không phải machine_type F1, phân tích màu sắc thay vì OCR
-                if False:  # Removed old machine type support
+                if is_special_on_off_case and machine_type != "F1":
                     # Tách các kênh màu BGR
                     b, g, r = cv2.split(roi)
                     # Tính giá trị trung bình của kênh xanh dương và đỏ
@@ -1762,7 +1855,7 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                 try:
                                         # Specify the characters to read (digits only)
                     ocr_results = reader.readtext(roi_processed, 
-                                                allowlist='0123456789.CHEK', 
+                                                allowlist='0123456789.-ABCDEFGHIKLNORTUabcdefghiklnortu', 
                                                 detail=1, 
                                                 paragraph=False, 
                                                 batch_size=1, 
@@ -1860,14 +1953,15 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                     with open(roi_json_path, 'r', encoding='utf-8') as f:
                         roi_info = json.load(f)
                     
-                    # *** FIX: Sử dụng machine_code trực tiếp để lookup ***
+                    # *** FIX: Sử dụng machine_type thay vì machine_code để lookup ***
+                    machine_type_for_lookup = get_machine_type(machine_code)
                     
                     # Tìm allowed_values cho ROI hiện tại từ roi_info.json
-                    if (machine_code in roi_info.get("machines", {}) and 
-                        "screens" in roi_info["machines"][machine_code] and 
-                        screen_id in roi_info["machines"][machine_code]["screens"]):
+                    if (machine_type_for_lookup in roi_info.get("machines", {}) and 
+                        "screens" in roi_info["machines"][machine_type_for_lookup] and 
+                        screen_id in roi_info["machines"][machine_type_for_lookup]["screens"]):
                         
-                        roi_list = roi_info["machines"][machine_code]["screens"][screen_id]
+                        roi_list = roi_info["machines"][machine_type_for_lookup]["screens"][screen_id]
                         
                         for roi_item in roi_list:
                             if isinstance(roi_item, dict) and roi_item.get("name") == roi_name and "allowed_values" in roi_item:
@@ -1900,16 +1994,17 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                         with open(roi_json_path, 'r', encoding='utf-8') as f:
                             roi_info = json.load(f)
                         
-                        # *** FIX: Sử dụng machine_code trực tiếp để lookup ***
+                        # *** FIX: Sử dụng machine_type thay vì machine_code để lookup ***
+                        machine_type_for_lookup = get_machine_type(machine_code)
                         
                         # Tìm allowed_values cho ROI hiện tại
                         allowed_values = None
                         
-                        if (machine_code in roi_info.get("machines", {}) and 
-                            "screens" in roi_info["machines"][machine_code] and 
-                            screen_id in roi_info["machines"][machine_code]["screens"]):
+                        if (machine_type_for_lookup in roi_info.get("machines", {}) and 
+                            "screens" in roi_info["machines"][machine_type_for_lookup] and 
+                            screen_id in roi_info["machines"][machine_type_for_lookup]["screens"]):
                             
-                            roi_list = roi_info["machines"][machine_code]["screens"][screen_id]
+                            roi_list = roi_info["machines"][machine_type_for_lookup]["screens"][screen_id]
                             
                             for roi_item in roi_list:
                                 if isinstance(roi_item, dict) and roi_item.get("name") == roi_name and "allowed_values" in roi_item:
@@ -1966,19 +2061,16 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                         # Kiểm tra xem có cấu hình cho ROI này không
                         best_text = best_text[1:] if is_negative else best_text
                         
-                        # Debug: In thông tin lookup decimal places
-                        print(f"🔧 DEBUG Decimal Places:")
-                        print(f"   machine_code: {machine_code}")
-                        print(f"   screen_id: {screen_id}")
-                        print(f"   roi_name: {roi_name}")
-                        print(f"   decimal_places_config keys: {list(decimal_places_config.keys())}")
+                        # Lấy machine_type từ machine_code
+                        machine_type = get_machine_type(machine_code)
+                        print(f"Getting decimal places config for machine_type={machine_type}, screen_id={screen_id}, roi_name={roi_name}")
                         
-                        # Áp dụng decimal_places - sử dụng machine_code trực tiếp
-                        if (machine_code in decimal_places_config and 
-                            screen_id in decimal_places_config[machine_code] and 
-                            roi_name in decimal_places_config[machine_code][screen_id]):
+                        # Áp dụng decimal_places trước khi chuyển sang ROI tiếp theo
+                        if (machine_type in decimal_places_config and 
+                            screen_id in decimal_places_config[machine_type] and 
+                            roi_name in decimal_places_config[machine_type][screen_id]):
                             
-                            decimal_places = int(decimal_places_config[machine_code][screen_id][roi_name])
+                            decimal_places = int(decimal_places_config[machine_type][screen_id][roi_name])
                             print(f"Found decimal places config for ROI {roi_name}: {decimal_places}")
                             
                             # Xử lý các trường hợp khác nhau dựa trên decimal_places
@@ -2072,7 +2164,7 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                                 # Nếu không có cấu hình decimal_places, giữ nguyên giá trị
                                 formatted_text = best_text
                                 formatted_text = '-' + str(formatted_text) if is_negative else str(formatted_text)
-                                print(f"No decimal places config found for {machine_code}/{screen_id}/{roi_name}. Keeping original value.")
+                                print(f"No decimal places config found for {machine_type}/{screen_id}/{roi_name}. Keeping original value.")
                     except Exception as e:
                         print(f"Error applying decimal places format for ROI {roi_name}: {str(e)}")
                         formatted_text = best_text
@@ -2179,7 +2271,7 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                     
                                         # 5. Thực hiện OCR trên mask đã tạo với thông số tối ưu
                     retry_results = reader.readtext(digit_mask, 
-                                                  allowlist='0123456789.CHEK', 
+                                                  allowlist='0123456789.-ABCDEFGHIKLNORTUabcdefghiklnortu', 
                                                   detail=1, 
                                                   paragraph=False, 
                                                   batch_size=1, 
@@ -2319,7 +2411,7 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                                         )
                                         
                                         if retry_best_match:
-                                            print(f"✅ RETRY MATCHED: '{retry_text}' -> '{retry_best_match}' (score: {retry_match_score:.3f}, method: {retry_match_method})")
+                                            print(f"[OK] RETRY MATCHED: '{retry_text}' -> '{retry_best_match}' (score: {retry_match_score:.3f}, method: {retry_match_method})")
                                             retry_text = retry_best_match
                                             # Cập nhật kết quả ngay lập tức và bỏ qua các xử lý tiếp theo
                                             results[-1]["text"] = retry_text
@@ -2328,9 +2420,9 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                                             results[-1]["original_value"] = retry_text
                                             best_confidence = retry_confidence
                                             retry_matched_with_allowed_values = True
-                                            print(f"✅ Updated result with allowed value match: '{retry_text}'")
+                                            print(f"[OK] Updated result with allowed value match: '{retry_text}'")
                                         else:
-                                            print(f"❌ NO SUITABLE RETRY MATCH FOUND. Using first allowed value: '{allowed_values[0]}'")
+                                            print(f"[ERROR] NO SUITABLE RETRY MATCH FOUND. Using first allowed value: '{allowed_values[0]}'")
                                             retry_text = allowed_values[0]
                                             results[-1]["text"] = retry_text
                                             results[-1]["confidence"] = retry_confidence
@@ -2338,7 +2430,7 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                                             results[-1]["original_value"] = retry_text
                                             best_confidence = retry_confidence
                                             retry_matched_with_allowed_values = True
-                                            print(f"✅ Updated result with first allowed value: '{retry_text}'")
+                                            print(f"[OK] Updated result with first allowed value: '{retry_text}'")
                         except Exception as e:
                             print(f"Error checking allowed_values for retry ROI {roi_name}: {str(e)}")
                         
@@ -2348,7 +2440,7 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                             # Chấp nhận retry result nếu confidence > 0.3 (theo yêu cầu user)
                             # hoặc nếu retry confidence tốt hơn original
                             if retry_confidence > 0.3 or retry_confidence > best_confidence:
-                                print(f"✅ Accepting retry result: confidence {retry_confidence:.4f} (threshold: 0.3, original: {best_confidence:.4f})")
+                                print(f"[OK] Accepting re0812try result: confidence {retry_confidence:.4f} (threshold: 0.3, original: {best_confidence:.4f})")
                                 
                                 # Áp dụng định dạng theo decimal_places nếu kết quả là số và có cấu hình
                                 formatted_retry_text = retry_text
@@ -2365,8 +2457,8 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                                     try:
                                         is_negative = retry_text.startswith('-')
                                         clean_text = retry_text[1:] if is_negative else retry_text
-                                        decimal_places = int(decimal_places_config[machine_code][screen_id][roi_name])
-                                        print(f"Getting decimal places config for machine_code={machine_code}, screen_id={screen_id}, roi_name={roi_name}")
+                                        decimal_places = int(decimal_places_config[machine_type][screen_id][roi_name])
+                                        print(f"Getting decimal places config for machine_type={machine_type}, screen_id={screen_id}, roi_name={roi_name}")
                                         print(f"Found decimal places config for ROI {roi_name}: {decimal_places}")
                                         
                                         # Xử lý tương tự như phần xử lý decimal_places ở trên
@@ -2440,11 +2532,11 @@ def perform_ocr_on_roi(image, roi_coordinates, original_filename, template_path=
                                 results[-1]["has_text"] = True
                                 results[-1]["original_value"] = retry_text
                                 best_confidence = retry_confidence
-                                print(f"✅ Updated result with retry OCR: '{formatted_retry_text}' (confidence: {retry_confidence:.4f})")
+                                print(f"[OK] Updated result with retry OCR: '{formatted_retry_text}' (confidence: {retry_confidence:.4f})")
                             else:
                                 print(f"Keeping original result: retry confidence {retry_confidence:.4f} not meeting threshold 0.3")
                     else:
-                        print(f"❌ No retry OCR results found on digit mask")
+                        print(f"[ERROR] No retry OCR results found on digit mask")
                     
                     # Nếu confidence vẫn thấp dưới 0.1, trả về mảng rỗng
                     if best_confidence < 0.1:
@@ -2494,449 +2586,11 @@ def clear_processed_roi_folder():
             if deleted_count > 0:
                 print(f"🗑️ Cleared {deleted_count} old files from processed_roi folder")
             else:
-                print("📁 Processed_roi folder is already empty")
+                print("[FILE] Processed_roi folder is already empty")
         else:
-            print("📁 Processed_roi folder does not exist yet")
+            print("[FILE] Processed_roi folder does not exist yet")
     except Exception as e:
         print(f"Warning: Error clearing processed_roi folder: {str(e)}")
-
-# THÊM MỚI: SPECIAL REJECT SUMMARY DISAMBIGUATION FUNCTIONS
-def detect_reject_summary_ambiguity(detection_result):
-    """
-    Phát hiện trường hợp phân vân giữa các Reject Summary screens
-    Returns: (is_ambiguous, candidates_info)
-    """
-    if not detection_result:
-        return False, None
-    
-    # Kiểm tra xem có stage information không (từ two-stage detection)
-    final_scores = detection_result.get('final_combined_scores', [])
-    stage1_scores = detection_result.get('stage1_scores', [])
-    
-    # Lấy screen_id hiện tại
-    current_screen = detection_result.get('screen_id', '')
-    
-    # Chỉ check nếu là Reject Summary screen
-    if 'Reject Summary' not in current_screen:
-        return False, None
-    
-    # Kiểm tra có thông tin multiple candidates không
-    if len(final_scores) >= 2 and len(stage1_scores) >= 2:
-        # Tính score difference
-        score_diff = abs(final_scores[0] - final_scores[1])
-        
-        # Ngưỡng ambiguity - nếu difference < 0.1 thì coi là phân vân
-        AMBIGUITY_THRESHOLD = 0.1
-        
-        if score_diff < AMBIGUITY_THRESHOLD:
-            print(f"🤔 REJECT SUMMARY AMBIGUITY DETECTED!")
-            print(f"   Score difference: {score_diff:.4f} < threshold {AMBIGUITY_THRESHOLD}")
-            print(f"   Current winner: {current_screen}")
-            
-            # Trả về thông tin candidates (giả sử top 2)
-            candidates_info = {
-                'scores': final_scores[:2],
-                'traditional_scores': stage1_scores[:2],
-                'score_difference': score_diff,
-                'current_winner': current_screen
-            }
-            
-            return True, candidates_info
-    
-    return False, None
-
-def perform_comprehensive_reject_summary_disambiguation(image, machine_code, machine_type, candidates_info):
-    """
-    🎯 COMPREHENSIVE REJECT SUMMARY DISAMBIGUATION v2.0
-    Thử TẤT CẢ possible Reject Summary screens với ROI coordinates riêng biệt
-    """
-    print(f"🎯 Starting Comprehensive Reject Summary Disambiguation...")
-    
-    # Screen mapping với expected values
-    screen_mapping = {
-        "Reject Summary_1": "CHECK 1",
-        "Reject Summary_2": "CHECK 8",
-        # Có thể mở rộng cho các Reject Summary khác
-    }
-    
-    # Lấy danh sách tất cả possible Reject Summary screens cho machine này
-    possible_screens = get_possible_reject_summary_screens(machine_code)
-    print(f"📋 Possible Reject Summary screens for {machine_code}: {possible_screens}")
-    
-    if not possible_screens:
-        print(f"❌ No Reject Summary screens found for machine {machine_code}")
-        return None
-    
-    # Kết quả từng screen test
-    screen_results = []
-    
-    # LOOP: Thử từng screen một
-    for screen_id in possible_screens:
-        if screen_id not in screen_mapping:
-            print(f"⚠️ Skipping {screen_id}: No mapping defined")
-            continue
-            
-        expected_text = screen_mapping[screen_id]
-        print(f"\n🔍 Testing screen: {screen_id} (expected: '{expected_text}')")
-        
-        try:
-            # Load ROI coordinates RIÊNG cho screen này
-            roi_coordinates, roi_names = get_roi_coordinates(machine_code, screen_id, machine_type)
-            
-            if not roi_coordinates or not roi_names:
-                print(f"   ❌ No ROI data found for {screen_id}")
-                continue
-            
-            # Tìm ROI "must_check" cho screen này
-            must_check_index = None
-            must_check_coords = None
-            
-            for i, roi_name in enumerate(roi_names):
-                if roi_name == "must_check":
-                    must_check_index = i
-                    must_check_coords = roi_coordinates[i]
-                    break
-            
-            if must_check_index is None:
-                print(f"   ❌ ROI 'must_check' not found in {screen_id}")
-                print(f"       Available ROIs: {roi_names}")
-                continue
-            
-            print(f"   ✅ Found 'must_check' at index {must_check_index}")
-            print(f"       Coordinates: {must_check_coords}")
-            
-            # OCR ROI "must_check" cho screen này
-            ocr_result = ocr_must_check_roi(image, must_check_coords, screen_id)
-            
-            if ocr_result is None:
-                print(f"   ❌ OCR failed for {screen_id}")
-                continue
-            
-            ocr_text, ocr_confidence = ocr_result
-            print(f"   🔍 OCR result: '{ocr_text}' (confidence: {ocr_confidence:.3f})")
-            
-            # Chuẩn hóa và so sánh
-            normalized_ocr = ocr_text.upper().strip()
-            similarity = calculate_text_similarity(normalized_ocr, expected_text.upper())
-            
-            print(f"   📊 Similarity with '{expected_text}': {similarity:.3f}")
-            
-            # Lưu kết quả
-            screen_results.append({
-                'screen_id': screen_id,
-                'expected_text': expected_text,
-                'ocr_text': ocr_text,
-                'ocr_confidence': ocr_confidence,
-                'similarity': similarity,
-                'coordinates': must_check_coords
-            })
-            
-        except Exception as e:
-            print(f"   ❌ Error testing {screen_id}: {str(e)}")
-            continue
-    
-    # Phân tích kết quả và chọn best match
-    if not screen_results:
-        print(f"\n❌ No valid results from any screen test")
-        return None
-    
-    # Sắp xếp theo similarity (cao nhất trước)
-    screen_results.sort(key=lambda x: x['similarity'], reverse=True)
-    
-    print(f"\n📊 All screen test results:")
-    for result in screen_results:
-        print(f"   {result['screen_id']}: '{result['ocr_text']}' → similarity {result['similarity']:.3f}")
-    
-    # Chọn best match với threshold
-    best_result = screen_results[0]
-    SIMILARITY_THRESHOLD = 0.8
-    
-    if best_result['similarity'] > SIMILARITY_THRESHOLD:
-        print(f"\n✅ COMPREHENSIVE DISAMBIGUATION SUCCESS!")
-        print(f"   Winner: {best_result['screen_id']}")
-        print(f"   OCR: '{best_result['ocr_text']}' vs expected '{best_result['expected_text']}'")
-        print(f"   Similarity: {best_result['similarity']:.3f} (threshold: {SIMILARITY_THRESHOLD})")
-        return best_result['screen_id']
-    else:
-        print(f"\n❌ No clear match found")
-        print(f"   Best: {best_result['screen_id']} with similarity {best_result['similarity']:.3f} < {SIMILARITY_THRESHOLD}")
-        return None
-
-def get_possible_reject_summary_screens(machine_code):
-    """Lấy danh sách tất cả Reject Summary screens cho machine này"""
-    try:
-        machine_screens_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'roi_data', 'machine_screens.json')
-        with open(machine_screens_path, 'r', encoding='utf-8') as f:
-            config = json.load(f)
-        
-        # Tìm machine trong areas
-        for area_code, area_info in config.get('areas', {}).items():
-            machines = area_info.get('machines', {})
-            if machine_code in machines:
-                machine_info = machines[machine_code]
-                screens = machine_info.get('screens', [])
-                
-                # Filter chỉ lấy Reject Summary screens
-                reject_summary_screens = []
-                for screen in screens:
-                    screen_id = screen.get('screen_id', '')
-                    if 'Reject Summary' in screen_id:
-                        reject_summary_screens.append(screen_id)
-                
-                return reject_summary_screens
-        
-        print(f"❌ Machine {machine_code} not found in machine_screens.json")
-        return []
-        
-    except Exception as e:
-        print(f"❌ Error reading machine screens: {str(e)}")
-        return []
-
-def ocr_must_check_roi(image, coordinates, screen_id):
-    """OCR một ROI must_check cụ thể"""
-    try:
-        # Xử lý coordinates giống như logic cũ
-        img_height, img_width = image.shape[:2]
-        
-        if len(coordinates) != 4:
-            print(f"❌ Invalid coordinates: {coordinates}")
-            return None
-        
-        # Chuyển đổi tọa độ nếu cần
-        is_normalized = False
-        for value in coordinates:
-            if isinstance(value, float) and 0 <= value <= 1:
-                is_normalized = True
-                break
-        
-        if is_normalized:
-            x1, y1, x2, y2 = coordinates
-            x1, x2 = int(x1 * img_width), int(x2 * img_width)
-            y1, y2 = int(y1 * img_height), int(y2 * img_height)
-        else:
-            x1, y1, x2, y2 = coordinates
-            x1, x2 = int(float(x1)), int(float(x2))
-            y1, y2 = int(float(y1)), int(float(y2))
-        
-        # Đảm bảo thứ tự tọa độ chính xác
-        x1, x2 = min(x1, x2), max(x1, x2)
-        y1, y2 = min(y1, y2), max(y1, y2)
-        
-        # Cắt ROI
-        roi_image = image[y1:y2, x1:x2]
-        
-        if roi_image.size == 0:
-            print(f"❌ Empty ROI for {screen_id}")
-            return None
-        
-        print(f"   📏 ROI size for {screen_id}: {roi_image.shape}")
-        
-        # Preprocess ROI
-        if len(roi_image.shape) == 3:
-            roi_gray = cv2.cvtColor(roi_image, cv2.COLOR_BGR2GRAY)
-        else:
-            roi_gray = roi_image.copy()
-        
-        # Resize nếu quá nhỏ
-        height, width = roi_gray.shape[:2]
-        if height < 30 or width < 30:
-            scale_factor = max(30/height, 30/width)
-            new_height = int(height * scale_factor)
-            new_width = int(width * scale_factor)
-            roi_gray = cv2.resize(roi_gray, (new_width, new_height), interpolation=cv2.INTER_CUBIC)
-        
-        # OCR
-        if not HAS_EASYOCR or reader is None:
-            print(f"❌ EasyOCR not available")
-            return None
-        
-        results = reader.readtext(roi_gray, detail=1, width_ths=0.1, height_ths=0.1)
-        
-        # Lấy text tốt nhất
-        best_text = ""
-        best_confidence = 0.0
-        
-        for (bbox, text, confidence) in results:
-            if confidence > best_confidence:
-                best_text = text.strip()
-                best_confidence = confidence
-        best_text = best_text.replace("B", "8").replace("I", "1").replace("7", "1").replace("0", "8")
-        return (best_text, best_confidence)
-        
-    except Exception as e:
-        print(f"❌ Error in OCR for {screen_id}: {str(e)}")
-        return None
-
-def perform_reject_summary_disambiguation(image, machine_code, candidates_info, roi_names, roi_coordinates):
-    """
-    Thực hiện disambiguation giữa các Reject Summary screens bằng OCR ROI "must_check"
-    """
-    print(f"🎯 Starting Reject Summary Disambiguation...")
-    
-    # Tìm ROI "must_check"
-    must_check_index = None
-    must_check_coords = None
-    
-    for i, roi_name in enumerate(roi_names):
-        if roi_name == "must_check":
-            must_check_index = i
-            must_check_coords = roi_coordinates[i]
-            break
-    
-    if must_check_index is None or must_check_coords is None:
-        print(f"❌ ROI 'must_check' not found in ROI list")
-        print(f"   Available ROIs: {roi_names}")
-        return None
-    
-    print(f"✅ Found ROI 'must_check' at index {must_check_index}")
-    print(f"   Coordinates: {must_check_coords}")
-    
-    # Cắt và OCR ROI "must_check"
-    try:
-        # Xử lý coordinates như trong perform_ocr_on_roi_optimized
-        img_height, img_width = image.shape[:2]
-        
-        if len(must_check_coords) != 4:
-            print(f"❌ Invalid coordinates for must_check ROI: {must_check_coords}")
-            return None
-        
-        # Chuyển đổi tọa độ nếu cần
-        is_normalized = False
-        for value in must_check_coords:
-            if isinstance(value, float) and 0 <= value <= 1:
-                is_normalized = True
-                break
-        
-        if is_normalized:
-            x1, y1, x2, y2 = must_check_coords
-            x1, x2 = int(x1 * img_width), int(x2 * img_width)
-            y1, y2 = int(y1 * img_height), int(y2 * img_height)
-        else:
-            x1, y1, x2, y2 = must_check_coords
-            x1, x2 = int(float(x1)), int(float(x2))
-            y1, y2 = int(float(y1)), int(float(y2))
-        
-        # Đảm bảo thứ tự tọa độ chính xác
-        x1, x2 = min(x1, x2), max(x1, x2)
-        y1, y2 = min(y1, y2), max(y1, y2)
-        
-        # Cắt ROI
-        roi_image = image[y1:y2, x1:x2]
-        
-        if roi_image.size == 0:
-            print(f"❌ Empty ROI image for must_check")
-            return None
-        
-        print(f"🔍 OCR on must_check ROI (size: {roi_image.shape})")
-        
-        # Thực hiện OCR
-        if not HAS_EASYOCR or reader is None:
-            print(f"❌ EasyOCR not available")
-            return None
-        
-        # Preprocess ROI để cải thiện OCR
-        if len(roi_image.shape) == 3:
-            roi_gray = cv2.cvtColor(roi_image, cv2.COLOR_BGR2GRAY)
-        else:
-            roi_gray = roi_image.copy()
-        
-        # Resize nếu quá nhỏ
-        height, width = roi_gray.shape[:2]
-        if height < 30 or width < 30:
-            scale_factor = max(30/height, 30/width)
-            new_height = int(height * scale_factor)
-            new_width = int(width * scale_factor)
-            roi_gray = cv2.resize(roi_gray, (new_width, new_height), interpolation=cv2.INTER_CUBIC)
-        
-        # OCR với multiple attempts
-        results = reader.readtext(roi_gray, detail=1, width_ths=0.1, height_ths=0.1)
-        
-        # Lấy text tốt nhất
-        best_text = ""
-        best_confidence = 0.0
-        
-        for (bbox, text, confidence) in results:
-            if confidence > best_confidence:
-                best_text = text.strip()
-                best_confidence = confidence
-        
-        print(f"🔍 Must_check OCR result: '{best_text}' (confidence: {best_confidence:.3f})")
-        
-        # Chuẩn hóa text: uppercase và loại bỏ spaces thừa
-        normalized_text = best_text.upper().strip()
-        print(f"🔧 Normalized text: '{normalized_text}'")
-        
-        # Disambiguation logic dựa trên must_check content
-        screen_mapping = {
-            "CHECK 1": "Reject Summary_1",
-            "CHECK 8": "Reject Summary_2",
-            # Có thể thêm mapping cho các Reject Summary khác
-        }
-        
-        # So sánh với TẤT CẢ expected values để tìm best match
-        best_match = None
-        best_similarity = 0.0
-        similarity_results = []
-        
-        for expected_text, target_screen in screen_mapping.items():
-            similarity = calculate_text_similarity(normalized_text, expected_text.upper())
-            similarity_results.append((expected_text, target_screen, similarity))
-            print(f"   Similarity with '{expected_text}' -> '{target_screen}': {similarity:.3f}")
-            
-            # Tìm best match
-            if similarity > best_similarity:
-                best_similarity = similarity
-                best_match = target_screen
-        
-        # Ngưỡng similarity để quyết định - chỉ accept nếu có best match rõ ràng
-        SIMILARITY_THRESHOLD = 0.8  # Tăng threshold để chắc chắn hơn
-        
-        if best_similarity > SIMILARITY_THRESHOLD:
-            print(f"✅ DISAMBIGUATION SUCCESS: Detected '{best_match}' based on must_check='{best_text}'")
-            print(f"   Best similarity: {best_similarity:.3f} (threshold: {SIMILARITY_THRESHOLD})")
-            return best_match
-        else:
-            print(f"❌ No clear match found for must_check text: '{best_text}'")
-            print(f"   Best similarity: {best_similarity:.3f} < threshold: {SIMILARITY_THRESHOLD}")
-            
-            # Debug: hiển thị tất cả similarities
-            print("   All similarities:")
-            for expected, target, sim in similarity_results:
-                print(f"     '{expected}' -> {target}: {sim:.3f}")
-            
-            return None
-        
-    except Exception as e:
-        print(f"❌ Error in disambiguation OCR: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return None
-
-def calculate_text_similarity(text1, text2):
-    """Tính toán similarity giữa 2 text strings"""
-    try:
-        from difflib import SequenceMatcher
-        return SequenceMatcher(None, text1, text2).ratio()
-    except:
-        # Fallback: simple character overlap
-        common_chars = set(text1.lower()) & set(text2.lower())
-        total_chars = set(text1.lower()) | set(text2.lower())
-        return len(common_chars) / len(total_chars) if total_chars else 0.0
-
-def filter_ocr_results_exclude_must_check(ocr_results):
-    """
-    Filter OCR results để bỏ ROI 'must_check'
-    """
-    filtered_results = []
-    
-    for result in ocr_results:
-        roi_index = result.get("roi_index", "")
-        if roi_index != "must_check":
-            filtered_results.append(result)
-        else:
-            print(f"🚫 Filtered out must_check ROI from final results")
-    
-    return filtered_results
 
 # Sửa lại route upload_image để sử dụng template reference từ thư mục mới
 @app.route('/api/images', methods=['POST'])
@@ -2986,7 +2640,7 @@ def upload_image():
         
         # THIẾT LẬP TEMPLATE PATH - Đây là điều thiếu!
         if template_path is None:
-            template_path = get_reference_template_path(machine_type, screen_id, machine_code)
+            template_path = get_reference_template_path(machine_type, screen_id)
             print(f"🔧 DEBUG: Auto-detected template_path: {template_path}")
         else:
             print(f"🔧 DEBUG: Using provided template_path: {template_path}")
@@ -2995,81 +2649,41 @@ def upload_image():
         hmi_detected = False
         visualization_path = None
         hmi_refined_filename = None
+        hmi_screen, visualization, roi_coords = detect_hmi_screen(uploaded_image)
         
-        # Kiểm tra nếu ảnh đã là template (đã được crop) thì bỏ qua HMI detection
-        # Thêm mới: Phát hiện màn hình HMI
-        hmi_detected = False
-        visualization_path = None
-        hmi_refined_filename = None
-
-        # Kiểm tra nếu ảnh đã là template (đã được crop) thì bỏ qua HMI detection
-        is_template_image = "template" in filename.lower() or any(x in filename.lower() for x in ["reject", "summary"])
-
-        if is_template_image:
-            print(f"📸 Image appears to be a template/cropped image: {filename}. Skipping HMI detection.")
+        # Lưu trữ thông tin phát hiện HMI
+        hmi_detection_info = {
+            "hmi_detected": False,
+            "hmi_image": None,
+            "hmi_refined_filename": None,
+            "visualization": None
+        }
+        
+        if hmi_screen is not None:
+            hmi_detected = True
+            uploaded_image = hmi_screen
+            
+            # Lưu ảnh HMI refined
+            # hmi_refined_filename = f"hmi_refined_{filename}"
+            # hmi_refined_path = os.path.join(app.config['HMI_REFINED_FOLDER'], hmi_refined_filename)
+            # cv2.imwrite(hmi_refined_path, hmi_screen)
+            
+            # Cập nhật thông tin phát hiện HMI
+            hmi_detection_info = {
+                "hmi_detected": True,
+                "hmi_image": None,
+                "hmi_refined_filename": hmi_refined_filename,
+                "visualization": None
+            }
+        else:
             hmi_detection_info = {
                 "hmi_detected": False,
                 "hmi_image": None,
                 "hmi_refined_filename": None,
                 "visualization": None
             }
-        else:
-            print(f"🔍 Attempting HMI detection on image: {filename}")
-            hmi_screen, visualization, roi_coords = detect_hmi_screen(uploaded_image)
-
-            if hmi_screen is not None:
-                hmi_detected = True
-                uploaded_image = hmi_screen
-                print(f"✅ HMI screen detected successfully!")
-                # cv2.imwrite(f"D:\\WremblyScanHmi\\python_api_test\\roi_data\\reference_images\\hmi_screen_{filename}", hmi_screen)
-                # Cập nhật thông tin phát hiện HMI
-                hmi_detection_info = {
-                    "hmi_detected": True,
-                    "hmi_image": None,
-                    "hmi_refined_filename": None,
-                    "visualization": None
-                }
-            else:
-                print(f"❌ No HMI screen detected in image: {filename}")
-                hmi_detection_info = {
-                    "hmi_detected": False,
-                    "hmi_image": None,
-                    "hmi_refined_filename": None,
-                    "visualization": None
-                }
-
-        # THÊM MỚI: SPECIAL REJECT SUMMARY DISAMBIGUATION LOGIC
-        is_ambiguous, candidates_info = detect_reject_summary_ambiguity(detection_result)
         
-        if is_ambiguous:
-            print(f"🤔 Reject Summary ambiguity detected, attempting disambiguation...")
-            
-            # Thực hiện disambiguation với logic đúng: thử tất cả possible screens
-            disambiguated_screen = perform_comprehensive_reject_summary_disambiguation(
-                uploaded_image, machine_code, machine_type, candidates_info
-            )
-            
-            if disambiguated_screen:
-                print(f"✅ Disambiguation successful: {screen_id} -> {disambiguated_screen}")
-                
-                # Cập nhật screen_id và template_path
-                screen_id = disambiguated_screen
-                template_path = get_reference_template_path(machine_type, screen_id, machine_code)
-                
-                # Cập nhật detection result
-                detection_result['screen_id'] = screen_id
-                detection_result['template_path'] = template_path
-                detection_result['disambiguation_used'] = True
-                detection_result['disambiguation_method'] = 'comprehensive_must_check_roi_ocr'
-                
-                print(f"🔧 Updated template_path: {template_path}")
-            else:
-                print(f"❌ Disambiguation failed, using original result: {screen_id}")
-                detection_result['disambiguation_used'] = False
-        else:
-            detection_result['disambiguation_used'] = False
-
-        # Lấy ROI coordinates và tên ROI dựa trên machine_code và screen_id đã phát hiện (có thể đã updated)
+        # Lấy ROI coordinates và tên ROI dựa trên machine_type và screen_id đã phát hiện
         roi_coordinates, roi_names = get_roi_coordinates(machine_code, screen_id, machine_type)
         
         if not roi_coordinates or len(roi_coordinates) == 0:
@@ -3099,13 +2713,6 @@ def upload_image():
             screen_id
         )
         
-        # THÊM MỚI: Filter bỏ ROI "must_check" khỏi kết quả cuối cùng (nếu đã disambiguation)
-        if is_ambiguous and detection_result.get('disambiguation_used', False):
-            original_count = len(ocr_results)
-            ocr_results = filter_ocr_results_exclude_must_check(ocr_results)
-            filtered_count = len(ocr_results)
-            print(f"🚫 Filtered OCR results: {original_count} -> {filtered_count} (removed must_check)")
-        
         # Tạo cấu trúc dữ liệu giống với file OCR result
         result_data = {
             "filename": filename,
@@ -3122,11 +2729,6 @@ def upload_image():
                 "screen_numeric_id": screen_numeric_id,
                 "similarity_score": similarity_score,
                 "machine_type": machine_type
-            },
-            "disambiguation": {
-                "used": detection_result.get('disambiguation_used', False),
-                "method": detection_result.get('disambiguation_method', None),
-                "original_screen": candidates_info.get('current_winner', None) if detection_result.get('disambiguation_used', False) and candidates_info else None
             }
         }
         
@@ -3141,9 +2743,9 @@ def upload_image():
                 
                 with open(json_file_path, 'w', encoding='utf-8') as json_file:
                     json.dump(result_data, json_file, ensure_ascii=False, indent=2)
-                print(f"📁 OCR result saved to: {json_file_path}")
+                print(f"[FILE] OCR result saved to: {json_file_path}")
             except Exception as e:
-                print(f"❌ Error saving OCR result: {str(e)}")
+                print(f"[ERROR] Error saving OCR result: {str(e)}")
         
         # Submit to thread pool để save async
         _ocr_thread_pool.submit(save_json_async)
@@ -3311,29 +2913,19 @@ def get_decimal_places():
 # API mới: Lấy cấu hình số chữ số thập phân cho một máy cụ thể
 @app.route('/api/decimal_places/<machine_code>', methods=['GET'])
 def get_decimal_places_for_machine(machine_code):
-    """Lấy cấu hình số chữ số thập phân cho một máy cụ thể bằng machine_code"""
+    """Lấy cấu hình số chữ số thập phân cho một máy cụ thể"""
     try:
         decimal_config_path = os.path.join(app.config['ROI_DATA_FOLDER'], 'decimal_places.json')
         if os.path.exists(decimal_config_path):
             with open(decimal_config_path, 'r', encoding='utf-8') as f:
                 config = json.load(f)
             
-            # Tìm kiếm theo machine_code trực tiếp
             if machine_code in config:
-                return jsonify({
-                    "machine_code": machine_code,
-                    "decimal_places": config[machine_code]
-                }), 200
+                return jsonify(config[machine_code]), 200
             else:
-                return jsonify({
-                    "machine_code": machine_code,
-                    "decimal_places": {}
-                }), 200
+                return jsonify({}), 200
         else:
-            return jsonify({
-                "machine_code": machine_code,
-                "decimal_places": {}
-            }), 200
+            return jsonify({}), 200
     
     except Exception as e:
         return jsonify({"error": f"Failed to get decimal places configuration: {str(e)}"}), 500
@@ -3341,32 +2933,19 @@ def get_decimal_places_for_machine(machine_code):
 # API mới: Lấy cấu hình số chữ số thập phân cho một màn hình cụ thể của một máy
 @app.route('/api/decimal_places/<machine_code>/<screen_name>', methods=['GET'])
 def get_decimal_places_for_screen(machine_code, screen_name):
-    """Lấy cấu hình số chữ số thập phân cho một màn hình cụ thể của một máy bằng machine_code"""
+    """Lấy cấu hình số chữ số thập phân cho một màn hình cụ thể của một máy"""
     try:
         decimal_config_path = os.path.join(app.config['ROI_DATA_FOLDER'], 'decimal_places.json')
         if os.path.exists(decimal_config_path):
             with open(decimal_config_path, 'r', encoding='utf-8') as f:
                 config = json.load(f)
             
-            # Tìm kiếm theo machine_code trực tiếp
             if machine_code in config and screen_name in config[machine_code]:
-                return jsonify({
-                    "machine_code": machine_code,
-                    "screen_name": screen_name,
-                    "decimal_places": config[machine_code][screen_name]
-                }), 200
+                return jsonify(config[machine_code][screen_name]), 200
             else:
-                return jsonify({
-                    "machine_code": machine_code,
-                    "screen_name": screen_name,
-                    "decimal_places": {}
-                }), 200
+                return jsonify({}), 200
         else:
-            return jsonify({
-                "machine_code": machine_code,
-                "screen_name": screen_name,
-                "decimal_places": {}
-            }), 200
+            return jsonify({}), 200
     
     except Exception as e:
         return jsonify({"error": f"Failed to get decimal places configuration: {str(e)}"}), 500
@@ -3732,11 +3311,11 @@ def check_machine_screen_status():
         has_roi = roi_coordinates is not None and len(roi_coordinates) > 0
         roi_count = len(roi_coordinates) if has_roi else 0
         
-        # Kiểm tra cấu hình decimal places - sử dụng screen_name thay vì screen_id
+        # Kiểm tra cấu hình decimal places
         decimal_config = get_decimal_places_config()
         has_decimal_config = (machine_code in decimal_config and 
-                             screen_name in decimal_config[machine_code] and 
-                             len(decimal_config[machine_code][screen_name]) > 0)
+                             screen_id in decimal_config[machine_code] and 
+                             len(decimal_config[machine_code][screen_id]) > 0)
         
         # Kiểm tra từng ROI có cấu hình decimal places không
         roi_status = []
@@ -3744,16 +3323,16 @@ def check_machine_screen_status():
             for i in range(roi_count):
                 roi_name = roi_names[i] if i < len(roi_names) else f"ROI_{i}"
                 has_decimal = (machine_code in decimal_config and 
-                              screen_name in decimal_config[machine_code] and 
-                              (roi_name in decimal_config[machine_code][screen_name] or 
-                               str(i) in decimal_config[machine_code][screen_name]))
+                              screen_id in decimal_config[machine_code] and 
+                              (roi_name in decimal_config[machine_code][screen_id] or 
+                               str(i) in decimal_config[machine_code][screen_id]))
                 
                 decimal_value = None
                 if has_decimal:
-                    if roi_name in decimal_config[machine_code][screen_name]:
-                        decimal_value = decimal_config[machine_code][screen_name][roi_name]
-                    elif str(i) in decimal_config[machine_code][screen_name]:
-                        decimal_value = decimal_config[machine_code][screen_name][str(i)]
+                    if roi_name in decimal_config[machine_code][screen_id]:
+                        decimal_value = decimal_config[machine_code][screen_id][roi_name]
+                    elif str(i) in decimal_config[machine_code][screen_id]:
+                        decimal_value = decimal_config[machine_code][screen_id][str(i)]
                 
                 roi_status.append({
                     "roi_index": i,
@@ -3884,7 +3463,7 @@ def get_screen_numeric_id(machine_type, screen_name):
     Lấy ID số của một màn hình dựa trên tên màn hình
     
     Args:
-        machine_type: Loại máy (F1)
+        machine_type: Loại máy (ví dụ: F1, F41, F42)
         screen_name: Tên màn hình (ví dụ: Plasticizer)
         
     Returns:
@@ -4007,7 +3586,7 @@ def upload_reference_image():
     
     Form data parameters:
     - file: File ảnh template mẫu
-    - machine_type: Loại máy (F1)
+    - machine_type: Loại máy (ví dụ: F1, F41, F42)
     - screen_id: Mã màn hình (ví dụ: Faults)
     """
     # Kiểm tra xem có file trong request không
@@ -4170,31 +3749,23 @@ def get_hmi_refined_image(filename):
         abort(404)
 
 # Hàm mới: Lấy đường dẫn đến ảnh template mẫu dựa trên machine_code và screen_id
-def get_reference_template_path(machine_type, screen_id, machine_code=None):
+def get_reference_template_path(machine_type, screen_id):
     """
-    Tìm kiếm ảnh template mẫu dựa trên machine_type, screen_id và machine_code
-    Hỗ trợ cả format cũ và mới:
-    - Format mới: {machine_code}_{screen_id}.ext (ưu tiên)
-    - Format cũ: template_{machine_type}_{screen_id}.ext (fallback)
+    Tìm kiếm ảnh template mẫu dựa trên machine_type và screen_id
     
     Returns:
         str: Đường dẫn đến file template nếu tìm thấy, None nếu không tìm thấy
     """
     reference_folder = app.config['REFERENCE_IMAGES_FOLDER']
     
-    if not os.path.exists(reference_folder):
-        return None
+    # Tạo pattern tên file
+    file_pattern = f"template_{machine_type}_{screen_id}.*"
     
-    # Only support new format with machine_code
-    if machine_code:
-        new_format_pattern = f"{machine_code}_{screen_id}.*"
-        for filename in os.listdir(reference_folder):
-            if fnmatch.fnmatch(filename, new_format_pattern):
-                template_path = os.path.join(reference_folder, filename)
-                print(f"✅ Found template: {filename}")
-                return template_path
+    # Tìm kiếm file theo pattern
+    for filename in os.listdir(reference_folder):
+        if fnmatch.fnmatch(filename, file_pattern):
+            return os.path.join(reference_folder, filename)
     
-    print(f"❌ No template found for machine_code={machine_code}, machine_type={machine_type}, screen_id={screen_id}")
     return None
 
 def preprocess_roi_for_ocr(roi, roi_index, original_filename, roi_name=None, image_aligned=None, x1=None, y1=None, x2=None, y2=None):
@@ -4461,10 +4032,10 @@ def get_machines_by_area(area_code):
 @app.route('/api/decimal_places/<machine_code>/<screen_name>', methods=['POST'])
 def update_decimal_places_for_screen(machine_code, screen_name):
     """
-    Cập nhật cấu hình số chữ số thập phân cho một màn hình cụ thể bằng machine_code
+    Cập nhật cấu hình số chữ số thập phân cho một màn hình cụ thể
     
     Path Parameters:
-    - machine_code: Mã máy (ví dụ: IE-F1-CWA01)
+    - machine_code: Mã máy (ví dụ: F1)
     - screen_name: Tên màn hình (ví dụ: Faults)
     
     Request Body (JSON):
@@ -4490,7 +4061,7 @@ def update_decimal_places_for_screen(machine_code, screen_name):
         else:
             config = {}
         
-        # Tạo cấu trúc nếu chưa tồn tại (dùng machine_code trực tiếp)
+        # Tạo cấu trúc nếu chưa tồn tại
         if machine_code not in config:
             config[machine_code] = {}
         
@@ -5327,26 +4898,16 @@ def fine_tune_hmi_screen(image, roi_coords):
 @app.route('/api/history', methods=['GET'])
 def get_ocr_history():
     """
-    API để truy vấn kết quả OCR trong khoảng thời gian chỉ định với khả năng lọc theo area và machine_code
+    API để truy vấn kết quả OCR trong khoảng thời gian chỉ định
     Tham số truy vấn:
-    - ExpectedStartTime: Thời gian bắt đầu theo định dạng YYYY-MM-DD (bắt buộc)
-    - ExpectedEndTime: Thời gian kết thúc theo định dạng YYYY-MM-DD (bắt buộc)
-    - area: Khu vực (tùy chọn, ví dụ: F1, F42)
-    - machine_code: Mã máy (tùy chọn, ví dụ: IE-F1-CWA01)
-    
-    Ví dụ:
-    - /api/history?ExpectedStartTime=2025-01-01&ExpectedEndTime=2025-01-31
-    - /api/history?ExpectedStartTime=2025-01-01&ExpectedEndTime=2025-01-31&area=F1
-    - /api/history?ExpectedStartTime=2025-01-01&ExpectedEndTime=2025-01-31&machine_code=IE-F1-CWA01
-    - /api/history?ExpectedStartTime=2025-01-01&ExpectedEndTime=2025-01-31&area=F1&machine_code=IE-F1-CWA01
+    - ExpectedStartTime: Thời gian bắt đầu theo định dạng YYYY-MM-DD
+    - ExpectedEndTime: Thời gian kết thúc theo định dạng YYYY-MM-DD
     """
     # Lấy tham số truy vấn
     start_time_str = request.args.get('ExpectedStartTime')
     end_time_str = request.args.get('ExpectedEndTime')
-    area_filter = request.args.get('area', '').strip().upper()  # Chuẩn hóa thành chữ hoa
-    machine_code_filter = request.args.get('machine_code', '').strip().upper()  # Chuẩn hóa thành chữ hoa
     
-    # Kiểm tra tham số bắt buộc
+    # Kiểm tra tham số
     if not start_time_str or not end_time_str:
         return jsonify({"error": "ExpectedStartTime và ExpectedEndTime là bắt buộc"}), 400
     
@@ -5394,37 +4955,18 @@ def get_ocr_history():
                     # Đọc nội dung file JSON
                     with open(file_path, 'r', encoding='utf-8') as f:
                         data = json.load(f)
-                    
-                    # THÊM MỚI: Filter theo area và machine_code nếu có
-                    should_include = True
-                    
-                    # Filter theo area nếu được cung cấp
-                    if area_filter:
-                        file_area = data.get('area', '').strip().upper()
-                        if file_area != area_filter:
-                            should_include = False
-                            continue
-                    
-                    # Filter theo machine_code nếu được cung cấp
-                    if machine_code_filter:
-                        file_machine_code = data.get('machine_code', '').strip().upper()
-                        if file_machine_code != machine_code_filter:
-                            should_include = False
-                            continue
-                    
-                    # Chỉ thêm vào kết quả nếu pass tất cả filters
-                    if should_include:
-                        # Thêm thông tin thời gian và tên file vào dữ liệu
-                        data['timestamp'] = file_creation_time.strftime("%Y-%m-%d %H:%M:%S")
-                        data['datetime_obj'] = file_creation_time  # Thêm đối tượng datetime để sắp xếp
-                        data['filename'] = filename
                         
-                        # Thêm machine_name từ thông tin máy đã đọc
-                        if 'machine_code' in data and data['machine_code'] in machine_info:
-                            data['machine_name'] = machine_info[data['machine_code']]
-                        
-                        # Thêm vào danh sách kết quả
-                        ocr_results.append(data)
+                    # Thêm thông tin thời gian và tên file vào dữ liệu
+                    data['timestamp'] = file_creation_time.strftime("%Y-%m-%d %H:%M:%S")
+                    data['datetime_obj'] = file_creation_time  # Thêm đối tượng datetime để sắp xếp
+                    data['filename'] = filename
+                    
+                    # Thêm machine_name từ thông tin máy đã đọc
+                    if 'machine_code' in data and data['machine_code'] in machine_info:
+                        data['machine_name'] = machine_info[data['machine_code']]
+                    
+                    # Thêm vào danh sách kết quả
+                    ocr_results.append(data)
             except (json.JSONDecodeError, Exception) as e:
                 print(f"Lỗi khi đọc file {filename}: {str(e)}")
     
@@ -5438,19 +4980,8 @@ def get_ocr_history():
         del result['datetime_obj']
         indexed_results[str(i)] = result
     
-    # Tạo thông tin về filtering đã áp dụng
-    filter_info = {
-        "start_time": start_time_str,
-        "end_time": end_time_str,
-        "area_filter": area_filter if area_filter else None,
-        "machine_code_filter": machine_code_filter if machine_code_filter else None,
-        "total_results": len(ocr_results)
-    }
-    
     return jsonify({
-        "filter_info": filter_info,
-        "results": indexed_results,
-        **indexed_results  # Giữ nguyên format cũ để tương thích backward
+        **indexed_results  # Thêm các kết quả đã đánh số vào response
     })
 
 # API mới: Cập nhật máy và màn hình
@@ -5562,7 +5093,7 @@ def compare_histograms(img1, img2):
 
 def compare_histograms_optimized(img1, img2):
     """
-    🚀 Optimized histogram comparison for auto detection
+    [*] Optimized histogram comparison for auto detection
     
     Improvements:
     - Multi-channel histogram analysis
@@ -5678,6 +5209,93 @@ def compare_phash(img1, img2, hash_size=16):
     
     return similarity
 
+def find_best_matching_template(hmi_image, reference_dir, machine_type=None):
+    """
+    🔄 LEGACY: Tìm template phù hợp nhất với ảnh HMI (deprecated)
+    
+    [WARNING] Function này được giữ lại để tương thích ngược, 
+        nhưng auto_detect_machine_and_screen() đã được tối ưu hóa hoàn toàn
+    
+    Args:
+        hmi_image: Ảnh cần so sánh
+        reference_dir: Đường dẫn thư mục chứa ảnh tham chiếu
+        machine_type: Loại máy để lọc ảnh tham chiếu
+        
+    Returns:
+        Tuple (best_match_path, best_match_screen_id, similarity_score)
+    """
+    print("[WARNING] WARNING: Using legacy find_best_matching_template(). Consider using optimized auto_detect_machine_and_screen()")
+    
+    if not os.path.exists(reference_dir):
+        print(f"Thư mục reference không tồn tại: {reference_dir}")
+        return None, None, 0
+    
+    # Lọc các file theo loại máy (nếu có)
+    template_files = []
+    for filename in os.listdir(reference_dir):
+        # Chỉ xử lý file ảnh
+        if not filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+            continue
+            
+        # Nếu có chỉ định machine_type, chỉ lấy các template tương ứng
+        if machine_type and f"template_{machine_type}_" not in filename:
+            continue
+            
+        template_files.append(filename)
+    
+    if not template_files:
+        print(f"Không tìm thấy template phù hợp với loại máy {machine_type}")
+        return None, None, 0
+    
+    best_match = None
+    best_score = -1
+    best_screen_id = None
+    
+    print(f"Bắt đầu so sánh với {len(template_files)} template...")
+    
+    for template_file in template_files:
+        template_path = os.path.join(reference_dir, template_file)
+        
+        # Đọc ảnh template
+        template_img = cv2.imread(template_path)
+        if template_img is None:
+            print(f"Không thể đọc file template: {template_path}")
+            continue
+        
+        # So sánh kích thước của ảnh
+        img_height, img_width = hmi_image.shape[:2]
+        templ_height, templ_width = template_img.shape[:2]
+        
+        # Nếu kích thước quá khác nhau, điều chỉnh template
+        if abs(img_height/img_width - templ_height/templ_width) > 0.3:
+            print(f"Tỷ lệ khung hình quá khác biệt cho {template_file}, điều chỉnh...")
+            template_img = cv2.resize(template_img, (img_width, img_height))
+        
+        # Kết hợp các phương pháp so sánh
+        hist_score = compare_histograms(hmi_image, template_img)
+        feature_score = compare_features_orb(hmi_image, template_img)
+        phash_score = compare_phash(hmi_image, template_img)
+        
+        # Tính điểm tổng hợp (có thể điều chỉnh trọng số)
+        combined_score = 0.3 * hist_score + 0.4 * feature_score + 0.3 * phash_score
+        
+        print(f"Template {template_file}: hist={hist_score:.2f}, feature={feature_score:.2f}, phash={phash_score:.2f}, combined={combined_score:.2f}")
+        
+        # Cập nhật best match
+        if combined_score > best_score:
+            best_score = combined_score
+            best_match = template_path
+            
+            # Trích xuất screen_id từ tên file template
+            # Format: template_{machine_type}_{screen_name}.png
+            parts = template_file.split('_')
+            if len(parts) >= 3:
+                # Lấy tất cả phần từ index 2 trở đi và bỏ phần mở rộng
+                screen_name = '_'.join(parts[2:]).rsplit('.', 1)[0]
+                best_screen_id = screen_name
+    
+    print(f"Best match: {os.path.basename(best_match) if best_match else 'None'} với điểm {best_score:.2f}, screen_id: {best_screen_id}")
+    return best_match, best_screen_id, best_score
 
 def detect_screen_by_template_matching(image, machine_type):
     """
@@ -5685,7 +5303,7 @@ def detect_screen_by_template_matching(image, machine_type):
     
     Args:
         image: Ảnh cần phân tích
-        machine_type: Loại máy (F1)
+        machine_type: Loại máy (ví dụ: F1, F41, F42)
         
     Returns:
         Tuple (screen_id, screen_numeric_id, template_path)
@@ -5708,12 +5326,12 @@ def detect_screen_by_template_matching(image, machine_type):
     return best_screen_id, screen_numeric_id, best_template
 
 # Thêm hàm get_decimal_places để lấy thông tin số thập phân theo machine_type và screen_id
-def get_decimal_places(machine_code, screen_id):
+def get_decimal_places(machine_type, screen_id):
     """
     Lấy thông tin số chữ số thập phân cho các ROI của một màn hình cụ thể
     
     Args:
-        machine_code: Mã máy (ví dụ: IE-F1-CWA01, IE-F1-CTF01)
+        machine_type: Loại máy (ví dụ: F1, F41, F42)
         screen_id: Tên màn hình (ví dụ: "Faults", "Production Data")
         
     Returns:
@@ -5729,18 +5347,18 @@ def get_decimal_places(machine_code, screen_id):
         with open(decimal_config_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
         
-        # Kiểm tra xem machine_code có trong cấu hình không
-        if machine_code not in config:
-            print(f"Machine code {machine_code} not found in decimal places config")
+        # Kiểm tra xem machine_type có trong cấu hình không
+        if machine_type not in config:
+            print(f"Machine type {machine_type} not found in decimal places config")
             return {}
         
-        # Kiểm tra xem screen_id có trong cấu hình của machine_code không
-        if screen_id not in config[machine_code]:
-            print(f"Screen ID {screen_id} not found in decimal places config for machine code {machine_code}")
+        # Kiểm tra xem screen_id có trong cấu hình của machine_type không
+        if screen_id not in config[machine_type]:
+            print(f"Screen ID {screen_id} not found in decimal places config for machine type {machine_type}")
             return {}
         
         # Trả về cấu hình decimal places cho screen_id
-        return config[machine_code][screen_id]
+        return config[machine_type][screen_id]
     
     except Exception as e:
         print(f"Error getting decimal places: {str(e)}")
@@ -5778,7 +5396,7 @@ def find_best_allowed_value_match(ocr_text, allowed_values, debug_roi_name=""):
         
         # 1. Exact match (highest priority)
         if ocr_upper == value_upper:
-            print(f"  ✅ EXACT MATCH: '{value}' (score: 1.0)")
+            print(f"  [OK] EXACT MATCH: '{value}' (score: 1.0)")
             return value, 1.0, "exact_match"
         
         # 2. Levenshtein distance (character-level similarity)
@@ -5887,7 +5505,7 @@ def find_best_allowed_value_match(ocr_text, allowed_values, debug_roi_name=""):
         if best_score >= 0.20:  
             return best_value, best_score, "composite_similarity"
         else:
-            print(f"  ❌ SCORE TOO LOW ({best_score:.3f} < 0.20), rejecting match")
+            print(f"  [ERROR] SCORE TOO LOW ({best_score:.3f} < 0.20), rejecting match")
             return None, best_score, "low_confidence"
     
     return None, 0.0, "no_match"
@@ -6100,9 +5718,10 @@ def save_roi_image_with_result(roi, roi_name, original_filename, detected_text, 
         return roi_result_path
         
     except Exception as e:
-        print(f"❌ Error saving ROI image with result: {str(e)}")
+        print(f"[ERROR] Error saving ROI image with result: {str(e)}")
         return None
 
+# Sửa lại hàm perform_ocr_on_roi để sử dụng ảnh đã căn chỉnh
 auto_detect_machine_and_screen = auto_detect_machine_and_screen_smart
 
 if __name__ == '__main__':
@@ -6131,7 +5750,7 @@ if __name__ == '__main__':
     print("- /api/set_decimal_value (POST): Set decimal places value based on current machine, screen and ROI index")
     print("- /api/machine_screen_status (GET): Check machine and screen status")
     print("- /api/set_all_decimal_values (POST): Set all decimal places for a specific screen")
-    print("- /api/history (GET): Get OCR history with optional area and machine_code filters")
+    print("- /api/history (GET): Get OCR history")
     print("- /api/reference_images (POST): Upload ảnh tham chiếu với machine_type và screen_id")
     print("- /api/reference_images (GET): Lấy danh sách ảnh tham chiếu, có thể lọc theo machine_type và screen_id")
     print("Starting server...")

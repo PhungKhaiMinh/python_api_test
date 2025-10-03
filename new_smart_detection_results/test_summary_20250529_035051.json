@@ -1,0 +1,465 @@
+{
+  "total_images": 38,
+  "correct_predictions": 38,
+  "accuracy": 1.0,
+  "avg_processing_time": 0.43472096794529963,
+  "total_time": 17.751755952835083,
+  "per_class_accuracy": {
+    "Production": {
+      "accuracy": 1.0,
+      "correct": 6,
+      "total": 6
+    },
+    "Temperature": {
+      "accuracy": 1.0,
+      "correct": 12,
+      "total": 12
+    },
+    "Overview": {
+      "accuracy": 1.0,
+      "correct": 4,
+      "total": 4
+    },
+    "Plasticizer": {
+      "accuracy": 1.0,
+      "correct": 6,
+      "total": 6
+    },
+    "Setup": {
+      "accuracy": 1.0,
+      "correct": 4,
+      "total": 4
+    },
+    "Tracking": {
+      "accuracy": 1.0,
+      "correct": 6,
+      "total": 6
+    }
+  },
+  "processing_times": [
+    0.44757556915283203,
+    0.4326655864715576,
+    0.44492053985595703,
+    0.4486525058746338,
+    0.4398915767669678,
+    0.42800092697143555,
+    0.43462395668029785,
+    0.42710280418395996,
+    0.438615083694458,
+    0.41602015495300293,
+    0.45348405838012695,
+    0.44397950172424316,
+    0.4199802875518799,
+    0.42592310905456543,
+    0.49249863624572754,
+    0.4458191394805908,
+    0.42411351203918457,
+    0.42068052291870117,
+    0.455873966217041,
+    0.42317843437194824,
+    0.41515636444091797,
+    0.4212822914123535,
+    0.42064619064331055,
+    0.4274427890777588,
+    0.42484450340270996,
+    0.4430201053619385,
+    0.437380313873291,
+    0.425095796585083,
+    0.42984652519226074,
+    0.4243309497833252,
+    0.43235087394714355,
+    0.411376953125,
+    0.4528369903564453,
+    0.4180576801300049,
+    0.4718499183654785,
+    0.4398019313812256,
+    0.4185669422149658,
+    0.4419097900390625
+  ],
+  "detailed_results": [
+    {
+      "filename": "F41_production_1.jpg",
+      "expected_screen": "Production",
+      "predicted_screen": "Production",
+      "is_correct": true,
+      "confidence": 0.5986942077100832,
+      "processing_time": 0.44757556915283203,
+      "detection_method": "hog_svm_v3.0",
+      "machine_type": "F41"
+    },
+    {
+      "filename": "F41_production_2.jpg",
+      "expected_screen": "Production",
+      "predicted_screen": "Production",
+      "is_correct": true,
+      "confidence": 0.5871276665818819,
+      "processing_time": 0.4326655864715576,
+      "detection_method": "hog_svm_v3.0",
+      "machine_type": "F41"
+    },
+    {
+      "filename": "F41_production_3.jpg",
+      "expected_screen": "Production",
+      "predicted_screen": "Production",
+      "is_correct": true,
+      "confidence": 0.6045684802965019,
+      "processing_time": 0.44492053985595703,
+      "detection_method": "hog_svm_v3.0",
+      "machine_type": "F41"
+    },
+    {
+      "filename": "F41_temp_1.jpg",
+      "expected_screen": "Temperature",
+      "predicted_screen": "Temperature",
+      "is_correct": true,
+      "confidence": 0.660927020319522,
+      "processing_time": 0.4486525058746338,
+      "detection_method": "hog_svm_v3.0",
+      "machine_type": "F41"
+    },
+    {
+      "filename": "F41_temp_2.jpg",
+      "expected_screen": "Temperature",
+      "predicted_screen": "Temperature",
+      "is_correct": true,
+      "confidence": 0.44651928552517184,
+      "processing_time": 0.4398915767669678,
+      "detection_method": "hog_svm_v3.0",
+      "machine_type": "F41"
+    },
+    {
+      "filename": "F41_temp_3.jpg",
+      "expected_screen": "Temperature",
+      "predicted_screen": "Temperature",
+      "is_correct": true,
+      "confidence": 0.6616172288999175,
+      "processing_time": 0.42800092697143555,
+      "detection_method": "hog_svm_v3.0",
+      "machine_type": "F41"
+    },
+    {
+      "filename": "F42_Overview_1.jpg",
+      "expected_screen": "Overview",
+      "predicted_screen": "Overview",
+      "is_correct": true,
+      "confidence": 0.5183528595242707,
+      "processing_time": 0.43462395668029785,
+      "detection_method": "hog_svm_v3.0",
+      "machine_type": "F41"
+    },
+    {
+      "filename": "F42_Overview_2.jpg",
+      "expected_screen": "Overview",
+      "predicted_screen": "Overview",
+      "is_correct": true,
+      "confidence": 0.5160648588214773,
+      "processing_time": 0.42710280418395996,
+      "detection_method": "hog_svm_v3.0",
+      "machine_type": "F41"
+    },
+    {
+      "filename": "F42_Plasticizer_1.jpg",
+      "expected_screen": "Plasticizer",
+      "predicted_screen": "Plasticizer",
+      "is_correct": true,
+      "confidence": 0.6081938835753073,
+      "processing_time": 0.438615083694458,
+      "detection_method": "hog_svm_v3.0",
+      "machine_type": "F41"
+    },
+    {
+      "filename": "F42_Plasticizer_2.jpg",
+      "expected_screen": "Plasticizer",
+      "predicted_screen": "Plasticizer",
+      "is_correct": true,
+      "confidence": 0.6041274941925198,
+      "processing_time": 0.41602015495300293,
+      "detection_method": "hog_svm_v3.0",
+      "machine_type": "F41"
+    },
+    {
+      "filename": "F42_Plasticizer_3.jpg",
+      "expected_screen": "Plasticizer",
+      "predicted_screen": "Plasticizer",
+      "is_correct": true,
+      "confidence": 0.6146293969379074,
+      "processing_time": 0.45348405838012695,
+      "detection_method": "hog_svm_v3.0",
+      "machine_type": "F41"
+    },
+    {
+      "filename": "F42_setting_1.jpg",
+      "expected_screen": "Setup",
+      "predicted_screen": "Setup",
+      "is_correct": true,
+      "confidence": 0.5539235170175125,
+      "processing_time": 0.44397950172424316,
+      "detection_method": "hog_svm_v3.0",
+      "machine_type": "F41"
+    },
+    {
+      "filename": "F42_setting_2.jpg",
+      "expected_screen": "Setup",
+      "predicted_screen": "Setup",
+      "is_correct": true,
+      "confidence": 0.5511946669280195,
+      "processing_time": 0.4199802875518799,
+      "detection_method": "hog_svm_v3.0",
+      "machine_type": "F41"
+    },
+    {
+      "filename": "F42_temp_1.jpg",
+      "expected_screen": "Temperature",
+      "predicted_screen": "Temperature",
+      "is_correct": true,
+      "confidence": 0.6558496473986768,
+      "processing_time": 0.42592310905456543,
+      "detection_method": "hog_svm_v3.0",
+      "machine_type": "F41"
+    },
+    {
+      "filename": "F42_temp_2.jpg",
+      "expected_screen": "Temperature",
+      "predicted_screen": "Temperature",
+      "is_correct": true,
+      "confidence": 0.6558956288951608,
+      "processing_time": 0.49249863624572754,
+      "detection_method": "hog_svm_v3.0",
+      "machine_type": "F41"
+    },
+    {
+      "filename": "F42_temp_3.jpg",
+      "expected_screen": "Temperature",
+      "predicted_screen": "Temperature",
+      "is_correct": true,
+      "confidence": 0.6565957053749086,
+      "processing_time": 0.4458191394805908,
+      "detection_method": "hog_svm_v3.0",
+      "machine_type": "F41"
+    },
+    {
+      "filename": "F42_tracking_1.jpg",
+      "expected_screen": "Tracking",
+      "predicted_screen": "Tracking",
+      "is_correct": true,
+      "confidence": 0.5617797425823282,
+      "processing_time": 0.42411351203918457,
+      "detection_method": "hog_svm_v3.0",
+      "machine_type": "F41"
+    },
+    {
+      "filename": "F42_tracking_2.jpg",
+      "expected_screen": "Tracking",
+      "predicted_screen": "Tracking",
+      "is_correct": true,
+      "confidence": 0.5617591527410618,
+      "processing_time": 0.42068052291870117,
+      "detection_method": "hog_svm_v3.0",
+      "machine_type": "F41"
+    },
+    {
+      "filename": "F42_tracking_3.jpg",
+      "expected_screen": "Tracking",
+      "predicted_screen": "Tracking",
+      "is_correct": true,
+      "confidence": 0.5587081280745804,
+      "processing_time": 0.455873966217041,
+      "detection_method": "hog_svm_v3.0",
+      "machine_type": "F41"
+    },
+    {
+      "filename": "F41_production_1.jpg",
+      "expected_screen": "Production",
+      "predicted_screen": "Production",
+      "is_correct": true,
+      "confidence": 0.5986942077100832,
+      "processing_time": 0.42317843437194824,
+      "detection_method": "hog_svm_v3.0",
+      "machine_type": "F41"
+    },
+    {
+      "filename": "F41_production_2.jpg",
+      "expected_screen": "Production",
+      "predicted_screen": "Production",
+      "is_correct": true,
+      "confidence": 0.5871276665818819,
+      "processing_time": 0.41515636444091797,
+      "detection_method": "hog_svm_v3.0",
+      "machine_type": "F41"
+    },
+    {
+      "filename": "F41_production_3.jpg",
+      "expected_screen": "Production",
+      "predicted_screen": "Production",
+      "is_correct": true,
+      "confidence": 0.6045684802965019,
+      "processing_time": 0.4212822914123535,
+      "detection_method": "hog_svm_v3.0",
+      "machine_type": "F41"
+    },
+    {
+      "filename": "F41_temp_1.jpg",
+      "expected_screen": "Temperature",
+      "predicted_screen": "Temperature",
+      "is_correct": true,
+      "confidence": 0.660927020319522,
+      "processing_time": 0.42064619064331055,
+      "detection_method": "hog_svm_v3.0",
+      "machine_type": "F41"
+    },
+    {
+      "filename": "F41_temp_2.jpg",
+      "expected_screen": "Temperature",
+      "predicted_screen": "Temperature",
+      "is_correct": true,
+      "confidence": 0.44651928552517184,
+      "processing_time": 0.4274427890777588,
+      "detection_method": "hog_svm_v3.0",
+      "machine_type": "F41"
+    },
+    {
+      "filename": "F41_temp_3.jpg",
+      "expected_screen": "Temperature",
+      "predicted_screen": "Temperature",
+      "is_correct": true,
+      "confidence": 0.6616172288999175,
+      "processing_time": 0.42484450340270996,
+      "detection_method": "hog_svm_v3.0",
+      "machine_type": "F41"
+    },
+    {
+      "filename": "F42_Overview_1.jpg",
+      "expected_screen": "Overview",
+      "predicted_screen": "Overview",
+      "is_correct": true,
+      "confidence": 0.5183528595242707,
+      "processing_time": 0.4430201053619385,
+      "detection_method": "hog_svm_v3.0",
+      "machine_type": "F41"
+    },
+    {
+      "filename": "F42_Overview_2.jpg",
+      "expected_screen": "Overview",
+      "predicted_screen": "Overview",
+      "is_correct": true,
+      "confidence": 0.5160648588214773,
+      "processing_time": 0.437380313873291,
+      "detection_method": "hog_svm_v3.0",
+      "machine_type": "F41"
+    },
+    {
+      "filename": "F42_Plasticizer_1.jpg",
+      "expected_screen": "Plasticizer",
+      "predicted_screen": "Plasticizer",
+      "is_correct": true,
+      "confidence": 0.6081938835753073,
+      "processing_time": 0.425095796585083,
+      "detection_method": "hog_svm_v3.0",
+      "machine_type": "F41"
+    },
+    {
+      "filename": "F42_Plasticizer_2.jpg",
+      "expected_screen": "Plasticizer",
+      "predicted_screen": "Plasticizer",
+      "is_correct": true,
+      "confidence": 0.6041274941925198,
+      "processing_time": 0.42984652519226074,
+      "detection_method": "hog_svm_v3.0",
+      "machine_type": "F41"
+    },
+    {
+      "filename": "F42_Plasticizer_3.jpg",
+      "expected_screen": "Plasticizer",
+      "predicted_screen": "Plasticizer",
+      "is_correct": true,
+      "confidence": 0.6146293969379074,
+      "processing_time": 0.4243309497833252,
+      "detection_method": "hog_svm_v3.0",
+      "machine_type": "F41"
+    },
+    {
+      "filename": "F42_setting_1.jpg",
+      "expected_screen": "Setup",
+      "predicted_screen": "Setup",
+      "is_correct": true,
+      "confidence": 0.5539235170175125,
+      "processing_time": 0.43235087394714355,
+      "detection_method": "hog_svm_v3.0",
+      "machine_type": "F41"
+    },
+    {
+      "filename": "F42_setting_2.jpg",
+      "expected_screen": "Setup",
+      "predicted_screen": "Setup",
+      "is_correct": true,
+      "confidence": 0.5511946669280195,
+      "processing_time": 0.411376953125,
+      "detection_method": "hog_svm_v3.0",
+      "machine_type": "F41"
+    },
+    {
+      "filename": "F42_temp_1.jpg",
+      "expected_screen": "Temperature",
+      "predicted_screen": "Temperature",
+      "is_correct": true,
+      "confidence": 0.6558496473986768,
+      "processing_time": 0.4528369903564453,
+      "detection_method": "hog_svm_v3.0",
+      "machine_type": "F41"
+    },
+    {
+      "filename": "F42_temp_2.jpg",
+      "expected_screen": "Temperature",
+      "predicted_screen": "Temperature",
+      "is_correct": true,
+      "confidence": 0.6558956288951608,
+      "processing_time": 0.4180576801300049,
+      "detection_method": "hog_svm_v3.0",
+      "machine_type": "F41"
+    },
+    {
+      "filename": "F42_temp_3.jpg",
+      "expected_screen": "Temperature",
+      "predicted_screen": "Temperature",
+      "is_correct": true,
+      "confidence": 0.6565957053749086,
+      "processing_time": 0.4718499183654785,
+      "detection_method": "hog_svm_v3.0",
+      "machine_type": "F41"
+    },
+    {
+      "filename": "F42_tracking_1.jpg",
+      "expected_screen": "Tracking",
+      "predicted_screen": "Tracking",
+      "is_correct": true,
+      "confidence": 0.5617797425823282,
+      "processing_time": 0.4398019313812256,
+      "detection_method": "hog_svm_v3.0",
+      "machine_type": "F41"
+    },
+    {
+      "filename": "F42_tracking_2.jpg",
+      "expected_screen": "Tracking",
+      "predicted_screen": "Tracking",
+      "is_correct": true,
+      "confidence": 0.5617591527410618,
+      "processing_time": 0.4185669422149658,
+      "detection_method": "hog_svm_v3.0",
+      "machine_type": "F41"
+    },
+    {
+      "filename": "F42_tracking_3.jpg",
+      "expected_screen": "Tracking",
+      "predicted_screen": "Tracking",
+      "is_correct": true,
+      "confidence": 0.5587081280745804,
+      "processing_time": 0.4419097900390625,
+      "detection_method": "hog_svm_v3.0",
+      "machine_type": "F41"
+    }
+  ],
+  "requirements_met": {
+    "accuracy_>=_90%": true,
+    "speed_<=_10s": "True"
+  }
+}

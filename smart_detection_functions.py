@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-🚀 Smart Detection Functions với Ensemble HOG + ORB Algorithm
+[*] Smart Detection Functions với Ensemble HOG + ORB Algorithm
 Sử dụng thuật toán Ensemble HOG + ORB cho auto detection màn hình HMI
 với hiệu suất cao và độ chính xác vượt trội (>90%)
 
@@ -25,23 +25,34 @@ import hashlib
 import threading
 from typing import Dict, List, Tuple, Optional
 
+# [*] Import GPU Accelerator
+try:
+    from gpu_accelerator import get_gpu_accelerator, is_gpu_available
+    GPU_AVAILABLE = True
+    _gpu_acc = get_gpu_accelerator()
+    print("[OK] GPU Accelerator loaded in smart_detection_functions")
+except ImportError:
+    GPU_AVAILABLE = False
+    _gpu_acc = None
+    print("[WARNING] GPU Accelerator not available in smart_detection_functions")
+
 # Import Ensemble HOG + ORB Classifier (Primary)
 try:
     from ensemble_hog_orb_classifier import EnsembleHOGORBClassifier, EnsembleResult
     ENSEMBLE_AVAILABLE = True
-    print("✅ Ensemble HOG + ORB Classifier available")
+    print("[OK] Ensemble HOG + ORB Classifier available")
 except ImportError as e:
     ENSEMBLE_AVAILABLE = False
-    print(f"❌ Ensemble HOG + ORB Classifier not available: {e}")
+    print(f"[ERROR] Ensemble HOG + ORB Classifier not available: {e}")
 
 # Import HOG SVM Classifier (Fallback)
 try:
     from hog_svm_classifier import HOGSVMClassifier, ClassificationResult
     HOG_SVM_AVAILABLE = True
-    print("✅ HOG + SVM Classifier available as fallback")
+    print("[OK] HOG + SVM Classifier available as fallback")
 except ImportError as e:
     HOG_SVM_AVAILABLE = False
-    print(f"⚠️ HOG + SVM Classifier not available: {e}")
+    print(f"[WARNING]HOG + SVM Classifier not available: {e}")
 
 # Import từ scikit-image để tối ưu hóa (nếu có)
 try:
@@ -108,16 +119,16 @@ _ensemble_classifier = None
 # Global OpenCV detectors để tối ưu hiệu suất
 try:
     _global_orb_detector = cv2.ORB_create(nfeatures=500, scaleFactor=1.2, nlevels=8)
-    print("✅ Global ORB detector initialized successfully")
+    print("[OK] Global ORB detector initialized successfully")
 except Exception as e:
-    print(f"❌ Error initializing global ORB detector: {e}")
+    print(f"[ERROR] Error initializing global ORB detector: {e}")
     _global_orb_detector = None
 
 try:
     _global_bf_matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
-    print("✅ Global BFMatcher initialized successfully")
+    print("[OK] Global BFMatcher initialized successfully")
 except Exception as e:
-    print(f"❌ Error initializing global BFMatcher: {e}")
+    print(f"[ERROR] Error initializing global BFMatcher: {e}")
     _global_bf_matcher = None
 
 def _get_hog_svm_classifier() -> Optional[HOGSVMClassifier]:
@@ -125,14 +136,14 @@ def _get_hog_svm_classifier() -> Optional[HOGSVMClassifier]:
     global _hog_svm_classifier
     
     if not HOG_SVM_AVAILABLE:
-        print("❌ HOG + SVM not available")
+        print("[ERROR] HOG + SVM not available")
         return None
     
     if _hog_svm_classifier is None:
         try:
             _hog_svm_classifier = HOGSVMClassifier()
             if not _hog_svm_classifier.is_trained:
-                print("🔄 Training HOG + SVM classifier với augmented reference images...")
+                print("[TRAIN] Training HOG + SVM classifier với augmented reference images...")
                 
                 # Sử dụng augmented training data folder
                 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -140,12 +151,12 @@ def _get_hog_svm_classifier() -> Optional[HOGSVMClassifier]:
                 
                 # Tạo augmented training data nếu chưa có
                 if not os.path.exists(augmented_dir):
-                    print("🔄 Creating augmented training data...")
+                    print("[TRAIN] Creating augmented training data...")
                     try:
                         from augment_training_data import augment_training_data
                         augmented_dir = augment_training_data()
                     except Exception as e:
-                        print(f"❌ Error creating augmented training data: {e}")
+                        print(f"[ERROR] Error creating augmented training data: {e}")
                         # Fallback to focused data
                         focused_dir = os.path.join(current_dir, 'focused_training_data')
                         if os.path.exists(focused_dir):
@@ -157,15 +168,15 @@ def _get_hog_svm_classifier() -> Optional[HOGSVMClassifier]:
                 if os.path.exists(augmented_dir):
                     training_folders = [augmented_dir]
                     result = _hog_svm_classifier.train_from_folders(training_folders)
-                    print(f"✅ Training với augmented reference images completed: {result}")
+                    print(f"[OK] Training với augmented reference images completed: {result}")
                 else:
-                    print(f"⚠️ Training data folder not found: {augmented_dir}")
+                    print(f"[WARNING]Training data folder not found: {augmented_dir}")
                     return None
             else:
-                print("✅ Using pre-trained HOG + SVM model")
+                print("[OK] Using pre-trained HOG + SVM model")
                 
         except Exception as e:
-            print(f"❌ Error initializing HOG + SVM classifier: {e}")
+            print(f"[ERROR] Error initializing HOG + SVM classifier: {e}")
             return None
     
     return _hog_svm_classifier
@@ -175,14 +186,14 @@ def _get_ensemble_classifier() -> Optional[EnsembleHOGORBClassifier]:
     global _ensemble_classifier
     
     if not ENSEMBLE_AVAILABLE:
-        print("❌ Ensemble HOG + ORB not available")
+        print("[ERROR] Ensemble HOG + ORB not available")
         return None
     
     if _ensemble_classifier is None:
         try:
             _ensemble_classifier = EnsembleHOGORBClassifier()
             if not _ensemble_classifier.is_trained:
-                print("🔄 Training Ensemble HOG + ORB classifier với augmented reference images...")
+                print("[TRAIN] Training Ensemble HOG + ORB classifier với augmented reference images...")
                 
                 # Sử dụng augmented training data folder
                 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -190,26 +201,26 @@ def _get_ensemble_classifier() -> Optional[EnsembleHOGORBClassifier]:
                 
                 # Tạo augmented training data nếu chưa có
                 if not os.path.exists(augmented_dir):
-                    print("🔄 Creating augmented training data...")
+                    print("[TRAIN] Creating augmented training data...")
                     try:
                         from augment_training_data import augment_training_data
                         augmented_dir = augment_training_data()
                     except Exception as e:
-                        print(f"❌ Error creating augmented training data: {e}")
+                        print(f"[ERROR] Error creating augmented training data: {e}")
                         return None
                 
                 if os.path.exists(augmented_dir):
                     training_folders = [augmented_dir]
                     result = _ensemble_classifier.train_from_folders(training_folders)
-                    print(f"✅ Training với Ensemble HOG + ORB completed: {result}")
+                    print(f"[OK] Training với Ensemble HOG + ORB completed: {result}")
                 else:
-                    print(f"⚠️ Training data folder not found: {augmented_dir}")
+                    print(f"[WARNING]Training data folder not found: {augmented_dir}")
                     return None
             else:
-                print("✅ Using pre-trained Ensemble HOG + ORB model")
+                print("[OK] Using pre-trained Ensemble HOG + ORB model")
                 
         except Exception as e:
-            print(f"❌ Error initializing Ensemble HOG + ORB classifier: {e}")
+            print(f"[ERROR] Error initializing Ensemble HOG + ORB classifier: {e}")
             return None
     
     return _ensemble_classifier
@@ -235,10 +246,9 @@ def get_machine_type_from_config_smart(area, machine_code):
         print(f"Error reading machine config: {e}")
         return None, None
 
-def get_reference_templates_for_type_smart(machine_type, machine_code=None):
+def get_reference_templates_for_type_smart(machine_type):
     """
     Lấy danh sách tất cả reference templates cho một machine type cụ thể
-    Hỗ trợ cả format cũ và mới
     """
     current_dir = os.path.dirname(os.path.abspath(__file__))
     reference_dir = os.path.join(current_dir, 'roi_data', 'reference_images')
@@ -247,24 +257,12 @@ def get_reference_templates_for_type_smart(machine_type, machine_code=None):
     if not os.path.exists(reference_dir):
         return templates
     
-    # Tìm tất cả file template cho machine type này (hỗ trợ cả format cũ và mới)
+    # Tìm tất cả file template cho machine type này
     for filename in os.listdir(reference_dir):
-        if not filename.endswith(('.png', '.jpg')):
-            continue
-            
-        screen_id = None
-        
-        # Format cũ: template_{machine_type}_{screen_id}.ext
-        if filename.startswith(f"template_{machine_type}_"):
-            screen_id = filename.replace(f"template_{machine_type}_", "").replace(".jpg", "").replace(".png", "")
-        
-        # Format mới: {machine_code}_{screen_id}.ext
-        elif not filename.startswith("template_") and machine_code:
-            if filename.startswith(f"{machine_code}_"):
-                screen_id = filename.replace(f"{machine_code}_", "").replace(".jpg", "").replace(".png", "")
-        
-        if screen_id:
+        if filename.startswith(f"template_{machine_type}_") and filename.endswith(('.png', '.jpg')):
             template_path = os.path.join(reference_dir, filename)
+            # Extract screen_id from filename: template_F41_Clamp.jpg -> Clamp
+            screen_id = filename.replace(f"template_{machine_type}_", "").replace(".jpg", "").replace(".png", "")
             templates.append({
                 'path': template_path,
                 'filename': filename,
@@ -278,6 +276,7 @@ def detect_hmi_screen_optimized(image: np.ndarray) -> Tuple[Optional[np.ndarray]
     """
     Extract HMI screen region using advanced morphological operations and contour detection
     Enhanced algorithm based on app.py implementation with adaptive improvements
+    GPU acceleration enabled for image processing operations
     """
     start_time = time.time()
     
@@ -288,11 +287,17 @@ def detect_hmi_screen_optimized(image: np.ndarray) -> Tuple[Optional[np.ndarray]
         # Get image dimensions
         height, width = image.shape[:2]
         
-        # Convert to grayscale
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        # Convert to grayscale with GPU acceleration
+        if GPU_AVAILABLE and _gpu_acc:
+            gray = _gpu_acc.cvt_color_gpu(image, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         
-        # Apply Gaussian blur to reduce noise
-        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+        # Apply Gaussian blur to reduce noise with GPU acceleration
+        if GPU_AVAILABLE and _gpu_acc:
+            blurred = _gpu_acc.gaussian_blur_gpu(gray, (5, 5), 0)
+        else:
+            blurred = cv2.GaussianBlur(gray, (5, 5), 0)
         
         # Adaptive histogram equalization for better contrast
         clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
@@ -482,20 +487,32 @@ def compare_images_multi_method_optimized_v2(img1: np.ndarray, img2: np.ndarray,
     return results
 
 def _preprocess_for_comparison(image: np.ndarray) -> np.ndarray:
-    """Tiền xử lý ảnh để cải thiện so sánh"""
+    """Tiền xử lý ảnh để cải thiện so sánh với GPU acceleration"""
     try:
         # Normalize size if too large (for speed)
         h, w = image.shape[:2]
         if h > 1000 or w > 1000:
             scale = min(1000/h, 1000/w)
             new_h, new_w = int(h * scale), int(w * scale)
-            image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
+            
+            # Use GPU resize if available
+            if GPU_AVAILABLE and _gpu_acc:
+                image = _gpu_acc.resize_gpu(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
+            else:
+                image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
         
         # Enhance contrast slightly
         if len(image.shape) == 3:
-            lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
+            if GPU_AVAILABLE and _gpu_acc:
+                lab = _gpu_acc.cvt_color_gpu(image, cv2.COLOR_BGR2LAB)
+            else:
+                lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
             lab[:,:,0] = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8)).apply(lab[:,:,0])
-            enhanced = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+            
+            if GPU_AVAILABLE and _gpu_acc:
+                enhanced = _gpu_acc.cvt_color_gpu(lab, cv2.COLOR_LAB2BGR)
+            else:
+                enhanced = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
         else:
             enhanced = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8)).apply(image)
         
@@ -681,7 +698,7 @@ def _compare_orb_enhanced(img1: np.ndarray, img2: np.ndarray) -> float:
         
         # Sử dụng global ORB detector để tối ưu hiệu suất
         if _global_orb_detector is None:
-            print("❌ Global ORB detector not available")
+            print("[ERROR] Global ORB detector not available")
             return 0.0
         
         # Find keypoints and descriptors
@@ -693,7 +710,7 @@ def _compare_orb_enhanced(img1: np.ndarray, img2: np.ndarray) -> float:
         
         # Sử dụng global BFMatcher để tối ưu hiệu suất
         if _global_bf_matcher is None:
-            print("❌ Global BFMatcher not available")
+            print("[ERROR] Global BFMatcher not available")
             return 0.0
         
         matches = _global_bf_matcher.match(des1, des2)
@@ -1024,25 +1041,25 @@ def get_valid_screen_types_for_machine(area, machine_code):
         with open(config_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
         
-        # Lấy machine info từ cấu trúc areas
+        # Lấy machine info
         if area in config['areas'] and machine_code in config['areas'][area]['machines']:
             machine_info = config['areas'][area]['machines'][machine_code]
             machine_type = machine_info['type']
             
-            # Lấy danh sách screen types trực tiếp từ machine info 
-            screen_types = [screen['screen_id'] for screen in machine_info.get('screens', [])]
-            print(f"📋 Valid screen types for {machine_code} ({machine_type}): {screen_types}")
-            return machine_type, screen_types
+            # Lấy danh sách screen types cho machine type này
+            if machine_type in config['machine_types']:
+                screen_types = [screen['screen_id'] for screen in config['machine_types'][machine_type]['screens']]
+                print(f"📋 Valid screen types for {machine_code} ({machine_type}): {screen_types}")
+                return machine_type, screen_types
         
         return None, []
     except Exception as e:
-        print(f"❌ Error getting valid screen types: {e}")
+        print(f"[ERROR] Error getting valid screen types: {e}")
         return None, []
 
-def filter_reference_images_by_machine_type(machine_type, valid_screen_types, machine_code=None):
+def filter_reference_images_by_machine_type(machine_type, valid_screen_types):
     """
     Lọc reference images chỉ lấy những cái thuộc machine type và screen types hợp lệ
-    Hỗ trợ cả format cũ và mới
     """
     current_dir = os.path.dirname(os.path.abspath(__file__))
     reference_dir = os.path.join(current_dir, 'roi_data', 'reference_images')
@@ -1051,25 +1068,14 @@ def filter_reference_images_by_machine_type(machine_type, valid_screen_types, ma
     if not os.path.exists(reference_dir):
         return filtered_templates
     
-    # Tìm tất cả file template cho machine type này (hỗ trợ cả format cũ và mới)
+    # Tìm tất cả file template cho machine type này
     for filename in os.listdir(reference_dir):
-        if not filename.endswith(('.png', '.jpg')):
-            continue
-            
-        screen_id = None
-        
-        # Format cũ: template_{machine_type}_{screen_id}.ext
-        if filename.startswith(f"template_{machine_type}_"):
+        if filename.startswith(f"template_{machine_type}_") and filename.endswith(('.png', '.jpg')):
+            # Extract screen_id from filename: template_F41_Clamp.jpg -> Clamp
             screen_id = filename.replace(f"template_{machine_type}_", "").replace(".jpg", "").replace(".png", "")
             
-        # Format mới: {machine_code}_{screen_id}.ext
-        elif not filename.startswith("template_") and machine_code:
-            if filename.startswith(f"{machine_code}_"):
-                screen_id = filename.replace(f"{machine_code}_", "").replace(".jpg", "").replace(".png", "")
-                print(f"✅ Found new format template: {filename} -> screen_id: {screen_id}")
-        
             # Chỉ lấy những screen types hợp lệ
-        if screen_id and screen_id in valid_screen_types:
+            if screen_id in valid_screen_types:
                 template_path = os.path.join(reference_dir, filename)
                 filtered_templates.append({
                     'path': template_path,
@@ -1083,7 +1089,7 @@ def filter_reference_images_by_machine_type(machine_type, valid_screen_types, ma
 
 def auto_detect_machine_and_screen_smart(image, area=None, machine_code=None):
     """
-    🚀 THUẬT TOÁN ENSEMBLE HOG + ORB AUTO DETECTION v5.1 - OPTIMIZED FOCUSED DETECTION
+    [*] THUẬT TOÁN ENSEMBLE HOG + ORB AUTO DETECTION v5.1 - OPTIMIZED FOCUSED DETECTION
     Sử dụng Template Matching được tối ưu với context-aware similarity:
     - Độ chính xác: >90%
     - Tốc độ: < 5 giây/ảnh (đã tối ưu)
@@ -1098,7 +1104,7 @@ def auto_detect_machine_and_screen_smart(image, area=None, machine_code=None):
         Dict với thông tin machine và screen được detect
     """
     start_time = time.time()
-    print(f"🚀 Starting Optimized Focused Detection v5.1 with area={area}, machine_code={machine_code}")
+    print(f"[*] Starting Optimized Focused Detection v5.1 with area={area}, machine_code={machine_code}")
     
     # ====== BƯỚC 1: LẤY DANH SÁCH SCREEN TYPES HỢP LỆ ======
     target_machine_type = None
@@ -1108,13 +1114,13 @@ def auto_detect_machine_and_screen_smart(image, area=None, machine_code=None):
         target_machine_type, valid_screen_types = get_valid_screen_types_for_machine(area, machine_code)
         
         if not target_machine_type or not valid_screen_types:
-            print(f"❌ Cannot find valid screen types for {area}/{machine_code}, using fallback")
+            print(f"[ERROR] Cannot find valid screen types for {area}/{machine_code}, using fallback")
             return _auto_detect_legacy_fallback(image, area, machine_code)
         
-        print(f"✅ Target machine type: {target_machine_type}")
-        print(f"✅ Valid screen types: {valid_screen_types}")
+        print(f"[OK] Target machine type: {target_machine_type}")
+        print(f"[OK] Valid screen types: {valid_screen_types}")
     else:
-        print("⚠️ Missing area or machine_code, using general detection")
+        print("[WARNING]Missing area or machine_code, using general detection")
         # Fallback to general detection
         classifier = _get_ensemble_classifier()
         if classifier is None:
@@ -1123,10 +1129,10 @@ def auto_detect_machine_and_screen_smart(image, area=None, machine_code=None):
             return _auto_detect_with_general_ensemble(image, area, machine_code, classifier)
     
     # ====== BƯỚC 2: LỌC REFERENCE TEMPLATES ======
-    filtered_templates = filter_reference_images_by_machine_type(target_machine_type, valid_screen_types, machine_code)
+    filtered_templates = filter_reference_images_by_machine_type(target_machine_type, valid_screen_types)
     
     if not filtered_templates:
-        print(f"❌ No reference templates found for {target_machine_type}, using fallback")
+        print(f"[ERROR] No reference templates found for {target_machine_type}, using fallback")
         return _auto_detect_legacy_fallback(image, area, machine_code)
     
     # ====== BƯỚC 3: OPTIMIZED FOCUSED TEMPLATE MATCHING (SKIP ENSEMBLE) ======
@@ -1141,12 +1147,12 @@ def auto_detect_machine_and_screen_smart(image, area=None, machine_code=None):
         result['processing_time'] = processing_time
         result['detection_method'] = 'optimized_focused_template_matching_v5.1'
         
-        print(f"✅ Optimized Focused Detection v5.1 completed in {processing_time:.3f}s")
+        print(f"[OK] Optimized Focused Detection v5.1 completed in {processing_time:.3f}s")
         print(f"   Result: {result.get('machine_type')} - {result.get('screen_id')} (Confidence: {result.get('similarity_score', 0):.4f})")
         
         return result
     else:
-        print("❌ Template matching failed, using legacy fallback")
+        print("[ERROR] Template matching failed, using legacy fallback")
         return _auto_detect_legacy_fallback(image, area, machine_code)
 
 def _auto_detect_with_focused_template_matching(image, area, machine_code, machine_type, filtered_templates):
@@ -1154,7 +1160,7 @@ def _auto_detect_with_focused_template_matching(image, area, machine_code, machi
     Template matching với adaptive similarity metrics - DISCRIMINATION v2.1
     Now using TWO-STAGE ENHANCED DETECTION with edge comparison
     """
-    print("🔄 Using TWO-STAGE Enhanced Template Matching (context-aware + edge discrimination)")
+    print("[TRAIN] Using TWO-STAGE Enhanced Template Matching (context-aware + edge discrimination)")
     
     # Use the new two-stage enhanced detection
     result = _auto_detect_with_two_stage_enhanced(image, area, machine_code, machine_type, filtered_templates)
@@ -1162,14 +1168,14 @@ def _auto_detect_with_focused_template_matching(image, area, machine_code, machi
     if result:
         return result
     else:
-        print("❌ Two-stage detection failed, using legacy fallback")
+        print("[ERROR] Two-stage detection failed, using legacy fallback")
         return _auto_detect_legacy_fallback(image, area, machine_code)
 
 def _auto_detect_with_general_ensemble(image, area, machine_code, classifier):
     """
     General ensemble detection when area/machine_code not provided
     """
-    print("🔄 Using general ensemble detection")
+    print("[TRAIN] Using general ensemble detection")
     start_time = time.time()
     
     try:
@@ -1204,26 +1210,87 @@ def _auto_detect_with_general_ensemble(image, area, machine_code, classifier):
         return result
         
     except Exception as e:
-        print(f"❌ Error in general ensemble: {e}")
+        print(f"[ERROR] Error in general ensemble: {e}")
         return _auto_detect_legacy_fallback(image, area, machine_code)
 
 def _infer_machine_type_from_screen(predicted_screen: str) -> str:
     """
-    Suy luận machine type từ predicted screen type - F1 ONLY
+    Suy luận machine type từ predicted screen type
     """
-    # Only support F1 machine types now
-    return 'F1'  # All current systems are F1
+    screen_to_machine_mapping = {
+        # F41 screens
+        'production': 'F41',
+        'temperature': 'F41',
+        'temp': 'F41',
+        'injection': 'F41',
+        'clamp': 'F41',
+        'ejector': 'F41',
+        
+        # F42 screens  
+        'overview': 'F42',
+        'tracking': 'F42',
+        'plasticizer': 'F42',
+        'setup': 'F42',
+        'setting': 'F42',
+        
+        # F1 screens
+        'main': 'F1',
+        'feeder': 'F1',
+        'data': 'F1',
+        'maintenance': 'F1',
+        
+        # Common fallback
+        'faults': 'F41',
+        'alarms': 'F41'
+    }
+    
+    predicted_lower = predicted_screen.lower()
+    return screen_to_machine_mapping.get(predicted_lower, 'F41')  # Default to F41
 
 def _normalize_screen_name(predicted_screen: str, machine_type: str) -> str:
     """
-    Chuẩn hóa tên screen prediction - F1 ONLY
+    Chuẩn hóa tên screen prediction thành tên chính xác trong machine_screens.json
+    
+    Args:
+        predicted_screen: Tên screen được dự đoán bởi classifier
+        machine_type: Type của machine (F1, F41, F42)
+    
+    Returns:
+        Tên screen đã được chuẩn hóa theo config
     """
-    # Only F1 screen mappings
+    # Screen name mappings để fix inconsistency giữa classifier và config
     screen_mappings = {
-        'production data': 'Production Data',
-        'reject summary': 'Reject Summary', 
-        'reject summary 1': 'Reject Summary_1',
-        'reject summary 2': 'Reject Summary_2'
+        'F1': {
+            'main': 'Main Machine Parameters',
+            'feeder': 'Feeders and Conveyors', 
+            'feeders': 'Feeders and Conveyors',
+            'data': 'Production Data',
+            'production': 'Production Data',
+            'maintenance': 'Selectors and Maintenance',
+            'selectors': 'Selectors and Maintenance',
+            'faults': 'Faults',
+            'fault': 'Faults'
+        },
+        'F41': {
+            'temperature': 'Temp',  # FIX: Temperature -> Temp
+            'temp': 'Temp',
+            'production': 'Production',
+            'clamp': 'Clamp',
+            'ejector': 'Ejector', 
+            'injection': 'Injection',
+            'alarm': 'Alarm',
+            'alarms': 'Alarm',
+            'faults': 'Alarm'  # Map faults to Alarm for F41
+        },
+        'F42': {
+            'temperature': 'Temp',  # FIX: Temperature -> Temp  
+            'temp': 'Temp',
+            'setting': 'Setting',
+            'setup': 'Setting',
+            'plasticizer': 'Plasticizer',
+            'overview': 'Overview',
+            'tracking': 'Tracking'
+        }
     }
     
     # Normalize input
@@ -1246,7 +1313,7 @@ def _auto_detect_legacy_fallback(image, area=None, machine_code=None):
     """
     Fallback method sử dụng thuật toán cũ khi HOG + SVM không available
     """
-    print("🔄 Using legacy detection method as fallback")
+    print("[TRAIN] Using legacy detection method as fallback")
     start_time = time.time()
     
     # Nếu có đầy đủ area và machine_code, xác định machine type trước
@@ -1256,33 +1323,11 @@ def _auto_detect_legacy_fallback(image, area=None, machine_code=None):
     if area and machine_code:
         target_machine_type, target_machine_name = get_machine_type_from_config_smart(area, machine_code)
         if target_machine_type:
-            print(f"✅ Determined machine type: {target_machine_type} from config")
+            print(f"[OK] Determined machine type: {target_machine_type} from config")
         else:
-            print(f"⚠️ Could not find machine type for area={area}, machine_code={machine_code}")
+            print(f"[WARNING]Could not find machine type for area={area}, machine_code={machine_code}")
     
-    # Get first available screen for this machine as fallback
-    fallback_screen_id = 'Production Data'  # Default fallback
-    fallback_screen_numeric_id = 1
-    
-    if area and machine_code and target_machine_type:
-        # Try to get first available screen from config
-        try:
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            config_path = os.path.join(current_dir, 'roi_data', 'machine_screens.json')
-            with open(config_path, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-            
-            if area in config['areas'] and machine_code in config['areas'][area]['machines']:
-                machine_info = config['areas'][area]['machines'][machine_code]
-                screens = machine_info.get('screens', [])
-                if screens:
-                    first_screen = screens[0]
-                    fallback_screen_id = first_screen['screen_id']
-                    fallback_screen_numeric_id = first_screen['id']
-                    print(f"✅ Using first available screen as fallback: {fallback_screen_id}")
-        except Exception as e:
-            print(f"⚠️ Could not get screens for fallback: {e}")
-    
+    # Simple fallback: classify as Main if no specific detection
     processing_time = time.time() - start_time
     
     result = {
@@ -1290,8 +1335,8 @@ def _auto_detect_legacy_fallback(image, area=None, machine_code=None):
         'machine_type': target_machine_type or 'F41',
         'area': area or 'UNKNOWN', 
         'machine_name': target_machine_name or f"Máy {machine_code}",
-        'screen_id': fallback_screen_id,  # Use valid screen instead of 'Main'
-        'screen_numeric_id': fallback_screen_numeric_id,
+        'screen_id': 'Main',  # Default fallback
+        'screen_numeric_id': 1,
         'template_path': None,
         'similarity_score': 0.5,  # Default fallback score
         'processing_time': processing_time,
@@ -1299,7 +1344,7 @@ def _auto_detect_legacy_fallback(image, area=None, machine_code=None):
         'fallback_reason': 'hog_svm_unavailable'
     }
     
-    print(f"✅ Legacy fallback completed in {processing_time:.3f}s")
+    print(f"[OK] Legacy fallback completed in {processing_time:.3f}s")
     return result 
 
 # LEGACY COMPATIBILITY FUNCTIONS (để app.py vẫn hoạt động)
@@ -1483,7 +1528,7 @@ def _adaptive_edge_detection_enhanced(image: np.ndarray) -> np.ndarray:
         return final_edges
         
     except Exception as e:
-        print(f"❌ Error in adaptive edge detection: {e}")
+        print(f"[ERROR] Error in adaptive edge detection: {e}")
         # Fallback to simple Canny
         if len(image.shape) == 3:
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -1588,16 +1633,16 @@ def _compare_edge_similarity_enhanced(edge1: np.ndarray, edge2: np.ndarray) -> f
         return max(0.0, min(1.0, final_similarity))
         
     except Exception as e:
-        print(f"❌ Error in edge similarity comparison: {e}")
+        print(f"[ERROR] Error in edge similarity comparison: {e}")
         return 0.0
 
 def _auto_detect_with_two_stage_enhanced(image, area, machine_code, machine_type, filtered_templates):
     """
-    🚀 TWO-STAGE ENHANCED DETECTION v1.0
+    [*] TWO-STAGE ENHANCED DETECTION v1.0
     Stage 1: Traditional similarity scoring to get top 2 candidates
     Stage 2: Edge detection comparison for final decision
     """
-    print("🚀 Using TWO-STAGE ENHANCED DETECTION v1.0")
+    print("[*] Using TWO-STAGE ENHANCED DETECTION v1.0")
     start_time = time.time()
     
     # ====== STAGE 1: TRADITIONAL SIMILARITY SCORING ======
@@ -1636,11 +1681,11 @@ def _auto_detect_with_two_stage_enhanced(image, area, machine_code, machine_type
             print(f"   {template_info['screen_id']}: {score:.4f}")
             
         except Exception as e:
-            print(f"❌ Error processing template {template_info['screen_id']}: {e}")
+            print(f"[ERROR] Error processing template {template_info['screen_id']}: {e}")
             continue
     
     if len(candidates) < 1:
-        print("❌ No valid candidates found in Stage 1")
+        print("[ERROR] No valid candidates found in Stage 1")
         return None
     
     # Sort candidates by traditional score and get top 2
@@ -1653,7 +1698,7 @@ def _auto_detect_with_two_stage_enhanced(image, area, machine_code, machine_type
     
     # If only one candidate or clear winner (score difference > 0.3), return it
     if len(top_candidates) == 1:
-        print("✅ Only one candidate, returning it directly")
+        print("[OK] Only one candidate, returning it directly")
         best_candidate = top_candidates[0]
         return _format_detection_result(best_candidate, area, machine_code, machine_type, 
                                       best_candidate['traditional_score'], 
@@ -1662,7 +1707,7 @@ def _auto_detect_with_two_stage_enhanced(image, area, machine_code, machine_type
     
     score_diff = top_candidates[0]['traditional_score'] - top_candidates[1]['traditional_score']
     if score_diff > 0.3:
-        print(f"✅ Clear winner (score difference: {score_diff:.4f}), returning top candidate")
+        print(f"[OK] Clear winner (score difference: {score_diff:.4f}), returning top candidate")
         best_candidate = top_candidates[0]
         return _format_detection_result(best_candidate, area, machine_code, machine_type, 
                                       best_candidate['traditional_score'], 
@@ -1694,7 +1739,7 @@ def _auto_detect_with_two_stage_enhanced(image, area, machine_code, machine_type
             print(f"   Edge similarity with {template_name}: {edge_similarity:.4f}")
             
         except Exception as e:
-            print(f"❌ Error in edge comparison with {candidate['template_info']['screen_id']}: {e}")
+            print(f"[ERROR] Error in edge comparison with {candidate['template_info']['screen_id']}: {e}")
             edge_similarities.append(0.0)
     
     # ====== FINAL DECISION LOGIC ======
@@ -1773,7 +1818,7 @@ def _auto_detect_with_two_stage_enhanced(image, area, machine_code, machine_type
     best_edge_similarity = edge_similarities[best_idx] if best_idx < len(edge_similarities) else 0.0
     
     if best_edge_similarity < 0.1:  # Very low edge similarity
-        print(f"⚠️ Warning: Very low edge similarity ({best_edge_similarity:.4f}), using traditional score")
+        print(f"[WARNING]Warning: Very low edge similarity ({best_edge_similarity:.4f}), using traditional score")
         best_combined_score = best_candidate['traditional_score']
     
     processing_time = time.time() - start_time
@@ -1804,19 +1849,11 @@ def _format_detection_result(candidate, area, machine_code, machine_type, score,
         with open(config_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
         
-        # Tìm screen_numeric_id từ cấu trúc areas
-        for area_code, area_info in config.get('areas', {}).items():
-            machines = area_info.get('machines', {})
-            for machine_code_key, machine_info in machines.items():
-                if machine_info.get('type') == machine_type:
-                    for screen in machine_info.get('screens', []):
-                        if screen['screen_id'] == candidate['template_info']['screen_id']:
-                            screen_numeric_id = screen['id']
-                            break
-                    if screen_numeric_id:
-                        break
-            if screen_numeric_id:
-                break
+        if machine_type in config['machine_types']:
+            for screen in config['machine_types'][machine_type]['screens']:
+                if screen['screen_id'] == candidate['template_info']['screen_id']:
+                    screen_numeric_id = screen['id']
+                    break
     except:
         pass
     
@@ -1857,17 +1894,17 @@ def test_ensemble_hog_orb_classifier():
     
     # Kiểm tra khả năng import
     if not ENSEMBLE_AVAILABLE:
-        print("❌ Ensemble HOG + ORB Classifier not available")
+        print("[ERROR] Ensemble HOG + ORB Classifier not available")
         print("   Make sure ensemble_hog_orb_classifier.py exists and scikit-learn is installed")
         return False
     
     # Khởi tạo classifier
     classifier = _get_ensemble_classifier()
     if classifier is None:
-        print("❌ Failed to initialize Ensemble HOG + ORB Classifier")
+        print("[ERROR] Failed to initialize Ensemble HOG + ORB Classifier")
         return False
     
-    print("✅ Ensemble HOG + ORB Classifier initialized successfully")
+    print("[OK] Ensemble HOG + ORB Classifier initialized successfully")
     
     # Test với ảnh mẫu (nếu có)
     test_folders = [
@@ -1911,7 +1948,7 @@ def test_ensemble_hog_orb_classifier():
             
             if result and 'detection_method' in result and 'ensemble' in result['detection_method']:
                 success_count += 1
-                print(f"✅ Success: {result['screen_id']} (Confidence: {result.get('prediction_confidence', 0):.4f})")
+                print(f"[OK] Success: {result['screen_id']} (Confidence: {result.get('prediction_confidence', 0):.4f})")
                 print(f"   Method: {result['detection_method']}")
                 print(f"   Processing time: {processing_time:.3f}s")
                 
@@ -1920,12 +1957,12 @@ def test_ensemble_hog_orb_classifier():
                     print(f"   HOG: {ensemble_info['hog_prediction']} ({ensemble_info['hog_confidence']:.4f})")
                     print(f"   ORB: {ensemble_info['orb_prediction']} ({ensemble_info['orb_confidence']:.4f})")
             else:
-                print(f"⚠️ Used fallback method: {result.get('detection_method', 'unknown')}")
+                print(f"[WARNING]Used fallback method: {result.get('detection_method', 'unknown')}")
             
             break  # Test chỉ 1 ảnh per folder
             
         except Exception as e:
-            print(f"❌ Error testing image {test_image_path}: {e}")
+            print(f"[ERROR] Error testing image {test_image_path}: {e}")
             continue
     
     print(f"\n📊 Test Results:")
@@ -1940,28 +1977,28 @@ def test_ensemble_hog_orb_classifier():
             print("🎉 Ensemble HOG + ORB Classifier is working correctly!")
             return True
         else:
-            print("⚠️ Ensemble classifier has low success rate, may need training")
+            print("[WARNING]Ensemble classifier has low success rate, may need training")
             return False
     else:
-        print("❌ No test images found")
+        print("[ERROR] No test images found")
         return False
 
 def main():
     """
-    🚀 Main function để test Ensemble HOG + ORB Classifier
+    [*] Main function để test Ensemble HOG + ORB Classifier
     """
-    print("🚀 Smart Detection Functions với Ensemble HOG + ORB")
+    print("[*] Smart Detection Functions với Ensemble HOG + ORB")
     print("=" * 60)
     
     # Test classifier
     test_result = test_ensemble_hog_orb_classifier()
     
     if test_result:
-        print("\n✅ Ensemble HOG + ORB Classifier sẵn sàng sử dụng!")
+        print("\n[OK] Ensemble HOG + ORB Classifier sẵn sàng sử dụng!")
         print("   Bạn có thể sử dụng function auto_detect_machine_and_screen_smart()")
         print("   để phân loại màn hình HMI với độ chính xác >90%")
     else:
-        print("\n⚠️ Có vấn đề với Ensemble HOG + ORB Classifier")
+        print("\n[WARNING]Có vấn đề với Ensemble HOG + ORB Classifier")
         print("   Kiểm tra lại dependencies và training data")
     
     return test_result
@@ -2152,7 +2189,7 @@ def _discriminate_clamp_vs_ejector_enhanced_v5(image: np.ndarray, clamp_score: f
         return result, confidence, reasoning
         
     except Exception as e:
-        print(f"           ❌ ENHANCED DISCRIMINATOR ERROR: {str(e)}")
+        print(f"           [ERROR] ENHANCED DISCRIMINATOR ERROR: {str(e)}")
         if clamp_score > ejector_score:
             return "Clamp", max(0.51, min(0.80, clamp_score)), "enhanced_discriminator_error_fallback"
         else:

@@ -261,55 +261,38 @@ class EnsembleHOGORBClassifier:
             return 0.0
     
     def _extract_screen_from_filename(self, filename: str) -> str:
-        """Extract screen type từ filename - FIXED for new format"""
+        """Extract screen type từ filename"""
         try:
-            # NEW FORMAT: IE-F1-CWA01_Production Data_aug_0_001.jpg
-            # OR: IE-F1-CWA01_Reject Summary_1_original_001.jpg
-            if '_' in filename:
-                # Remove extension
-                base_name = filename.replace('.jpg', '').replace('.png', '').replace('.jpeg', '')
-                parts = base_name.split('_')
-                
-                if len(parts) >= 2:
-                    # Skip machine code (first part), extract screen type
-                    screen_parts = []
-                    for i in range(1, len(parts)):
-                        part = parts[i]
-                        # Stop when we hit known suffixes
-                        if part in ['original', 'aug'] or part.isdigit():
-                            break
-                        screen_parts.append(part)
-                    
-                    if screen_parts:
-                        screen_type = '_'.join(screen_parts)
-                        print(f"🔍 Extracted screen type: '{filename}' -> '{screen_type}'")
-                        return screen_type
-            
-            # OLD FORMAT SUPPORT: template_F1_Screen_Name.jpg
             if filename.startswith('template_'):
                 name_part = filename.replace('.jpg', '').replace('.png', '').replace('template_', '')
                 parts = name_part.split('_', 1)
                 
                 if len(parts) >= 2:
                     screen_type = parts[1]
-                    # Remove augmentation suffixes if present
-                    for suffix in ['_rotate_-5', '_rotate_5', '_brightness_down', '_brightness_up',
-                                  '_contrast_down', '_contrast_up', '_scale_down', '_scale_up',
-                                  '_gamma_high', '_gamma_low', '_noise_light', '_noise_medium', '_noise_heavy',
-                                  '_blur_gaussian', '_blur_motion', '_perspective', '_color_shift', '_shadow',
-                                  '_sharpen', '_contrast_enhance']:
-                        if screen_type.endswith(suffix):
-                            screen_type = screen_type[:-len(suffix)]
-                            break
+                    base_screen = screen_type.split('_')[0]
                     
-                    print(f"🔍 Extracted screen type (template): '{filename}' -> '{screen_type}'")
-                    return screen_type
+                    screen_mapping = {
+                        'Temp': 'Temperature',
+                        'Setting': 'Setup',
+                        'Main': 'Main',
+                        'Feeders': 'Feeder',
+                        'Production': 'Production',
+                        'Data': 'Data',
+                        'Selectors': 'Maintenance'
+                    }
+                    
+                    return screen_mapping.get(base_screen, base_screen)
             
-            print(f"⚠️ Could not extract screen type from: {filename}")
+            # Fallback logic
+            filename_lower = filename.lower()
+            for screen_type in ['production', 'temperature', 'overview', 'plasticizer', 'setup', 'tracking']:
+                if screen_type in filename_lower:
+                    return screen_type.capitalize()
+            
             return 'Unknown'
             
         except Exception as e:
-            print(f"❌ Error extracting screen from filename {filename}: {e}")
+            print(f"Error extracting screen from filename {filename}: {e}")
             return 'Unknown'
     
     def train_from_folders(self, folder_paths: List[str], test_size: float = 0.1) -> Dict:

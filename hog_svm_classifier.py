@@ -127,18 +127,72 @@ class HOGSVMClassifier:
     
     def _extract_screen_from_filename(self, filename: str) -> str:
         """
-        Extract screen type từ filename - F1 NEW FORMAT ONLY
+        Extract screen type từ filename của reference images
+        Format: template_F41_Production.jpg -> Production
         """
         try:
-            # NEW FORMAT: IE-F1-CWA01_Production_Data.jpg
-            if '_' in filename and not filename.startswith('template_'):
-                base_name = filename.replace('.jpg', '').replace('.png', '')
-                parts = base_name.split('_', 1)
+            # Xử lý filename format: template_F41_Production.jpg
+            if filename.startswith('template_'):
+                # Remove extension và prefix
+                name_part = filename.replace('.jpg', '').replace('.png', '').replace('template_', '')
+                
+                # Split by underscore: F41_Production -> ['F41', 'Production']
+                parts = name_part.split('_', 1)  # Split max 1 time
+                
                 if len(parts) >= 2:
-                    screen_type = parts[1]
-                    return screen_type
+                    screen_type = parts[1]  # Get the screen type part
+                    
+                    # Normalize augmented filenames: Production_brightness_up -> Production
+                    base_screen = screen_type.split('_')[0]  # Take first part only
+                    
+                    # Map các tên đặc biệt
+                    screen_mapping = {
+                        'Temp': 'Temperature',
+                        'Setting': 'Setup',
+                        'Main': 'Main',
+                        'Feeders': 'Feeder',
+                        'Production': 'Production',
+                        'Data': 'Data',
+                        'Selectors': 'Maintenance'
+                    }
+                    
+                    return screen_mapping.get(base_screen, base_screen)
             
-            return 'Unknown'
+            # Fallback to old logic for other files
+            filename_lower = filename.lower()
+            
+            if 'main' in filename_lower:
+                return 'Main'
+            elif 'feeder' in filename_lower:
+                return 'Feeder'
+            elif 'production' in filename_lower or 'prod' in filename_lower:
+                return 'Production'
+            elif 'fault' in filename_lower or 'error' in filename_lower:
+                return 'Faults'
+            elif 'overview' in filename_lower:
+                return 'Overview'
+            elif 'alarm' in filename_lower:
+                return 'Alarms'
+            elif 'setup' in filename_lower or 'setting' in filename_lower:
+                return 'Setup'
+            elif 'data' in filename_lower:
+                return 'Data'
+            elif 'tracking' in filename_lower:
+                return 'Tracking'
+            elif 'temp' in filename_lower:
+                return 'Temperature'
+            elif 'plasticizer' in filename_lower:
+                return 'Plasticizer'
+            elif 'clamp' in filename_lower:
+                return 'Clamp'
+            elif 'injection' in filename_lower:
+                return 'Injection'
+            elif 'ejector' in filename_lower:
+                return 'Ejector'
+            elif 'maintenance' in filename_lower:
+                return 'Maintenance'
+            else:
+                return 'Unknown'
                 
         except Exception as e:
             print(f"Error extracting screen from filename {filename}: {e}")

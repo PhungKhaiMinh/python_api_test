@@ -1,0 +1,21 @@
+{
+  "iteration": 1,
+  "accuracy": 1.0,
+  "accuracy_percent": 100.0,
+  "avg_processing_time": 0.4420920861394782,
+  "total_processing_time": 16.79949927330017,
+  "total_test_time": 18.069769382476807,
+  "total_images": 38,
+  "correct_predictions": 38,
+  "class_accuracy": {
+    "Temperature": 1.0,
+    "Overview": 1.0,
+    "Production": 1.0,
+    "Tracking": 1.0,
+    "Setup": 1.0,
+    "Plasticizer": 1.0
+  },
+  "meets_accuracy_requirement": true,
+  "meets_speed_requirement": true,
+  "meets_all_requirements": true
+}

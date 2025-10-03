@@ -15,12 +15,12 @@
                         },
                         {
                             "id": 2,
-                            "screen_id": "Reject Summary_1",
+                            "screen_id": "Feeders and Conveyors",
                             "description": "monitor 1.png"
                         },
                         {
                             "id": 3,
-                            "screen_id": "Reject Summary_2",
+                            "screen_id": "Main Machine Parameters",
                             "description": "monitor 1.png"
                         }
                     ]
@@ -37,7 +37,12 @@
                         },
                         {
                             "id": 2,
-                            "screen_id": "Reject Summary",
+                            "screen_id": "Feeders and Conveyors",
+                            "description": "monitor 1.png"
+                        },
+                        {
+                            "id": 3,
+                            "screen_id": "Main Machine Parameters",
                             "description": "monitor 1.png"
                         }
                     ]
@@ -54,12 +59,12 @@
                         },
                         {
                             "id": 2,
-                            "screen_id": "Reject Summary_1",
+                            "screen_id": "Feeders and Conveyors",
                             "description": "monitor 1.png"
                         },
                         {
                             "id": 3,
-                            "screen_id": "Reject Summary_2",
+                            "screen_id": "Main Machine Parameters",
                             "description": "monitor 1.png"
                         }
                     ]
@@ -76,12 +81,216 @@
                         },
                         {
                             "id": 2,
-                            "screen_id": "Reject Summary",
+                            "screen_id": "Feeders and Conveyors",
+                            "description": "monitor 1.png"
+                        },
+                        {
+                            "id": 3,
+                            "screen_id": "Main Machine Parameters",
+                            "description": "monitor 1.png"
+                        }
+                    ]
+                }
+            }
+        },
+        "F4": {
+            "name": "Khu vực F4",
+            "machines": {
+                "IE-F4-WBI01": {
+                    "name": "Máy IE-F4-WBI01",
+                    "type": "F42",
+                    "description": "monitor 1.png",
+                    "screens": [
+                        {
+                            "id": 1,
+                            "screen_id": "Setting",
+                            "description": "monitor 1.png"
+                        },
+                        {
+                            "id": 2,
+                            "screen_id": "Overview",
+                            "description": "monitor 1.png"
+                        },
+                        {
+                            "id": 3,
+                            "screen_id": "Tracking",
+                            "description": "monitor 1.png"
+                        }
+                    ]
+                },
+                "IE-F4-WBI02": {
+                    "name": "Máy IE-F4-WBI02",
+                    "type": "F42",
+                    "description": "monitor 1.png",
+                    "screens": [
+                        {
+                            "id": 1,
+                            "screen_id": "Setting",
+                            "description": "monitor 1.png"
+                        },
+                        {
+                            "id": 2,
+                            "screen_id": "Overview",
+                            "description": "monitor 1.png"
+                        },
+                        {
+                            "id": 3,
+                            "screen_id": "Tracking",
+                            "description": "monitor 1.png"
+                        }
+                    ]
+                },
+                "IE-F4-WBI03": {
+                    "name": "Máy IE-F4-WBI03",
+                    "type": "F42",
+                    "description": "monitor 1.png",
+                    "screens": [
+                        {
+                            "id": 1,
+                            "screen_id": "Setting",
+                            "description": "monitor 1.png"
+                        },
+                        {
+                            "id": 2,
+                            "screen_id": "Overview",
+                            "description": "monitor 1.png"
+                        },
+                        {
+                            "id": 3,
+                            "screen_id": "Tracking",
+                            "description": "monitor 1.png"
+                        }
+                    ]
+                },
+                "IE-F4-WBI04": {
+                    "name": "Máy IE-F4-WBI04",
+                    "type": "F42",
+                    "description": "monitor 1.png",
+                    "screens": [
+                        {
+                            "id": 1,
+                            "screen_id": "Setting",
+                            "description": "monitor 1.png"
+                        },
+                        {
+                            "id": 2,
+                            "screen_id": "Overview",
+                            "description": "monitor 1.png"
+                        },
+                        {
+                            "id": 3,
+                            "screen_id": "Tracking",
+                            "description": "monitor 1.png"
+                        }
+                    ]
+                },
+                "IE-F4-WBI05": {
+                    "name": "Máy IE-F4-WBI05",
+                    "type": "F41",
+                    "description": "monitor 1.png",
+                    "screens": [
+                        {
+                            "id": 1,
+                            "screen_id": "Injection",
+                            "description": "monitor 1.png"
+                        },
+                        {
+                            "id": 2,
+                            "screen_id": "Temp",
+                            "description": "monitor 1.png"
+                        },
+                        {
+                            "id": 3,
+                            "screen_id": "Production",
+                            "description": "monitor 1.png"
+                        }
+                    ]
+                },
+                "IE-F4-WBI06": {
+                    "name": "Máy IE-F4-WBI06",
+                    "type": "F41",
+                    "description": "monitor 1.png",
+                    "screens": [
+                        {
+                            "id": 1,
+                            "screen_id": "Injection",
+                            "description": "monitor 1.png"
+                        },
+                        {
+                            "id": 2,
+                            "screen_id": "Temp",
+                            "description": "monitor 1.png"
+                        },
+                        {
+                            "id": 3,
+                            "screen_id": "Production",
                             "description": "monitor 1.png"
                         }
                     ]
                 }
             }
         }
+    },
+    "machine_types": {
+        "F1": {
+            "name": "Máy F1",
+            "screens": [
+                {
+                    "id": 1,
+                    "screen_id": "Production Data",
+                    "description": "monitor 1.png"
+                },
+                {
+                    "id": 2,
+                    "screen_id": "Feeders and Conveyors",
+                    "description": "monitor 1.png"
+                },
+                {
+                    "id": 3,
+                    "screen_id": "Main Machine Parameters",
+                    "description": "monitor 1.png"
+                }       
+            ]
+        },
+        "F41": {
+            "name": "Máy F41",
+            "screens": [
+                {
+                    "id": 1,
+                    "screen_id": "Injection",
+                    "description": "monitor 1.png"
+                },
+                {
+                    "id": 2,
+                    "screen_id": "Temp",
+                    "description": "monitor 1.png"
+                },
+                {
+                    "id": 3,
+                    "screen_id": "Production",
+                    "description": "monitor 1.png"
+                }
+            ]
+        },
+        "F42": {
+            "name": "Máy F42",
+            "screens": [
+                {
+                    "id": 1,
+                    "screen_id": "Setting",
+                    "description": "monitor 1.png"
+                },
+                {
+                    "id": 2,
+                    "screen_id": "Overview",
+                    "description": "monitor 1.png"
+                },
+                {
+                    "id": 3,
+                    "screen_id": "Tracking",
+                    "description": "monitor 1.png"
+                }
+            ]
+        }
     }
-}
+} 

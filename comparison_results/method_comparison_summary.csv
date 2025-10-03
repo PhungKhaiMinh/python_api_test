@@ -1,0 +1,4 @@
+method,total_images,correct_predictions,accuracy,accuracy_percent,avg_processing_time,total_time,meets_accuracy_req_90%,meets_speed_req_10s,overall_pass
+HOG + SVM,38,38,1.0,100.0,0.4267286940624839,17.429604530334473,True,True,True
+Intelligent Classifier,38,16,0.42105263157894735,42.10526315789473,4.025400431532609,153.00549054145813,False,True,False
+Smart Detection,38,18,0.47368421052631576,47.368421052631575,6.790127214632537,259.3545951843262,False,True,False

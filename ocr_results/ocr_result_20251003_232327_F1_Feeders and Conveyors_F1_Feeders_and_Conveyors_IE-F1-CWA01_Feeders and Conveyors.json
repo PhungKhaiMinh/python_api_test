@@ -1,0 +1,72 @@
+{
+  "filename": "F1_Feeders_and_Conveyors.jpg",
+  "machine_code": "IE-F1-CWA01",
+  "area": "F1",
+  "machine_name": "Máy IE-F1-CWA01",
+  "screen_id": "Feeders and Conveyors",
+  "timestamp": "2025-10-03 23:23:27",
+  "template_path": "d:\\python_WREMBLY_test-main\\python_api_test\\roi_data\\reference_images\\template_F1_Feeders and Conveyors.jpg",
+  "results": [
+    {
+      "roi_index": "FC 03.05 Linear No Full",
+      "text": "50",
+      "confidence": 0.9998395928629652,
+      "has_text": true,
+      "original_value": "50"
+    },
+    {
+      "roi_index": "Bowl Jam",
+      "text": "20000",
+      "confidence": 0.9957922092998879,
+      "has_text": true,
+      "original_value": "20000"
+    },
+    {
+      "roi_index": "FC 03.04 Linear No Empty",
+      "text": "2000",
+      "confidence": 0.9989324808120728,
+      "has_text": true,
+      "original_value": "2000"
+    },
+    {
+      "roi_index": "375.A1 Linear",
+      "text": "10000",
+      "confidence": 0.6110468753299367,
+      "has_text": true,
+      "original_value": "10000"
+    },
+    {
+      "roi_index": "FC 03.05 Linear Full",
+      "text": "4000",
+      "confidence": 0.9987481236457825,
+      "has_text": true,
+      "original_value": "4000"
+    },
+    {
+      "roi_index": "FC 03.04 Linear Empty",
+      "text": "2000",
+      "confidence": 0.9974198341369629,
+      "has_text": true,
+      "original_value": "2000"
+    },
+    {
+      "roi_index": "EV 03.06 Clamp",
+      "text": "300",
+      "confidence": 0.7657408617161392,
+      "has_text": true,
+      "original_value": "300"
+    }
+  ],
+  "hmi_detection": {
+    "hmi_detected": true,
+    "hmi_image": null,
+    "hmi_refined_filename": null,
+    "visualization": null
+  },
+  "detected_screen": {
+    "screen_id": "Feeders and Conveyors",
+    "screen_numeric_id": 2,
+    "similarity_score": 0.5503475570572843,
+    "machine_type": "F1"
+  }
+}
