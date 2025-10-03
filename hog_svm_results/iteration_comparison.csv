@@ -1,2 +1,0 @@
-iteration,accuracy,accuracy_percent,avg_processing_time,meets_accuracy_req,meets_speed_req,meets_all_req,total_images,correct_predictions
-1,1.0,100.0,0.4420920861394782,True,True,True,38,38

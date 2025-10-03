@@ -1,519 +1,914 @@
-# Python API Test
+# HMI OCR API Server - Hướng Dẫn Đầy Đủ
 
-## Giới thiệu
-Python API Test là một ứng dụng web API được xây dựng bằng Flask để xử lý và trích xuất thông tin từ hình ảnh màn hình HMI (Human-Machine Interface). Ứng dụng cung cấp chức năng OCR (Optical Character Recognition) để nhận dạng và trích xuất các số từ vùng quan tâm (ROI) được định nghĩa trước trên màn hình.
+**Phiên bản:** 2.0 - Refactored  
+**Cập nhật:** October 3, 2025  
+**Trạng thái:** ✅ Sẵn sàng Production
 
-## Tính năng chính
-- Tải lên và quản lý hình ảnh màn hình HMI
-- Xác định vùng quan tâm (ROI) trong hình ảnh
-- Thực hiện OCR để trích xuất số từ các vùng đã xác định
-- Quản lý cấu hình máy và màn hình
-- Quản lý cấu hình số thập phân cho các giá trị được trích xuất
+---
 
-## Cài đặt và thiết lập cho Windows 11
+## 📋 Mục Lục
 
-### Yêu cầu hệ thống
-- Windows 11 với quyền quản trị viên
-- Python 3.7 trở lên
-- Pip (trình quản lý gói Python)
-- Các thư viện: Flask, OpenCV, NumPy, EasyOCR, Scikit-image
+1. [Giới Thiệu](#giới-thiệu)
+2. [Yêu Cầu Hệ Thống](#yêu-cầu-hệ-thống)
+3. [Cài Đặt](#cài-đặt)
+4. [Cấu Trúc Dự Án](#cấu-trúc-dự-án)
+5. [Chạy Server](#chạy-server)
+6. [API Endpoints](#api-endpoints)
+7. [Cấu Hình](#cấu-hình)
+8. [Khắc Phục Sự Cố](#khắc-phục-sự-cố)
+9. [Bảo Trì](#bảo-trì)
 
-### Cài đặt trên Windows 11 với IIS
+---
 
-#### 1. Cài đặt Python
-1. Tải Python từ trang chủ: https://www.python.org/downloads/
-2. Chọn phiên bản Python 3.7 trở lên (khuyến nghị là Python 3.10 cho Windows 11)
-3. Trong quá trình cài đặt, đảm bảo đánh dấu các tùy chọn:
-   - "Add Python to PATH" (quan trọng)
-   - "Install for all users" (nếu bạn muốn tất cả người dùng đều có thể sử dụng)
-   - "Install pip" (đã được chọn mặc định)
-4. Kiểm tra cài đặt Python thành công bằng cách mở Windows Terminal (nhấn tổ hợp Windows + X, chọn "Terminal" hoặc "Windows Terminal") và nhập:
-   ```
+## 🎯 Giới Thiệu
+
+**HMI OCR API Server** là hệ thống API dựa trên Flask để:
+- Tự động nhận diện loại màn hình HMI (Human-Machine Interface)
+- Trích xuất thông số từ ảnh màn hình bằng OCR (Optical Character Recognition)
+- Xử lý song song với GPU acceleration
+- Quản lý cấu hình máy móc và ROI (Region of Interest)
+
+### Tính Năng Chính
+
+✅ **Tự động phát hiện màn hình**: Thuật toán Two-Stage Enhanced Detection v1.0  
+✅ **OCR GPU-accelerated**: EasyOCR với CUDA  
+✅ **Căn chỉnh ảnh tự động**: SIFT-based perspective correction  
+✅ **Xử lý song song**: Multi-threading với 24 workers  
+✅ **Cache thông minh**: Template và configuration caching  
+✅ **RESTful API**: 30 endpoints đầy đủ tính năng
+
+---
+
+## 💻 Yêu Cầu Hệ Thống
+
+### Phần Cứng Tối Thiểu
+
+| Thành phần | Yêu cầu tối thiểu | Khuyến nghị |
+|------------|-------------------|-------------|
+| **CPU** | Intel Core i5 gen 8 hoặc tương đương | Intel Core i7 gen 10+ |
+| **RAM** | 8 GB | 16 GB trở lên |
+| **GPU** | Không bắt buộc | NVIDIA GPU với 4GB VRAM+ |
+| **Ổ cứng** | 10 GB trống | SSD 20 GB+ |
+| **Hệ điều hành** | Windows 10/11 64-bit | Windows 11 64-bit |
+
+### Phần Cứng Đã Test
+
+```
+Tên máy: MSI
+CPU: 12 cores
+RAM: 16 GB
+GPU: NVIDIA GeForce GTX 1050 Ti (4GB VRAM)
+GPU Driver: 580.97
+OS: Windows 11 64-bit (Build 2009)
+Python: 3.12.10
+CUDA: 12.1
+```
+
+### Phần Mềm Cần Thiết
+
+1. **Python 3.8 - 3.12** (Đã test với Python 3.12.10)
+2. **CUDA Toolkit 12.x** (nếu dùng GPU)
+3. **Visual C++ Redistributable** (cho một số thư viện)
+4. **Git** (để clone repository - tùy chọn)
+
+---
+
+## 🔧 Cài Đặt
+
+### Bước 1: Cài Đặt Python
+
+1. **Download Python 3.12.x** từ https://www.python.org/downloads/
+2. **Chạy installer** với các tùy chọn:
+   - ✅ **Add Python to PATH** (Quan trọng!)
+   - ✅ Install for all users
+   - ✅ Install pip
+3. **Kiểm tra cài đặt**:
+   ```bash
    python --version
+   # Kết quả: Python 3.12.10
+   
    pip --version
+   # Kết quả: pip 24.x.x
    ```
 
-#### 2. Cài đặt IIS trên Windows 11
-1. Nhấp chuột phải vào nút Start Windows, chọn "Settings" (Cài đặt)
-2. Trong cài đặt, chọn "Apps" > "Optional features" > "More Windows features" (hoặc "Turn Windows features on or off")
-3. Trong cửa sổ Windows Features, tìm và đánh dấu chọn:
-   - "Internet Information Services"
-   - Mở rộng "Internet Information Services" và đảm bảo các tính năng sau được chọn:
-     - Web Management Tools > IIS Management Console
-     - World Wide Web Services > Application Development Features > CGI
-4. Nhấn OK và đợi Windows 11 hoàn tất việc cài đặt các tính năng
-5. **Quan trọng**: Sau khi cài đặt, khởi động lại máy tính để đảm bảo mọi thay đổi được áp dụng
+### Bước 2: Cài Đặt CUDA (Cho GPU - Tùy Chọn)
 
-#### 3. Cài đặt URL Rewrite Module cho IIS
-1. Tải URL Rewrite Module từ trang web Microsoft: https://www.iis.net/downloads/microsoft/url-rewrite
-2. Chạy tệp cài đặt với quyền Administrator (nhấp chuột phải vào tệp, chọn "Run as administrator")
-3. Làm theo hướng dẫn trên màn hình để hoàn tất cài đặt
+**Lưu ý**: Nếu không có NVIDIA GPU, bỏ qua bước này. Hệ thống vẫn chạy được nhưng chậm hơn.
 
-#### 4. Cài đặt WFASTCGI
-1. Mở Windows Terminal với quyền Administrator (nhấp chuột phải vào biểu tượng Windows Terminal trong Start menu, chọn "Run as administrator")
-2. Nhập lệnh sau để cài đặt wfastcgi:
+1. **Kiểm tra GPU**:
+   ```bash
+   nvidia-smi
    ```
-   pip install wfastcgi
-   ```
-3. Kích hoạt wfastcgi bằng lệnh:
-   ```
-   wfastcgi-enable
-   ```
-4. Sau khi chạy lệnh, bạn sẽ thấy một thông báo kèm theo đường dẫn Python. Sao chép toàn bộ đường dẫn này (ví dụ: "C:\Program Files\Python310\python.exe|C:\Program Files\Python310\Lib\site-packages\wfastcgi.py") và lưu lại, vì bạn sẽ cần nó trong các bước sau.
+   Xem phiên bản CUDA Compatible (ví dụ: 12.1)
 
-#### 5. Cài đặt và Cấu hình Ứng dụng
-1. Tải hoặc clone repository về máy tính
-2. Đặt thư mục project vào đường dẫn dễ truy cập, ví dụ: `C:\python_api_test`
-3. Mở Windows Terminal với quyền Administrator, điều hướng đến thư mục project:
+2. **Download CUDA Toolkit** từ:
+   https://developer.nvidia.com/cuda-downloads
+   
+   Chọn phiên bản phù hợp với driver (ví dụ: CUDA 12.1)
+
+3. **Cài đặt CUDA Toolkit** theo hướng dẫn của NVIDIA
+
+4. **Kiểm tra**:
+   ```bash
+   nvcc --version
    ```
-   cd C:\python_api_test
+
+### Bước 3: Giải Nén/Clone Dự Án
+
+```bash
+# Nếu có file zip
+Unzip python_WREMBLY_test-main.zip
+
+# Hoặc clone từ git
+git clone [repository-url] python_WREMBLY_test-main
+```
+
+### Bước 4: Cài Đặt Dependencies
+
+1. **Mở Terminal/PowerShell** tại thư mục dự án:
+   ```bash
+   cd D:\python_WREMBLY_test-main\python_api_test
    ```
-4. Cài đặt các thư viện phụ thuộc:
+
+2. **Tạo Virtual Environment** (Khuyến nghị):
+   ```bash
+   python -m venv venv
+   
+   # Kích hoạt virtual environment
+   # Windows PowerShell:
+   .\venv\Scripts\Activate.ps1
+   
+   # Windows CMD:
+   .\venv\Scripts\activate.bat
    ```
+
+3. **Nâng cấp pip**:
+   ```bash
+   python -m pip install --upgrade pip
+   ```
+
+4. **Cài đặt các packages**:
+   ```bash
    pip install -r requirements.txt
    ```
-   Lưu ý: Quá trình này có thể mất 10-15 phút tùy thuộc vào tốc độ mạng và cấu hình máy tính của bạn. EasyOCR là một gói lớn với nhiều dependencies.
+   
+   Quá trình này sẽ mất 5-15 phút tùy vào tốc độ mạng.
 
-#### 6. Cấu hình IIS trên Windows 11
-1. Mở IIS Manager bằng một trong các cách sau:
-   - Cách 1: Nhấn tổ hợp phím Windows + S (hoặc nhấp vào biểu tượng Search), tìm kiếm "IIS" hoặc "Internet Information Services" và chọn "Internet Information Services (IIS) Manager"
-   - Cách 2: Mở Windows Terminal với quyền Administrator và nhập lệnh: `start inetmgr`
-   - Cách 3: Nhấn tổ hợp phím Windows + R, gõ "control panel" và nhấn Enter, sau đó điều hướng đến System and Security > Administrative Tools > Internet Information Services (IIS) Manager
-
-2. Trong cửa sổ IIS Manager:
-   - Ở panel bên trái, mở rộng server của bạn, nhấp chuột phải vào "Sites" > "Add Website"
-   - Nhập thông tin:
-     - Site name: Python_API_Test
-     - Physical path: đường dẫn đến thư mục project (ví dụ: C:\python_api_test)
-     - Binding: Type = http, IP address = All Unassigned, Port = 5000 (hoặc cổng khác nếu 5000 đã được sử dụng)
-     - Host name: để trống
-   - Nhấn OK
-
-3. Chọn trang web vừa tạo (Python_API_Test) trong panel bên trái
-4. Nhấp đúp vào "Handler Mappings" trong view chính
-5. Trong view Handler Mappings, nhấp vào "Add Module Mapping..." ở panel bên phải
-6. Điền thông tin sau:
-   - Request path: *
-   - Module: FastCgiModule
-   - Executable: Dán đường dẫn bạn đã sao chép từ bước 4.4 
-     (Ví dụ: C:\Program Files\Python310\python.exe|C:\Program Files\Python310\Lib\site-packages\wfastcgi.py)
-     Lưu ý: Thay phần sau dấu | thành đường dẫn đến file wsgi.py trong thư mục dự án của bạn
-   - Name: FlaskHandler
-7. Nhấn OK và chọn "Yes" khi được hỏi về việc tạo FastCGI application
-
-#### 7. Kiểm tra và cập nhật web.config
-1. Điều hướng đến thư mục dự án (ví dụ: C:\python_api_test)
-2. Nếu đã có sẵn file web.config, mở nó bằng Notepad hoặc editor khác để kiểm tra
-3. Nếu chưa có hoặc cần cập nhật, tạo/chỉnh sửa file web.config với nội dung sau:
-   ```xml
-   <?xml version="1.0" encoding="UTF-8"?>
-   <configuration>
-     <system.webServer>
-       <handlers>
-         <add name="FlaskHandler" path="*" verb="*" modules="FastCgiModule" 
-              scriptProcessor="[Đường dẫn Python và wfastcgi đã lưu ở bước 4.4]" 
-              resourceType="Unspecified" requireAccess="Script" />
-       </handlers>
-       <rewrite>
-         <rules>
-           <rule name="Static Files" stopProcessing="true">
-             <match url="^static/.*" ignoreCase="true" />
-             <action type="Rewrite" url="{R:0}" />
-           </rule>
-           <rule name="Flask Application" stopProcessing="true">
-             <match url="(.*)" ignoreCase="true" />
-             <action type="Rewrite" url="wsgi.py" />
-           </rule>
-         </rules>
-       </rewrite>
-     </system.webServer>
-     <appSettings>
-       <add key="WSGI_HANDLER" value="app.app" />
-       <add key="PYTHONPATH" value="[Đường dẫn đến thư mục project]" />
-     </appSettings>
-   </configuration>
+5. **Cài đặt CuPy (cho GPU)**:
+   ```bash
+   # Cho CUDA 12.x
+   pip install cupy-cuda12x
+   
+   # Cho CUDA 11.x (nếu dùng CUDA 11)
+   pip install cupy-cuda11x
    ```
-   Thay thế các phần trong ngoặc vuông bằng đường dẫn thực tế trên máy tính của bạn.
 
-#### 8. Cấu hình Quyền truy cập thư mục trên Windows 11
-1. Mở File Explorer, điều hướng đến thư mục project (ví dụ: C:\python_api_test)
-2. Nhấp chuột phải vào thư mục > chọn "Properties"
-3. Chuyển đến tab "Security"
-4. Nhấp vào "Edit..." > "Add..."
-5. Trong hộp thoại "Select Users or Groups", nhập "IIS_IUSRS" vào ô "Enter the object names to select", nhấp "Check Names" để xác nhận, sau đó nhấp "OK"
-6. Chọn nhóm "IIS_IUSRS" vừa thêm và đánh dấu cho phép các quyền:
-   - Read & Execute
-   - List folder contents
-   - Read
-7. Nhấn "Apply" và "OK" để lưu thay đổi
-8. Lặp lại quy trình tương tự cho các thư mục con: uploads, roi_data, ocr_results để đảm bảo IIS có quyền đọc và ghi vào các thư mục này
+### Bước 5: Cài Đặt PyTorch với CUDA
 
-#### 9. Khởi động lại IIS trên Windows 11
-1. Mở Windows Terminal với quyền Administrator
-2. Nhập lệnh:
-   ```
-   iisreset
-   ```
-   Hoặc, nếu lệnh trên không hoạt động:
-   - Nhấn tổ hợp phím Windows + X, chọn "Terminal (Admin)"
-   - Nhập lệnh: `net stop was /y && net start w3svc`
+**Quan trọng**: PyTorch cần cài đặt đúng phiên bản CUDA.
 
-   Hoặc khởi động lại thông qua Services:
-   - Nhấn tổ hợp phím Windows + R, gõ "services.msc" và nhấn Enter
-   - Tìm "World Wide Web Publishing Service"
-   - Nhấp chuột phải và chọn "Restart"
+```bash
+# Gỡ cài đặt cũ (nếu có)
+pip uninstall torch torchvision -y
 
-#### 10. Kiểm tra ứng dụng
-1. Mở Microsoft Edge hoặc trình duyệt web khác
-2. Truy cập: http://localhost:5000
-3. Nếu mọi thứ được cấu hình đúng, bạn sẽ thấy thông báo "Server is running" và danh sách các endpoints có sẵn
+# Cài đặt với CUDA 12.1
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
 
-#### 11. Khắc phục sự cố trên Windows 11
-- **Lỗi 500 - Internal Server Error**: 
-  - Kiểm tra logs IIS trong `C:\inetpub\logs\LogFiles`
-  - Mở Event Viewer (Nhấn Windows + R, gõ "eventvwr.msc") và kiểm tra Windows Logs > Application để tìm lỗi liên quan đến IIS
-
-- **HTTP Error 403.14 - Forbidden**:
-  - Đảm bảo rằng handler đã được đăng ký đúng cách trong IIS
-  - Kiểm tra lại file web.config
-
-- **Ứng dụng không chạy**: 
-  - Đảm bảo rằng tất cả các thư viện Python đã được cài đặt đúng bằng cách chạy: `pip list`
-  - Thử chạy ứng dụng trực tiếp bằng cách gọi: `python wsgi.py` để xem có lỗi nào xuất hiện không
-
-- **Lỗi quyền truy cập**: 
-  - Mở PowerShell với quyền Administrator và chạy lệnh sau để kiểm tra quyền:
-    ```
-    icacls "C:\python_api_test"
-    ```
-  - Đảm bảo nhóm IIS_IUSRS có quyền (RX) trên thư mục
-
-- **Lỗi FastCGI**: 
-  - Đảm bảo wfastcgi đã được cấu hình đúng bằng cách kiểm tra trong IIS Manager:
-    1. Chọn server trong panel bên trái
-    2. Nhấp đúp vào "FastCGI Settings"
-    3. Xác nhận rằng đường dẫn Python và wfastcgi đã được liệt kê
-
-- **Lỗi Windows Defender Firewall**: 
-  - Mở Windows Defender Firewall với Advanced Security (tìm kiếm "wf.msc" trong Start)
-  - Thêm một quy tắc cho phép kết nối đến cổng 5000 (hoặc cổng bạn đã cấu hình)
-
-- **Không thể mở IIS Manager**: 
-  - Đảm bảo đã cài đặt đầy đủ IIS, bao gồm IIS Management Console
-  - Khởi động lại máy tính sau khi cài đặt IIS
-  - Thử mở thông qua Run command: Win+R > "inetmgr"
-
-## Cấu trúc dự án
-```
-/python_api_test/
-  |- app.py               # File chính khởi chạy ứng dụng Flask
-  |- config.py            # Cấu hình chung
-  |- uploads/             # Nơi lưu trữ hình ảnh được tải lên
-  |- roi_data/            # Nơi lưu trữ dữ liệu về các vùng ROI
-  |- ocr_results/         # Nơi lưu trữ kết quả OCR
-  |- requirements.txt      # Danh sách các thư viện cần thiết
-  |- start_server.bat     # Tập lệnh để khởi động server
-  |- wsgi.py              # Tập tin WSGI để chạy ứng dụng
-  |- README.md            # Tài liệu hướng dẫn sử dụng
+# Hoặc cho CUDA 11.8
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
 ```
 
-## API Documentation
+**Kiểm tra PyTorch CUDA**:
+```bash
+python -c "import torch; print('CUDA available:', torch.cuda.is_available()); print('CUDA version:', torch.version.cuda)"
+```
 
-## 1. Test Endpoint
-- **Endpoint:** `/`
-- **Method:** `GET`
-- **Description:** Check if the server is running.
-- **Response:**
-  ```json
-  {
-      "status": "Server is running",
-      "endpoints": ["/api/images"]
-  }
-  ```
+Kết quả mong đợi:
+```
+CUDA available: True
+CUDA version: 12.1
+```
 
-## 2. Debug Information
-- **Endpoint:** `/debug`
-- **Method:** `GET`
-- **Description:** Get detailed debug information about the server and its routes.
-- **Response:**
-  ```json
-  {
-      "server_info": {
-          "upload_folder": "path/to/upload",
-          "roi_data_folder": "path/to/roi_data",
-          "ocr_results_folder": "path/to/ocr_results",
-          "allowed_extensions": ["png", "jpg", "jpeg", "gif"],
-          "max_content_length": 16777216
-      },
-      "routes": [
-          {
-              "endpoint": "home",
-              "methods": ["GET"],
-              "route": "/"
-          },
-          ...
-      ],
-      "environment": {
-          "host": "localhost",
-          "remote_addr": "127.0.0.1",
-          "user_agent": "User-Agent"
-      }
-  }
-  ```
+### Bước 6: Kiểm Tra Cài Đặt
 
-## 3. Upload Image
-- **Endpoint:** `/api/images`
-- **Method:** `POST`
-- **Description:** Upload an image and perform OCR on defined ROIs.
-- **Form Data:**
-  - `file`: The image file to upload.
-  - `machine_code`: The machine code (e.g., "F1").
-  - `screen_id`: The screen ID (e.g., "Faults").
-  - `template_image`: (Optional) The path to a template image.
-- **Response:**
-  ```json
-  {
-      "filename": "uploaded_image.png",
-      "machine_code": "F1",
-      "screen_id": "Faults",
-      "timestamp": "2023-01-01 12:00:00",
-      "template_path": "path/to/template",
-      "results": [
-          {
-              "roi_index": "ROI_0",
-              "text": "123",
-              "confidence": 0.99,
-              "has_text": true,
-              "original_value": "123"
-          }
-      ]
-  }
-  ```
+```bash
+python -c "from app import app; print('[OK] All imports successful')"
+```
 
-## 4. Get Images
-- **Endpoint:** `/api/images`
-- **Method:** `GET`
-- **Description:** Retrieve the latest OCR results.
-- **Response:**
-  ```json
-  {
-      "filename": "ocr_result_20230101_120000_uploaded_image_F1_Faults.json",
-      "machine_code": "F1",
-      "screen_id": "Faults",
-      "timestamp": "2023-01-01 12:00:00",
-      "results": [...]
-  }
-  ```
+Nếu thành công, bạn sẽ thấy:
+```
+[OK] CuPy GPU acceleration available
+[OK] GPU Accelerator loaded
+[OK] EasyOCR initialized with GPU
+[OK] All imports successful
+```
 
-## 5. Get Image
-- **Endpoint:** `/api/images/<filename>`
-- **Method:** `GET`
-- **Description:** Retrieve a specific uploaded image.
-- **Response:** The image file.
-
-## 6. Delete Image
-- **Endpoint:** `/api/images/<filename>`
-- **Method:** `DELETE`
-- **Description:** Delete a specific uploaded image.
-- **Response:**
-  ```json
-  {
-      "message": "Image uploaded_image.png has been deleted successfully"
-  }
-  ```
-
-## 7. Get Aligned Image
-- **Endpoint:** `/api/images/aligned/<filename>`
-- **Method:** `GET`
-- **Description:** Retrieve an aligned image.
-- **Response:** The aligned image file.
-
-## 8. Get Processed ROI Image
-- **Endpoint:** `/api/images/processed_roi/<filename>`
-- **Method:** `GET`
-- **Description:** Retrieve a processed ROI image.
-- **Response:** The processed ROI image file.
-
-## 9. Get Machine Information
-- **Endpoint:** `/api/machines`
-- **Method:** `GET`
-- **Description:** Get information about machines and their screens.
-- **Response:**
-  ```json
-  {
-      "machines": [
-          {
-              "machine_code": "F1",
-              "name": "Machine 1"
-          }
-      ]
-  }
-  ```
-
-## 10. Set Current Machine and Screen
-- **Endpoint:** `/api/set_machine_screen`
-- **Method:** `POST`
-- **Description:** Set the current machine and screen based on provided parameters.
-- **Form Data:**
-  - `machine_code`: The machine code.
-  - `screen_id`: The screen ID.
-- **Response:**
-  ```json
-  {
-      "message": "Machine and screen selection updated successfully",
-      "machine": {
-          "machine_code": "F1"
-      },
-      "screen": {
-          "id": 1,
-          "screen_id": "Faults"
-      }
-  }
-  ```
-
-## 11. Get Current Machine and Screen
-- **Endpoint:** `/api/current_machine_screen`
-- **Method:** `GET`
-- **Description:** Get the currently selected machine and screen information.
-- **Response:**
-  ```json
-  {
-      "machine": {
-          "machine_code": "F1",
-          "name": "Machine 1"
-      },
-      "screen": {
-          "id": 1,
-          "screen_id": "Faults"
-      }
-  }
-  ```
-
-## 12. Check Machine and Screen Status
-- **Endpoint:** `/api/machine_screen_status`
-- **Method:** `GET`
-- **Description:** Check the status of the current machine and screen configuration.
-- **Query Parameters:**
-  - `machine_code`: (Optional) The machine code.
-  - `screen_id`: (Optional) The screen ID.
-- **Response:**
-  ```json
-  {
-      "machine_code": "F1",
-      "machine_name": "Machine 1",
-      "screen_id": 1,
-      "screen_name": "Faults",
-      "has_roi": true,
-      "roi_count": 3,
-      "has_decimal_config": true,
-      "is_fully_configured": true,
-      "roi_status": [...]
-  }
-  ```
-
-## 13. Update Decimal Places Configuration
-- **Endpoint:** `/api/decimal_places/<machine_code>/<screen_name>`
-- **Method:** `POST`
-- **Description:** Update the decimal places configuration for a specific screen.
-- **Request Body (JSON):**
-  ```json
-  {
-      "key1": value1,
-      "key2": value2
-  }
-  ```
-- **Response:**
-  ```json
-  {
-      "message": "Decimal places configuration updated successfully",
-      "machine_code": "F1",
-      "screen_name": "Faults",
-      "changes": {
-          "added": {},
-          "updated": {}
-      },
-      "config": {...}
-  }
-  ```
-
-## 14. Upload Reference Image
-- **Endpoint:** `/api/reference_images`
-- **Method:** `POST`
-- **Description:** Upload a reference template image for alignment.
-- **Form Data:**
-  - `file`: The reference image file.
-  - `machine_code`: The machine code.
-  - `screen_id`: The screen ID.1
-- **Response:**
-  ```json
-  {
-      "message": "Reference template uploaded successfully",
-      "template": {
-          "filename": "template_F1_Faults.jpg",
-          "path": "/api/reference_images/template_F1_Faults.jpg",
-          "size": 12345,
-          "dimensions": "1920x1080"
-      }
-  }
-  ```
-
-## 15. Get Reference Images
-- **Endpoint:** `/api/reference_images`
-- **Method:** `GET`
-- **Description:** Retrieve a list of uploaded reference template images.
-- **Response:**
-  ```json
-  {
-      "reference_images": [...],
-      "count": 2
-  }
-  ```
-
-## 16. Delete Reference Image
-- **Endpoint:** `/api/reference_images/<filename>`
-- **Method:** `DELETE`
-- **Description:** Delete a specific reference template image.
-- **Response:**
-  ```json
-  {
-      "message": "Reference template template_F1_Faults.jpg has been deleted successfully"
-  }
-  ```
-
-## Cách sử dụng
-
-### Thiết lập máy và màn hình
-1. Gọi API `/api/set_machine_screen` để thiết lập máy và màn hình hiện tại:
-   ```
-   POST /api/set_machine_screen
-   Content-Type: application/x-www-form-urlencoded
-   
-   machine_code=F1&screen_id=1
-   ```
-
-### Tải lên hình ảnh và thực hiện OCR
-1. Gọi API `/api/images` để tải lên hình ảnh:
-   ```
-   POST /api/images
-   Content-Type: multipart/form-data
-   
-   file=@path_to_your_image.jpg
-   machine_code=F1
-   screen_id=1
-   ```
-
-2. Kết quả OCR sẽ được trả về trong response, bao gồm các số được trích xuất từ các vùng ROI đã định nghĩa.
-
-### Cấu hình số chữ số thập phân
-1. Gọi API `/api/set_decimal_value` để cập nhật số chữ số thập phân cho một ROI:
-   ```
-   POST /api/set_decimal_value
-   Content-Type: application/x-www-form-urlencoded
-   
-   machine_code=F1&screen_id=1&roi_index=0&value=2
-   ```
-
-## Gỡ lỗi
-- Xem log server trong terminal
-- Sử dụng endpoint `/debug` để xem thông tin debug chi tiết
 ---
+
+## 📁 Cấu Trúc Dự Án
+
+```
+python_api_test/
+├── app.py                          # File chính - Main Flask application
+├── app_original.py                 # Backup file gốc
+│
+├── utils/                          # Các modules tiện ích
+│   ├── __init__.py                # Export functions
+│   ├── cache_manager.py           # Quản lý cache (179 dòng)
+│   ├── config_manager.py          # Quản lý cấu hình (362 dòng)
+│   ├── image_processor.py         # Xử lý ảnh (529 dòng)
+│   └── ocr_processor.py           # Xử lý OCR (413 dòng)
+│
+├── routes/                         # API route blueprints
+│   ├── __init__.py                # Export routes
+│   ├── image_routes.py            # Routes xử lý ảnh (202 dòng)
+│   ├── machine_routes.py          # Routes quản lý máy (254 dòng)
+│   ├── decimal_routes.py          # Routes cấu hình số thập phân (227 dòng)
+│   └── reference_routes.py        # Routes ảnh tham chiếu (144 dòng)
+│
+├── Core modules (Không sửa)
+│   ├── smart_detection_functions.py   # Thuật toán phát hiện màn hình
+│   ├── gpu_accelerator.py             # GPU acceleration
+│   ├── parallel_processor.py          # Xử lý song song
+│   ├── ensemble_hog_orb_classifier.py # ML classifier
+│   └── hog_svm_classifier.py          # ML classifier backup
+│
+├── Deployment
+│   ├── wsgi.py                    # WSGI server cho production
+│   ├── start_server.bat           # Script khởi động nhanh
+│   └── web.config                 # Cấu hình IIS (nếu dùng)
+│
+├── Data folders
+│   ├── roi_data/                  # Cấu hình ROI và máy móc
+│   │   ├── machine_screens.json   # Cấu hình máy và màn hình
+│   │   ├── roi_info.json          # Tọa độ ROI
+│   │   ├── decimal_places.json    # Cấu hình số thập phân
+│   │   ├── reference_images/      # Ảnh mẫu template
+│   │   └── parameter_order_value.txt
+│   │
+│   ├── uploads/                   # Ảnh được upload
+│   │   ├── aligned/               # Ảnh đã căn chỉnh
+│   │   ├── hmi_refined/           # Ảnh đã tinh chỉnh
+│   │   └── processed_roi/         # ROI đã xử lý
+│   │
+│   ├── ocr_results/               # Kết quả OCR lịch sử
+│   │
+│   └── Training data (Không xóa!)
+│       ├── augmented_training_data/    # Dữ liệu huấn luyện
+│       ├── advanced_augmented_data/    # Dữ liệu mở rộng
+│       └── focused_training_data/      # Dữ liệu tập trung
+│
+└── Documentation
+    ├── README.md                  # File này
+    ├── TECHNICAL_DOCS.md          # Tài liệu kỹ thuật
+    └── requirements.txt           # Dependencies
+```
+
+---
+
+## 🚀 Chạy Server
+
+### Chế Độ Development (Khuyến nghị cho testing)
+
+```bash
+cd D:\python_WREMBLY_test-main\python_api_test
+python app.py
+```
+
+Server sẽ khởi động tại: `http://0.0.0.0:5000`
+
+**Output mong đợi**:
+```
+[OK] GPU Accelerator và Parallel Processor modules loaded
+[OK] EasyOCR initialized with GPU
+[OK] SIFT detector initialized
+[OK] Enhanced thread pools initialized
+[OK] GPU Accelerator ready
+
+======================================================================
+HMI OCR API SERVER - REFACTORED v2.0
+======================================================================
+Upload folder: D:\python_WREMBLY_test-main\python_api_test\uploads
+ROI data folder: D:\python_WREMBLY_test-main\python_api_test\roi_data
+GPU available: True
+EasyOCR available: True
+======================================================================
+Starting server on http://0.0.0.0:5000
+======================================================================
+
+ * Serving Flask app 'app'
+ * Debug mode: on
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+```
+
+### Chế Độ Production (Với Waitress)
+
+```bash
+python wsgi.py
+```
+
+Hoặc dùng batch file:
+```bash
+start_server.bat
+```
+
+**Waitress** an toàn hơn và hiệu năng tốt hơn cho môi trường production.
+
+### Test Server
+
+Mở browser và truy cập:
+- http://localhost:5000/ - Trang chủ
+- http://localhost:5000/debug - Thông tin debug
+- http://localhost:5000/api/performance - Thông tin hiệu năng
+
+Hoặc dùng curl:
+```bash
+curl http://localhost:5000/
+```
+
+---
+
+## 📡 API Endpoints
+
+### 1. System Endpoints (4 endpoints)
+
+#### `GET /`
+Kiểm tra trạng thái server.
+
+**Response:**
+```json
+{
+  "status": "Server is running",
+  "version": "2.0 - Refactored",
+  "endpoints": [...]
+}
+```
+
+#### `GET /debug`
+Thông tin debug chi tiết về routes và cấu hình.
+
+#### `GET /api/performance`
+Thông tin hiệu năng và GPU.
+
+**Response:**
+```json
+{
+  "timestamp": "2025-10-03 10:30:00",
+  "gpu_available": true,
+  "gpu_info": {
+    "gpu_device_id": 0,
+    "gpu_name": "NVIDIA GeForce GTX 1050 Ti",
+    "gpu_memory_total_gb": 4.0
+  },
+  "ocr": {
+    "easyocr_available": true,
+    "gpu_enabled": true
+  }
+}
+```
+
+#### `GET /api/history?limit=10`
+Lấy lịch sử OCR.
+
+---
+
+### 2. Image Processing Endpoints (8 endpoints)
+
+#### `POST /api/images`
+Upload và xử lý ảnh HMI.
+
+**Request (Form-data):**
+- `file`: File ảnh (jpg, png, bmp)
+- `area`: Mã khu vực (ví dụ: "AREA1")
+- `machine_code`: Mã máy (ví dụ: "F41")
+
+**Example:**
+```bash
+curl -X POST http://localhost:5000/api/images \
+  -F "file=@test_image.jpg" \
+  -F "area=AREA1" \
+  -F "machine_code=F41"
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "filename": "1696320000_test_image.jpg",
+  "machine_code": "F41",
+  "machine_type": "F41",
+  "screen_id": "Production",
+  "detection_method": "two_stage_enhanced",
+  "similarity_score": 0.95,
+  "ocr_results": [
+    {
+      "roi_index": "Temperature",
+      "text": "245.5",
+      "confidence": 0.98,
+      "has_text": true
+    }
+  ],
+  "roi_count": 12
+}
+```
+
+#### `GET /api/images`
+Lấy danh sách tất cả ảnh đã upload.
+
+#### `GET /api/images/<filename>`
+Lấy file ảnh cụ thể.
+
+#### `DELETE /api/images/<filename>`
+Xóa file ảnh.
+
+#### `GET /api/images/processed_roi/<filename>`
+Lấy ảnh ROI đã xử lý.
+
+#### `GET /api/images/hmi_refined/<filename>`
+Lấy ảnh HMI đã tinh chỉnh.
+
+#### `GET /api/images/aligned/<filename>`
+Lấy ảnh đã căn chỉnh perspective.
+
+#### `GET /api/images/hmi_detection/<filename>`
+Lấy ảnh kết quả phát hiện HMI.
+
+---
+
+### 3. Machine Management Endpoints (7 endpoints)
+
+#### `GET /api/machines`
+Lấy thông tin tất cả máy và khu vực.
+
+#### `GET /api/machines/<area_code>`
+Lấy danh sách máy theo khu vực.
+
+**Example:**
+```bash
+curl http://localhost:5000/api/machines/AREA1
+```
+
+#### `GET /api/machine_screens/<machine_code>`
+Lấy danh sách màn hình của một máy.
+
+**Example:**
+```bash
+curl http://localhost:5000/api/machine_screens/F41
+```
+
+**Response:**
+```json
+{
+  "machine_code": "F41",
+  "machine_type": "F41",
+  "machine_name": "Máy ép F41",
+  "screens": [
+    {"id": 1, "screen_id": "Production", "description": "Màn hình sản xuất"},
+    {"id": 2, "screen_id": "Temp", "description": "Màn hình nhiệt độ"}
+  ]
+}
+```
+
+#### `POST /api/set_machine_screen`
+Đặt máy và màn hình hiện tại.
+
+**Request (JSON):**
+```json
+{
+  "machine_code": "F41",
+  "screen_id": "Production"
+}
+```
+
+#### `POST /api/update_machine_screen`
+Cập nhật máy và màn hình với parameter_order_value.txt.
+
+**Request (Form-data):**
+- `machine_code`: Mã máy
+- `screen_id`: Tên màn hình
+- `area`: Mã khu vực (optional)
+
+#### `GET /api/current_machine_screen`
+Lấy máy và màn hình hiện tại.
+
+#### `GET /api/machine_screen_status`
+Kiểm tra trạng thái cấu hình máy/màn hình.
+
+---
+
+### 4. Decimal Configuration Endpoints (7 endpoints)
+
+#### `GET /api/decimal_places`
+Lấy tất cả cấu hình số thập phân.
+
+#### `POST /api/decimal_places`
+Cập nhật cấu hình số thập phân.
+
+**Request (JSON):**
+```json
+{
+  "machine_code": "F41",
+  "screen_id": "Production",
+  "roi_config": {
+    "Temperature": 1,
+    "Pressure": 2,
+    "Speed": 0
+  }
+}
+```
+
+#### `GET /api/decimal_places/<machine_code>`
+Lấy cấu hình theo máy.
+
+#### `GET /api/decimal_places/<machine_code>/<screen_name>`
+Lấy cấu hình theo màn hình.
+
+#### `POST /api/decimal_places/<machine_code>/<screen_name>`
+Cập nhật cấu hình cho màn hình cụ thể.
+
+#### `POST /api/set_decimal_value`
+Đặt giá trị số thập phân cho ROI đơn lẻ.
+
+#### `POST /api/set_all_decimal_values`
+Đặt tất cả giá trị số thập phân cho màn hình.
+
+---
+
+### 5. Reference Images Endpoints (4 endpoints)
+
+#### `POST /api/reference_images`
+Upload ảnh template tham chiếu.
+
+**Request (Form-data):**
+- `file`: File ảnh template
+- `machine_type`: Loại máy (F1, F41, F42)
+- `screen_id`: ID màn hình
+
+#### `GET /api/reference_images`
+Lấy danh sách ảnh template.
+
+#### `GET /api/reference_images/<filename>`
+Lấy file ảnh template cụ thể.
+
+#### `DELETE /api/reference_images/<filename>`
+Xóa ảnh template.
+
+---
+
+## ⚙️ Cấu Hình
+
+### File Cấu Hình Quan Trọng
+
+#### 1. `roi_data/machine_screens.json`
+Cấu hình máy móc và màn hình.
+
+**Cấu trúc:**
+```json
+{
+  "areas": {
+    "AREA1": {
+      "name": "Khu vực 1",
+      "machines": {
+        "F41": {
+          "type": "F41",
+          "name": "Máy ép F41",
+          "description": "..."
+        }
+      }
+    }
+  },
+  "machine_types": {
+    "F41": {
+      "screens": [
+        {
+          "id": 1,
+          "screen_id": "Production",
+          "description": "Màn hình sản xuất"
+        }
+      ]
+    }
+  }
+}
+```
+
+#### 2. `roi_data/roi_info.json`
+Tọa độ ROI cho từng màn hình.
+
+**Cấu trúc:**
+```json
+{
+  "machines": {
+    "F41": {
+      "screens": {
+        "Production": [
+          {
+            "name": "Temperature",
+            "coordinates": [100, 200, 300, 250],
+            "allowed_values": []
+          }
+        ]
+      }
+    }
+  }
+}
+```
+
+**Lưu ý**: Tọa độ có thể là:
+- **Pixel tuyệt đối**: [x1, y1, x2, y2] (số nguyên)
+- **Normalized**: [0.1, 0.2, 0.3, 0.4] (số thập phân 0-1)
+
+#### 3. `roi_data/decimal_places.json`
+Cấu hình số chữ số thập phân.
+
+```json
+{
+  "F41": {
+    "Production": {
+      "Temperature": 1,
+      "Pressure": 2,
+      "Speed": 0
+    }
+  }
+}
+```
+
+### Thay Đổi Port
+
+Mặc định server chạy trên port 5000. Để thay đổi:
+
+**File `app.py`** (dòng 248):
+```python
+app.run(host='0.0.0.0', port=5001, debug=True)  # Đổi 5000 thành 5001
+```
+
+**File `wsgi.py`**:
+```python
+httpd = make_server('0.0.0.0', 5001, app)  # Đổi 5000 thành 5001
+```
+
+---
+
+## 🔥 Khắc Phục Sự Cố
+
+### Vấn Đề 1: Import Error
+
+**Lỗi:**
+```
+ModuleNotFoundError: No module named 'flask'
+```
+
+**Giải pháp:**
+```bash
+pip install -r requirements.txt
+```
+
+### Vấn Đề 2: GPU Không Phát Hiện
+
+**Lỗi:**
+```
+[WARNING] GPU not available
+```
+
+**Kiểm tra:**
+```bash
+nvidia-smi
+python -c "import torch; print(torch.cuda.is_available())"
+```
+
+**Giải pháp:**
+1. Cài đặt lại CUDA Toolkit
+2. Cài đặt lại CuPy với đúng phiên bản CUDA:
+   ```bash
+   pip uninstall cupy -y
+   pip install cupy-cuda12x  # Cho CUDA 12.x
+   ```
+3. Cài đặt lại PyTorch với CUDA:
+   ```bash
+   pip uninstall torch torchvision -y
+   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+   ```
+
+### Vấn Đề 3: EasyOCR Lỗi
+
+**Lỗi:**
+```
+Exception: EasyOCR failed to initialize
+```
+
+**Giải pháp:**
+```bash
+pip uninstall easyocr -y
+pip install easyocr==1.7.2
+```
+
+Nếu vẫn lỗi, xóa cache:
+```bash
+# Windows
+rmdir /s /q %USERPROFILE%\.EasyOCR
+```
+
+### Vấn Đề 4: Port Đang Được Sử Dụng
+
+**Lỗi:**
+```
+OSError: [WinError 10048] Only one usage of each socket address
+```
+
+**Giải pháp:**
+1. Tìm process đang dùng port 5000:
+   ```bash
+   netstat -ano | findstr :5000
+   ```
+2. Kill process:
+   ```bash
+   taskkill /PID <process_id> /F
+   ```
+3. Hoặc đổi port trong `app.py`
+
+### Vấn Đề 5: Out of Memory (GPU)
+
+**Lỗi:**
+```
+RuntimeError: CUDA out of memory
+```
+
+**Giải pháp:**
+1. Giảm batch size trong code
+2. Xử lý ít ảnh hơn cùng lúc
+3. Restart server để clear GPU memory
+
+### Vấn Đề 6: Slow Performance
+
+**Hiện tượng:** Server chạy chậm
+
+**Kiểm tra:**
+```bash
+curl http://localhost:5000/api/performance
+```
+
+**Giải pháp:**
+1. Kiểm tra GPU có đang hoạt động không
+2. Kiểm tra thread pool: Nên thấy "24 workers"
+3. Clear cache:
+   ```bash
+   # Xóa cache trong code
+   # Hoặc restart server
+   ```
+
+### Vấn Đề 7: Template Not Found
+
+**Lỗi:**
+```
+Template not found for machine X screen Y
+```
+
+**Giải pháp:**
+1. Kiểm tra file template trong `roi_data/reference_images/`
+2. Tên file phải đúng format: `template_{machine_type}_{screen_id}.jpg`
+3. Upload template mới qua API:
+   ```bash
+   curl -X POST http://localhost:5000/api/reference_images \
+     -F "file=@template.jpg" \
+     -F "machine_type=F41" \
+     -F "screen_id=Production"
+   ```
+
+---
+
+## 🛠️ Bảo Trì
+
+### Backup Dữ Liệu
+
+**Các thư mục cần backup định kỳ:**
+```
+roi_data/                    # Cấu hình
+uploads/                     # Ảnh đã xử lý (tùy chọn)
+ocr_results/                 # Kết quả OCR (tùy chọn)
+augmented_training_data/     # Dữ liệu training (quan trọng!)
+```
+
+**Script backup tự động:**
+```bash
+# Tạo file backup_data.bat
+@echo off
+set BACKUP_DIR=D:\Backups\HMI_OCR_%date:~-4,4%%date:~-7,2%%date:~-10,2%
+mkdir "%BACKUP_DIR%"
+xcopy /E /I /Y "roi_data" "%BACKUP_DIR%\roi_data"
+xcopy /E /I /Y "augmented_training_data" "%BACKUP_DIR%\training_data"
+echo Backup completed: %BACKUP_DIR%
+```
+
+### Update Dependencies
+
+```bash
+# Xem packages outdated
+pip list --outdated
+
+# Update một package cụ thể
+pip install --upgrade flask
+
+# Hoặc update tất cả (cẩn thận!)
+pip install --upgrade -r requirements.txt
+```
+
+### Logs và Monitoring
+
+**Xem logs:**
+- Server logs: Output terminal
+- OCR results: `ocr_results/` folder
+- Performance: `GET /api/performance`
+
+**Monitoring checklist:**
+- [ ] GPU memory usage
+- [ ] CPU usage
+- [ ] Disk space
+- [ ] Response time
+- [ ] Error rate
+
+### Clear Cache
+
+**Xóa uploaded images cũ:**
+```bash
+cd uploads
+del /Q *.jpg *.png
+cd aligned
+del /Q *.*
+```
+
+**Xóa OCR results cũ:**
+```bash
+cd ocr_results
+del /Q *.json
+```
+
+**Lưu ý:** Không xóa các thư mục training data!
+
+---
+
+## 📞 Hỗ Trợ
+
+### Thông Tin Liên Hệ
+
+- **Developer**: [Tên dev/team]
+- **Email**: [email@example.com]
+- **Hotline**: [số điện thoại]
+
+### Tài Liệu Thêm
+
+- **TECHNICAL_DOCS.md**: Chi tiết kỹ thuật về refactoring
+- **API Collection**: Postman/Insomnia collection (nếu có)
+- **Video hướng dẫn**: [link nếu có]
+
+---
+
+## 📝 Ghi Chú Quan Trọng
+
+### ⚠️ KHÔNG XÓA
+
+Các file/folder sau **KHÔNG ĐƯỢC XÓA**:
+- `augmented_training_data/` - Dữ liệu training ML
+- `advanced_augmented_data/` - Dữ liệu backup
+- `focused_training_data/` - Dữ liệu fallback
+- `roi_data/` - Cấu hình hệ thống
+- `smart_detection_functions.py` - Thuật toán core
+- `gpu_accelerator.py` - GPU optimization
+- `ensemble_hog_orb_classifier.py` - ML model
+
+### ✅ CÓ THỂ XÓA
+
+- `app_original.py` - Backup (sau khi test kỹ)
+- Files trong `uploads/` - Ảnh tạm (định kỳ)
+- Files trong `ocr_results/` - Lịch sử cũ (định kỳ)
+
+### 🔒 Bảo Mật
+
+**Lưu ý cho Production:**
+1. Không expose debug endpoints (`/debug`)
+2. Thêm authentication cho API
+3. Sử dụng HTTPS
+4. Rate limiting cho upload endpoints
+5. Validate input files (size, type)
+6. Không commit `.env` files với credentials
+
+---
+
+## 📈 Changelog
+
+### Version 2.0 (October 2025)
+- ✅ Refactor toàn bộ codebase thành modular structure
+- ✅ Tách utils và routes thành các modules riêng
+- ✅ Thêm 2 endpoints mới: hmi_detection, update_machine_screen
+- ✅ Cải thiện documentation
+- ✅ Cleanup 64+ redundant files
+- ✅ 100% backwards compatible
+
+### Version 1.0 (Original)
+- ✅ Basic OCR functionality
+- ✅ GPU acceleration
+- ✅ Screen detection algorithm
+- ✅ 28 API endpoints
+
+---
+
+**Chúc bạn triển khai thành công! 🎉**
