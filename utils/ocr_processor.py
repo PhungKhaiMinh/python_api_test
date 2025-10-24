@@ -30,7 +30,13 @@ def init_ocr_globals(easyocr_available, ocr_reader, gpu_acc, thread_pool):
 
 def process_single_roi_optimized(args):
     """Xử lý OCR cho một ROI đơn lẻ - GPU accelerated"""
-    (roi_image, roi_name, machine_type, allowed_values, is_special_on_off_case, screen_id) = args
+    # Unpack args - có thể có hoặc không có machine_code và sub_page
+    if len(args) == 8:
+        (roi_image, roi_name, machine_type, allowed_values, is_special_on_off_case, screen_id, machine_code, sub_page) = args
+    else:
+        (roi_image, roi_name, machine_type, allowed_values, is_special_on_off_case, screen_id) = args
+        machine_code = None
+        sub_page = None
     
     try:
         # Trường hợp đặc biệt ON/OFF - phân tích màu sắc
@@ -115,7 +121,7 @@ def process_single_roi_optimized(args):
             best_text = post_process_ocr_text(best_text, allowed_values)
             
             # Apply decimal places formatting
-            best_text = apply_decimal_places_format(best_text, roi_name, machine_type, screen_id)
+            best_text = apply_decimal_places_format(best_text, roi_name, machine_type, screen_id, machine_code, sub_page)
             
             # Handle working hours format
             if "working hours" in roi_name.lower():
@@ -187,7 +193,7 @@ def post_process_ocr_text(text, allowed_values=None):
     return text
 
 
-def apply_decimal_places_format(text, roi_name, machine_type, screen_id):
+def apply_decimal_places_format(text, roi_name, machine_type, screen_id, machine_code=None, sub_page=None):
     """Apply decimal places formatting based on configuration"""
     try:
         # Get decimal config
@@ -205,20 +211,26 @@ def apply_decimal_places_format(text, roi_name, machine_type, screen_id):
         # Get decimal places config for this ROI
         decimal_places = None
         
-        # Try machine_code first
-        machine_info = get_machine_info_cached()
-        machine_code = machine_info.get('machine_code')
+        # Try machine_info if machine_code not provided
+        if machine_code is None:
+            machine_info = get_machine_info_cached()
+            machine_code = machine_info.get('machine_code')
         
-        if machine_code in decimal_config:
-            if screen_id in decimal_config[machine_code]:
-                if roi_name in decimal_config[machine_code][screen_id]:
-                    decimal_places = decimal_config[machine_code][screen_id][roi_name]
-        
-        # Try machine_type if not found
-        if decimal_places is None and machine_type in decimal_config:
-            if screen_id in decimal_config[machine_type]:
-                if roi_name in decimal_config[machine_type][screen_id]:
-                    decimal_places = decimal_config[machine_type][screen_id][roi_name]
+        # Cấu trúc mới cho Reject Summary với sub-page:
+        # machine_type > screen_id > machine_code > sub_page > roi_name
+        if screen_id == "Reject Summary" and sub_page and machine_code:
+            if machine_type in decimal_config:
+                if screen_id in decimal_config[machine_type]:
+                    if machine_code in decimal_config[machine_type][screen_id]:
+                        if sub_page in decimal_config[machine_type][screen_id][machine_code]:
+                            if roi_name in decimal_config[machine_type][screen_id][machine_code][sub_page]:
+                                decimal_places = decimal_config[machine_type][screen_id][machine_code][sub_page][roi_name]
+        else:
+            # Cấu trúc thường: machine_type > screen_id > roi_name
+            if machine_type in decimal_config:
+                if screen_id in decimal_config[machine_type]:
+                    if roi_name in decimal_config[machine_type][screen_id]:
+                        decimal_places = decimal_config[machine_type][screen_id][roi_name]
         
         # Apply formatting
         if decimal_places is not None:
@@ -273,7 +285,7 @@ def process_roi_with_retry_logic_optimized(roi_args, original_filename):
 
 
 def perform_ocr_on_roi_optimized(image, roi_coordinates, original_filename, 
-                                 template_path=None, roi_names=None, machine_code=None, screen_id=None):
+                                 template_path=None, roi_names=None, machine_code=None, screen_id=None, sub_page=None):
     """
     Phiên bản tối ưu của perform_ocr_on_roi với parallel processing
     """
@@ -294,6 +306,7 @@ def perform_ocr_on_roi_optimized(image, roi_coordinates, original_filename,
         machine_info = get_machine_info_cached()
         machine_code = machine_code or machine_info.get('machine_code', 'F41')
         screen_id = screen_id or machine_info.get('screen_id', 'Main')
+        sub_page = sub_page or machine_info.get('sub_page')
         
         roi_info = get_roi_info_cached()
         machine_type = get_machine_type(machine_code)
@@ -342,7 +355,7 @@ def perform_ocr_on_roi_optimized(image, roi_coordinates, original_filename,
                                         is_special_on_off_case = True
                                     break
                 
-                roi_args.append((roi_image, roi_name, machine_type, allowed_values, is_special_on_off_case, screen_id))
+                roi_args.append((roi_image, roi_name, machine_type, allowed_values, is_special_on_off_case, screen_id, machine_code, sub_page))
                 
             except Exception as e:
                 print(f"Error preparing ROI {i}: {e}")

@@ -15,12 +15,7 @@
                         },
                         {
                             "id": 2,
-                            "screen_id": "Feeders and Conveyors",
-                            "description": "monitor 1.png"
-                        },
-                        {
-                            "id": 3,
-                            "screen_id": "Main Machine Parameters",
+                            "screen_id": "Reject Summary",
                             "description": "monitor 1.png"
                         }
                     ]
@@ -37,12 +32,7 @@
                         },
                         {
                             "id": 2,
-                            "screen_id": "Feeders and Conveyors",
-                            "description": "monitor 1.png"
-                        },
-                        {
-                            "id": 3,
-                            "screen_id": "Main Machine Parameters",
+                            "screen_id": "Reject Summary",
                             "description": "monitor 1.png"
                         }
                     ]
@@ -59,12 +49,7 @@
                         },
                         {
                             "id": 2,
-                            "screen_id": "Feeders and Conveyors",
-                            "description": "monitor 1.png"
-                        },
-                        {
-                            "id": 3,
-                            "screen_id": "Main Machine Parameters",
+                            "screen_id": "Reject Summary",
                             "description": "monitor 1.png"
                         }
                     ]
@@ -81,12 +66,7 @@
                         },
                         {
                             "id": 2,
-                            "screen_id": "Feeders and Conveyors",
-                            "description": "monitor 1.png"
-                        },
-                        {
-                            "id": 3,
-                            "screen_id": "Main Machine Parameters",
+                            "screen_id": "Reject Summary",
                             "description": "monitor 1.png"
                         }
                     ]

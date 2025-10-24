@@ -274,9 +274,8 @@ def get_reference_templates_for_type_smart(machine_type):
 
 def detect_hmi_screen_optimized(image: np.ndarray) -> Tuple[Optional[np.ndarray], float]:
     """
-    Extract HMI screen region using advanced morphological operations and contour detection
-    Enhanced algorithm based on app.py implementation with adaptive improvements
-    GPU acceleration enabled for image processing operations
+    Extract HMI screen region using advanced line detection and rectangle finding algorithm
+    Based on hmi_image_detector.py implementation with enhanced HMI detection
     """
     start_time = time.time()
     
@@ -284,137 +283,98 @@ def detect_hmi_screen_optimized(image: np.ndarray) -> Tuple[Optional[np.ndarray]
         if image is None or len(image.shape) != 3:
             return None, time.time() - start_time
             
+        # Import functions from hmi_image_detector
+        from hmi_image_detector import (
+            enhance_image, adaptive_edge_detection, process_lines, 
+            extend_lines, find_intersections, find_largest_rectangle,
+            find_rectangle_from_classified_lines, fine_tune_hmi_screen
+        )
+            
         # Get image dimensions
         height, width = image.shape[:2]
         
-        # Convert to grayscale with GPU acceleration
-        if GPU_AVAILABLE and _gpu_acc:
-            gray = _gpu_acc.cvt_color_gpu(image, cv2.COLOR_BGR2GRAY)
-        else:
-            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        # Step 1: Enhance image quality
+        enhanced_img, enhanced_clahe = enhance_image(image)
         
-        # Apply Gaussian blur to reduce noise with GPU acceleration
-        if GPU_AVAILABLE and _gpu_acc:
-            blurred = _gpu_acc.gaussian_blur_gpu(gray, (5, 5), 0)
-        else:
-            blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+        # Step 2: Edge detection
+        canny_edges, sobel_edges, edges = adaptive_edge_detection(enhanced_clahe)
         
-        # Adaptive histogram equalization for better contrast
-        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
-        enhanced = clahe.apply(blurred)
+        # Step 3: Find and filter contours
+        contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         
-        # Apply adaptive thresholding with multiple methods
-        # Method 1: Adaptive Mean
-        thresh_mean = cv2.adaptiveThreshold(enhanced, 255, 
-                                          cv2.ADAPTIVE_THRESH_MEAN_C, 
-                                          cv2.THRESH_BINARY, 11, 2)
+        # Filter contours by area
+        min_contour_area = image.shape[0] * image.shape[1] * 0.001  # 0.1% of image area
+        large_contours = [cnt for cnt in contours if cv2.contourArea(cnt) > min_contour_area]
         
-        # Method 2: Adaptive Gaussian
-        thresh_gaussian = cv2.adaptiveThreshold(enhanced, 255, 
-                                              cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-                                              cv2.THRESH_BINARY, 11, 2)
+        # Create contour mask
+        contour_mask = np.zeros_like(edges)
+        cv2.drawContours(contour_mask, large_contours, -1, 255, 2)
         
-        # Method 3: Otsu's thresholding
-        _, thresh_otsu = cv2.threshold(enhanced, 0, 255, 
-                                     cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        # Step 4: Detect lines with adjusted parameters
+        lines = cv2.HoughLinesP(contour_mask, 1, np.pi/180, threshold=25, minLineLength=15, maxLineGap=30)
         
-        # Combine thresholding results using weighted average
-        combined_thresh = cv2.addWeighted(thresh_mean, 0.4, thresh_gaussian, 0.4, 0)
-        combined_thresh = cv2.addWeighted(combined_thresh, 0.8, thresh_otsu, 0.2, 0)
+        # If no lines found, try with easier parameters
+        if lines is None or len(lines) < 2:
+            lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=15, minLineLength=10, maxLineGap=40)
+            
+            if lines is None or len(lines) < 2:
+                lines = cv2.HoughLinesP(edges, 1, np.pi/180, threshold=10, minLineLength=5, maxLineGap=50)
         
-        # Advanced morphological operations
-        # Create different kernel sizes for multi-scale processing
-        kernel_small = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-        kernel_medium = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
-        kernel_large = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7))
-        
-        # Opening operation to remove noise
-        opened = cv2.morphologyEx(combined_thresh, cv2.MORPH_OPEN, kernel_small)
-        
-        # Closing operation to fill gaps
-        closed = cv2.morphologyEx(opened, cv2.MORPH_CLOSE, kernel_medium)
-        
-        # Additional morphological gradient for edge enhancement
-        gradient = cv2.morphologyEx(closed, cv2.MORPH_GRADIENT, kernel_small)
-        
-        # Apply Canny edge detection with adaptive thresholds
-        edges = cv2.Canny(closed, 50, 150, apertureSize=3)
-        
-        # Combine morphological result with edge detection
-        combined = cv2.bitwise_or(closed, edges)
-        
-        # Find contours with hierarchy information
-        contours, hierarchy = cv2.findContours(combined, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        
-        if not contours:
+        if lines is None:
             return None, time.time() - start_time
         
-        # Enhanced contour filtering based on multiple criteria
-        valid_contours = []
-        min_area = (width * height) * 0.01  # At least 1% of image area
-        max_area = (width * height) * 0.8   # At most 80% of image area
+        # Step 5: Classify lines into horizontal and vertical
+        horizontal_lines, vertical_lines = process_lines(lines, image.shape, min_length=20)
         
-        for contour in contours:
-            area = cv2.contourArea(contour)
-            perimeter = cv2.arcLength(contour, True)
-            
-            if area < min_area or area > max_area:
-                continue
-            
-            # Calculate aspect ratio
-            x, y, w, h = cv2.boundingRect(contour)
-            aspect_ratio = w / h if h > 0 else 0
-            
-            # Calculate extent (ratio of contour area to bounding rectangle area)
-            rect_area = w * h
-            extent = area / rect_area if rect_area > 0 else 0
-            
-            # Calculate solidity (ratio of contour area to convex hull area)
-            hull = cv2.convexHull(contour)
-            hull_area = cv2.contourArea(hull)
-            solidity = area / hull_area if hull_area > 0 else 0
-            
-            # Apply geometric filters for rectangular HMI screens
-            if (0.5 <= aspect_ratio <= 3.0 and    # Reasonable aspect ratio
-                extent > 0.5 and                   # Fills most of bounding rect
-                solidity > 0.8 and                 # Relatively convex
-                perimeter > 100):                  # Minimum perimeter
-                
-                valid_contours.append((contour, area))
-        
-        if not valid_contours:
+        if len(horizontal_lines) < 2 or len(vertical_lines) < 2:
             return None, time.time() - start_time
         
-        # Sort by area and select the largest valid contour
-        valid_contours.sort(key=lambda x: x[1], reverse=True)
-        best_contour = valid_contours[0][0]
+        # Try to find rectangle directly from classified lines
+        largest_rectangle = find_rectangle_from_classified_lines(horizontal_lines, vertical_lines, image.shape)
         
-        # Get bounding rectangle with margin
-        x, y, w, h = cv2.boundingRect(best_contour)
+        if largest_rectangle is None:
+            # Step 6: Extend lines
+            extended_h_lines = extend_lines(horizontal_lines, width, height)
+            extended_v_lines = extend_lines(vertical_lines, width, height)
+            
+            # Step 7: Find intersections
+            intersections = find_intersections(extended_h_lines, extended_v_lines)
+            
+            if len(intersections) < 4:
+                return None, time.time() - start_time
+            
+            # Step 8: Find largest rectangle from intersections
+            largest_rectangle = find_largest_rectangle(intersections, image.shape)
+            
+            if largest_rectangle is None:
+                return None, time.time() - start_time
         
-        # Add margin (5% of dimensions)
-        margin_x = int(w * 0.05)
-        margin_y = int(h * 0.05)
+        # Step 9: Extract HMI region from largest rectangle
+        top_left, top_right, bottom_right, bottom_left, _ = largest_rectangle
         
-        x = max(0, x - margin_x)
-        y = max(0, y - margin_y)
-        w = min(width - x, w + 2 * margin_x)
-        h = min(height - y, h + 2 * margin_y)
+        # Calculate coordinates of HMI region
+        x_min = min(top_left[0], bottom_left[0])
+        y_min = min(top_left[1], top_right[1])
+        x_max = max(top_right[0], bottom_right[0])
+        y_max = max(bottom_left[1], bottom_right[1])
         
-        # Extract the region
-        extracted_region = image[y:y+h, x:x+w]
+        # Check boundaries
+        if x_min < 0: x_min = 0
+        if y_min < 0: y_min = 0
+        if x_max >= image.shape[1]: x_max = image.shape[1] - 1
+        if y_max >= image.shape[0]: y_max = image.shape[0] - 1
         
-        # Quality check - ensure extracted region is valid
-        if extracted_region.size == 0 or w < 50 or h < 50:
+        if x_max > x_min and y_max > y_min:
+            roi_coords = (x_min, y_min, x_max, y_max)
+            
+            # Fine-tune and flatten HMI screen
+            warped_roi, refined_coords = fine_tune_hmi_screen(image, roi_coords, None, None)
+            
+            # Quality check
+            if warped_roi is not None and warped_roi.size > 0:
+                return warped_roi, time.time() - start_time
+        
             return None, time.time() - start_time
-        
-        # Additional quality enhancement
-        # Apply bilateral filter to preserve edges while reducing noise
-        if extracted_region.shape[0] > 0 and extracted_region.shape[1] > 0:
-            enhanced_region = cv2.bilateralFilter(extracted_region, 9, 75, 75)
-            return enhanced_region, time.time() - start_time
-        
-        return extracted_region, time.time() - start_time
         
     except Exception as e:
         print(f"Error in HMI extraction: {e}")
@@ -1034,6 +994,7 @@ def calculate_combined_score_optimized(comparison_results: Dict[str, float]) -> 
 def get_valid_screen_types_for_machine(area, machine_code):
     """
     Lấy danh sách screen types hợp lệ cho một machine cụ thể từ machine_screens.json
+    Ưu tiên đọc từ areas trước, fallback về machine_types nếu không có
     """
     try:
         current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -1041,15 +1002,21 @@ def get_valid_screen_types_for_machine(area, machine_code):
         with open(config_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
         
-        # Lấy machine info
+        # Lấy machine info từ areas
         if area in config['areas'] and machine_code in config['areas'][area]['machines']:
             machine_info = config['areas'][area]['machines'][machine_code]
             machine_type = machine_info['type']
             
-            # Lấy danh sách screen types cho machine type này
+            # ƯU TIÊN: Lấy screen types từ machine cụ thể trong areas
+            if 'screens' in machine_info:
+                screen_types = [screen['screen_id'] for screen in machine_info['screens']]
+                print(f"[OK] Valid screen types for {machine_code} ({machine_type}) from areas: {screen_types}")
+                return machine_type, screen_types
+            
+            # FALLBACK: Lấy từ machine_types nếu không có screens trong areas
             if machine_type in config['machine_types']:
                 screen_types = [screen['screen_id'] for screen in config['machine_types'][machine_type]['screens']]
-                print(f"📋 Valid screen types for {machine_code} ({machine_type}): {screen_types}")
+                print(f"[OK] Valid screen types for {machine_code} ({machine_type}) from machine_types: {screen_types}")
                 return machine_type, screen_types
         
         return None, []
@@ -1084,7 +1051,7 @@ def filter_reference_images_by_machine_type(machine_type, valid_screen_types):
                     'screen_id': screen_id
                 })
     
-    print(f"🎯 Filtered reference templates for {machine_type}: {[t['screen_id'] for t in filtered_templates]}")
+    print(f"[OK] Filtered reference templates for {machine_type}: {[t['screen_id'] for t in filtered_templates]}")
     return filtered_templates
 
 def auto_detect_machine_and_screen_smart(image, area=None, machine_code=None):

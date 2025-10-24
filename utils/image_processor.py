@@ -398,120 +398,50 @@ def adaptive_edge_detection(image):
 def detect_hmi_screen(image):
     """
     Phát hiện và trích xuất vùng màn hình HMI từ ảnh
+    Sử dụng thuật toán GIỐNG Y CHANG như cut_img.py (option 1)
     
     Returns:
         tuple: (extracted_screen, processing_time)
     """
     import time
+    import tempfile
+    import os
     start_time = time.time()
     
     try:
         if image is None or len(image.shape) != 3:
             return None, time.time() - start_time
-            
-        height, width = image.shape[:2]
         
-        # Convert to grayscale
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        # Import function find_hmi_in_image từ hmi_image_detector.py - GIỐNG Y CHANG CUT_IMG.PY
+        from hmi_image_detector import find_hmi_in_image
         
-        # Apply Gaussian blur
-        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+        # Tạo file tạm để lưu ảnh với chất lượng cao (giống như cut_img.py)
+        temp_dir = tempfile.mkdtemp()
+        temp_image_path = os.path.join(temp_dir, "temp_image.png")
         
-        # CLAHE
-        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
-        enhanced = clahe.apply(blurred)
+        # Lưu ảnh với định dạng PNG để tránh mất mát dữ liệu
+        cv2.imwrite(temp_image_path, image)
         
-        # Multiple thresholding methods
-        thresh_mean = cv2.adaptiveThreshold(enhanced, 255, 
-                                          cv2.ADAPTIVE_THRESH_MEAN_C, 
-                                          cv2.THRESH_BINARY, 11, 2)
-        thresh_gaussian = cv2.adaptiveThreshold(enhanced, 255, 
-                                              cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-                                              cv2.THRESH_BINARY, 11, 2)
-        _, thresh_otsu = cv2.threshold(enhanced, 0, 255, 
-                                     cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        # Gọi function find_hmi_in_image GIỐNG Y CHANG như cut_img.py
+        detected_hmis, refined_hmis = find_hmi_in_image(temp_image_path, temp_dir)
         
-        # Combine thresholds
-        combined_thresh = cv2.addWeighted(thresh_mean, 0.4, thresh_gaussian, 0.4, 0)
-        combined_thresh = cv2.addWeighted(combined_thresh, 0.8, thresh_otsu, 0.2, 0)
+        # Dọn dẹp file tạm
+        try:
+            os.remove(temp_image_path)
+            os.rmdir(temp_dir)
+        except:
+            pass
         
-        # Morphological operations
-        kernel_small = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-        kernel_medium = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
-        
-        opened = cv2.morphologyEx(combined_thresh, cv2.MORPH_OPEN, kernel_small)
-        closed = cv2.morphologyEx(opened, cv2.MORPH_CLOSE, kernel_medium)
-        
-        # Edge detection
-        edges = cv2.Canny(closed, 50, 150, apertureSize=3)
-        
-        # Combine
-        combined = cv2.bitwise_or(closed, edges)
-        
-        # Find contours
-        contours, hierarchy = cv2.findContours(combined, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        
-        if not contours:
+        if refined_hmis and len(refined_hmis) > 0:
+            # Lấy màn hình HMI đầu tiên (đã được tinh chỉnh) - GIỐNG Y CHANG CUT_IMG.PY
+            hmi_screen = refined_hmis[0][0]  # warped_roi
+            processing_time = time.time() - start_time
+            return hmi_screen, processing_time
+        else:
             return None, time.time() - start_time
-        
-        # Filter contours
-        valid_contours = []
-        min_area = (width * height) * 0.01
-        max_area = (width * height) * 0.8
-        
-        for contour in contours:
-            area = cv2.contourArea(contour)
-            perimeter = cv2.arcLength(contour, True)
             
-            if area < min_area or area > max_area:
-                continue
-            
-            x, y, w, h = cv2.boundingRect(contour)
-            aspect_ratio = w / h if h > 0 else 0
-            rect_area = w * h
-            extent = area / rect_area if rect_area > 0 else 0
-            
-            hull = cv2.convexHull(contour)
-            hull_area = cv2.contourArea(hull)
-            solidity = area / hull_area if hull_area > 0 else 0
-            
-            if (0.5 <= aspect_ratio <= 3.0 and extent > 0.5 and 
-                solidity > 0.8 and perimeter > 100):
-                valid_contours.append((contour, area))
-        
-        if not valid_contours:
-            return None, time.time() - start_time
-        
-        # Get largest valid contour
-        valid_contours.sort(key=lambda x: x[1], reverse=True)
-        best_contour = valid_contours[0][0]
-        
-        # Get bounding rectangle with margin
-        x, y, w, h = cv2.boundingRect(best_contour)
-        
-        margin_x = int(w * 0.05)
-        margin_y = int(h * 0.05)
-        
-        x = max(0, x - margin_x)
-        y = max(0, y - margin_y)
-        w = min(width - x, w + 2 * margin_x)
-        h = min(height - y, h + 2 * margin_y)
-        
-        # Extract region
-        extracted_region = image[y:y+h, x:x+w]
-        
-        if extracted_region.size == 0 or w < 50 or h < 50:
-            return None, time.time() - start_time
-        
-        # Apply bilateral filter
-        if extracted_region.shape[0] > 0 and extracted_region.shape[1] > 0:
-            enhanced_region = cv2.bilateralFilter(extracted_region, 9, 75, 75)
-            return enhanced_region, time.time() - start_time
-        
-        return extracted_region, time.time() - start_time
-        
     except Exception as e:
-        print(f"Error in HMI extraction: {e}")
+        print(f"Error in detect_hmi_screen: {e}")
         return None, time.time() - start_time
 
 

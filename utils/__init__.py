@@ -18,6 +18,8 @@ __all__ = [
     
     # Config Manager
     'get_roi_coordinates',
+    'get_roi_coordinates_with_subpage',
+    'get_special_region_coordinates',
     'get_machine_type',
     'get_area_for_machine',
     'get_machine_name_from_code',
@@ -25,6 +27,7 @@ __all__ = [
     'find_machine_code_from_template',
     'get_screen_numeric_id',
     'get_reference_template_path',
+    'get_reference_template_path_with_subpage',
     'get_decimal_places_config',
     'is_named_roi_format',
     'get_current_machine_info',

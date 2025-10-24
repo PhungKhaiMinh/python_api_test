@@ -93,6 +93,170 @@ def get_roi_coordinates(machine_code, screen_id=None, machine_type=None):
         return [], []
 
 
+def get_roi_coordinates_with_subpage(machine_type, screen_name, sub_page=None, machine_code=None):
+    """
+    Lấy danh sách tọa độ ROI từ roi_info.json với hỗ trợ sub-pages
+    
+    Args:
+        machine_type: Loại máy (F1, F41, F42)
+        screen_name: Tên màn hình
+        sub_page: Sub-page (1, 2) cho màn hình có nhiều trang
+        machine_code: Mã máy cụ thể (cần cho cấu trúc mới với Reject Summary)
+        
+    Returns:
+        tuple: (roi_coordinates, roi_names)
+    """
+    try:
+        roi_data = get_roi_info_cached()
+        
+        print(f"Looking for ROIs in machine_type: {machine_type}, screen: {screen_name}, sub_page: {sub_page}, machine_code: {machine_code}")
+        
+        # Tìm trong machines
+        if machine_type in roi_data.get("machines", {}):
+            screens_data = roi_data["machines"][machine_type].get("screens", {})
+            
+            if screen_name and screen_name in screens_data:
+                screen_data = screens_data[screen_name]
+                
+                # Kiểm tra cấu trúc mới (với sub_pages)
+                if isinstance(screen_data, dict) and "sub_pages" in screen_data:
+                    # Cấu trúc mới: sub_pages > machine_code > sub_page > rois
+                    if not machine_code:
+                        print("[ERROR] machine_code is required for new sub_pages structure")
+                        return [], []
+                    
+                    if machine_code not in screen_data["sub_pages"]:
+                        print(f"Machine code '{machine_code}' not found in sub_pages for screen '{screen_name}'")
+                        return [], []
+                    
+                    if sub_page not in screen_data["sub_pages"][machine_code]:
+                        print(f"Sub-page '{sub_page}' not found for machine '{machine_code}', screen '{screen_name}'")
+                        return [], []
+                    
+                    sub_page_data = screen_data["sub_pages"][machine_code][sub_page]
+                    roi_list = sub_page_data.get("rois", [])
+                    
+                    roi_coordinates = []
+                    roi_names = []
+                    
+                    for roi_item in roi_list:
+                        if isinstance(roi_item, dict) and "name" in roi_item and "coordinates" in roi_item:
+                            roi_coordinates.append(roi_item["coordinates"])
+                            roi_names.append(roi_item["name"])
+                        elif isinstance(roi_item, (list, tuple)) and len(roi_item) == 4:
+                            roi_coordinates.append(roi_item)
+                            roi_names.append(f"ROI_{len(roi_names)}")
+                    
+                    print(f"Found {len(roi_coordinates)} ROIs for {screen_name} sub-page {sub_page} (new structure)")
+                    return roi_coordinates, roi_names
+                else:
+                    # Cấu trúc cũ (không có sub_pages)
+                    roi_list = screen_data
+                    
+                    # Lọc theo sub_page nếu có
+                    if sub_page:
+                        roi_list = [roi for roi in roi_list 
+                                   if isinstance(roi, dict) and roi.get("sub_page") == str(sub_page)]
+                    
+                    # Xử lý định dạng ROI
+                    roi_coordinates = []
+                    roi_names = []
+                    
+                    for roi_item in roi_list:
+                        if isinstance(roi_item, dict) and "name" in roi_item and "coordinates" in roi_item:
+                            roi_coordinates.append(roi_item["coordinates"])
+                            roi_names.append(roi_item["name"])
+                        else:
+                            roi_coordinates.append(roi_item)
+                            roi_names.append(f"ROI_{len(roi_names)}")
+                    
+                    print(f"Found {len(roi_coordinates)} ROIs for {screen_name} (sub_page: {sub_page}) (old structure)")
+                    return roi_coordinates, roi_names
+            else:
+                print(f"Screen '{screen_name}' not found in roi_info.json")
+        else:
+            print(f"Machine type '{machine_type}' not found in roi_info.json")
+        
+        return [], []
+    except Exception as e:
+        print(f"Error reading ROI coordinates: {str(e)}")
+        traceback.print_exc()
+        return [], []
+
+
+def get_special_region_coordinates(machine_type, machine_code, screen_name, sub_page=None):
+    """
+    Lấy tọa độ vùng đặc biệt để phân biệt sub-page
+    
+    Args:
+        machine_type: Loại máy (F1, F41, F42)
+        machine_code: Mã máy cụ thể (IE-F1-CWA01)
+        screen_name: Tên màn hình
+        sub_page: Sub-page (nếu có)
+        
+    Returns:
+        list: Danh sách tọa độ vùng đặc biệt
+    """
+    try:
+        roi_data = get_roi_info_cached()
+        
+        if machine_type not in roi_data.get("machines", {}):
+            print(f"Machine type '{machine_type}' not found")
+            return []
+        
+        screens_data = roi_data["machines"][machine_type].get("screens", {})
+        
+        if screen_name not in screens_data:
+            print(f"Screen '{screen_name}' not found")
+            return []
+        
+        screen_data = screens_data[screen_name]
+        
+        # Kiểm tra cấu trúc mới (với sub_pages)
+        if isinstance(screen_data, dict) and "sub_pages" in screen_data:
+            # Cấu trúc mới: sub_pages > machine_code > sub_page > special_region
+            if machine_code not in screen_data["sub_pages"]:
+                print(f"Machine code '{machine_code}' not found in sub_pages")
+                return []
+            
+            if sub_page:
+                # Lấy special_region của sub-page cụ thể
+                if sub_page in screen_data["sub_pages"][machine_code]:
+                    regions = screen_data["sub_pages"][machine_code][sub_page].get("special_region", [])
+                    print(f"Found {len(regions)} special regions for {machine_code}/{screen_name}/sub-page {sub_page} (new structure)")
+                    return regions
+                else:
+                    print(f"Sub-page '{sub_page}' not found for {machine_code}/{screen_name}")
+                    return []
+            else:
+                # Lấy special_region của tất cả sub-pages (để OCR xác định sub-page)
+                # Lấy sub-page 1 (mặc định để OCR)
+                for sp in ["1", "2"]:
+                    if sp in screen_data["sub_pages"][machine_code]:
+                        regions = screen_data["sub_pages"][machine_code][sp].get("special_region", [])
+                        if regions:
+                            print(f"Found {len(regions)} special regions for {machine_code}/{screen_name}/sub-page {sp} (for detection)")
+                            return regions
+                print(f"No special regions found for any sub-page of {machine_code}/{screen_name}")
+                return []
+        else:
+            # Cấu trúc cũ (special_regions riêng)
+            if ("special_regions" in roi_data["machines"][machine_type] and
+                machine_code in roi_data["machines"][machine_type]["special_regions"] and
+                screen_name in roi_data["machines"][machine_type]["special_regions"][machine_code]):
+                
+                regions = roi_data["machines"][machine_type]["special_regions"][machine_code][screen_name]
+                print(f"Found {len(regions)} special regions for {machine_code}/{screen_name} (old structure)")
+                return regions
+            
+            print(f"No special regions found for {machine_code}/{screen_name}")
+            return []
+    except Exception as e:
+        print(f"Error reading special region coordinates: {str(e)}")
+        traceback.print_exc()
+        return []
+
+
 def get_machine_type(machine_code):
     """
     Lấy loại máy (machine_type) từ mã máy (machine_code)
@@ -294,6 +458,46 @@ def get_reference_template_path(machine_type, screen_id):
         return None
     except Exception as e:
         print(f"Error getting reference template path: {str(e)}")
+        return None
+
+
+def get_reference_template_path_with_subpage(machine_type, screen_id, sub_page=None):
+    """
+    Tìm đường dẫn template ảnh tham chiếu cho machine_type, screen_id và sub_page
+    
+    Args:
+        machine_type: Loại máy (F1, F41, F42)
+        screen_id: Tên màn hình
+        sub_page: Sub-page (1, 2) cho màn hình có nhiều trang
+        
+    Returns:
+        str: Đường dẫn template hoặc None
+    """
+    try:
+        reference_folder = os.path.join(get_roi_data_folder(), 'reference_images')
+        if not os.path.exists(reference_folder):
+            return None
+        
+        # Nếu có sub_page, tìm template riêng cho từng trang
+        if sub_page:
+            template_filename = f"template_{machine_type}_{screen_id}_page{sub_page}.jpg"
+            template_path = os.path.join(reference_folder, template_filename)
+            
+            if os.path.exists(template_path):
+                return template_path
+            
+            # Thử với extension .png
+            template_filename = f"template_{machine_type}_{screen_id}_page{sub_page}.png"
+            template_path = os.path.join(reference_folder, template_filename)
+            
+            if os.path.exists(template_path):
+                return template_path
+        
+        # Fallback: tìm template chung (không có sub_page)
+        return get_reference_template_path(machine_type, screen_id)
+        
+    except Exception as e:
+        print(f"Error getting reference template path with subpage: {str(e)}")
         return None
 
 

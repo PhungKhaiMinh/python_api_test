@@ -337,9 +337,9 @@ curl http://localhost:5000/
 Kiểm tra trạng thái server.
 
 **Response:**
-```json
-{
-  "status": "Server is running",
+  ```json
+  {
+      "status": "Server is running",
   "version": "2.0 - Refactored",
   "endpoints": [...]
 }
@@ -352,8 +352,8 @@ Thông tin debug chi tiết về routes và cấu hình.
 Thông tin hiệu năng và GPU.
 
 **Response:**
-```json
-{
+  ```json
+  {
   "timestamp": "2025-10-03 10:30:00",
   "gpu_available": true,
   "gpu_info": {
@@ -364,9 +364,9 @@ Thông tin hiệu năng và GPU.
   "ocr": {
     "easyocr_available": true,
     "gpu_enabled": true
+      }
   }
-}
-```
+  ```
 
 #### `GET /api/history?limit=10`
 Lấy lịch sử OCR.
@@ -392,8 +392,8 @@ curl -X POST http://localhost:5000/api/images \
 ```
 
 **Response:**
-```json
-{
+  ```json
+  {
   "success": true,
   "filename": "1696320000_test_image.jpg",
   "machine_code": "F41",
@@ -458,8 +458,8 @@ curl http://localhost:5000/api/machine_screens/F41
 ```
 
 **Response:**
-```json
-{
+  ```json
+  {
   "machine_code": "F41",
   "machine_type": "F41",
   "machine_name": "Máy ép F41",
@@ -474,8 +474,8 @@ curl http://localhost:5000/api/machine_screens/F41
 Đặt máy và màn hình hiện tại.
 
 **Request (JSON):**
-```json
-{
+  ```json
+  {
   "machine_code": "F41",
   "screen_id": "Production"
 }
@@ -506,17 +506,17 @@ Lấy tất cả cấu hình số thập phân.
 Cập nhật cấu hình số thập phân.
 
 **Request (JSON):**
-```json
-{
+  ```json
+  {
   "machine_code": "F41",
   "screen_id": "Production",
   "roi_config": {
     "Temperature": 1,
     "Pressure": 2,
     "Speed": 0
+      }
   }
-}
-```
+  ```
 
 #### `GET /api/decimal_places/<machine_code>`
 Lấy cấu hình theo máy.
@@ -564,8 +564,8 @@ Xóa ảnh template.
 Cấu hình máy móc và màn hình.
 
 **Cấu trúc:**
-```json
-{
+  ```json
+  {
   "areas": {
     "AREA1": {
       "name": "Khu vực 1",
@@ -588,16 +588,16 @@ Cấu hình máy móc và màn hình.
         }
       ]
     }
+      }
   }
-}
-```
+  ```
 
 #### 2. `roi_data/roi_info.json`
 Tọa độ ROI cho từng màn hình.
 
 **Cấu trúc:**
-```json
-{
+  ```json
+  {
   "machines": {
     "F41": {
       "screens": {
@@ -621,17 +621,17 @@ Tọa độ ROI cho từng màn hình.
 #### 3. `roi_data/decimal_places.json`
 Cấu hình số chữ số thập phân.
 
-```json
-{
+  ```json
+  {
   "F41": {
     "Production": {
       "Temperature": 1,
       "Pressure": 2,
       "Speed": 0
     }
+      }
   }
-}
-```
+  ```
 
 ### Thay Đổi Port
 
