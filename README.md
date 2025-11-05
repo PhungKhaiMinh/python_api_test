@@ -1,7 +1,7 @@
 # HMI OCR API Server - Hướng Dẫn Đầy Đủ
 
 **Phiên bản:** 2.0 - Refactored  
-**Cập nhật:** October 3, 2025  
+**Cập nhật:** November 5, 2025  
 **Trạng thái:** ✅ Sẵn sàng Production
 
 ---
@@ -35,7 +35,10 @@
 ✅ **Căn chỉnh ảnh tự động**: SIFT-based perspective correction  
 ✅ **Xử lý song song**: Multi-threading với 24 workers  
 ✅ **Cache thông minh**: Template và configuration caching  
-✅ **RESTful API**: 30 endpoints đầy đủ tính năng
+✅ **RESTful API**: 30 API endpoints đầy đủ tính năng  
+✅ **Swagger UI**: Tài liệu API tương tác tại `/apidocs`  
+✅ **Sub-page Detection**: Hỗ trợ Reject_Summary với nhiều sub-pages  
+✅ **History Filtering**: Lọc lịch sử OCR theo machine_code, area, screen_id, time range
 
 ---
 
@@ -321,11 +324,29 @@ Mở browser và truy cập:
 - http://localhost:5000/ - Trang chủ
 - http://localhost:5000/debug - Thông tin debug
 - http://localhost:5000/api/performance - Thông tin hiệu năng
+- **http://localhost:5000/apidocs** - **Swagger UI** (Tài liệu API tương tác)
 
 Hoặc dùng curl:
 ```bash
 curl http://localhost:5000/
 ```
+
+### Swagger UI - Tài liệu API
+
+Hệ thống tích hợp **Swagger UI** để xem và test API trực tiếp trên trình duyệt.
+
+**Truy cập**: http://localhost:5000/apidocs
+
+**Tính năng:**
+- ✅ Xem tất cả 30 API endpoints được phân loại theo tags
+- ✅ Xem chi tiết parameters, request/response format
+- ✅ Test API trực tiếp trong trình duyệt
+- ✅ Tải OpenAPI spec (JSON) tại `/apispec.json`
+
+**Cấu trúc Swagger:**
+- `utils/swagger_config.py` - Cấu hình Swagger UI
+- `utils/swagger_specs.py` - Tất cả Swagger specifications
+- Tài liệu chi tiết: Xem `SWAGGER_DOCUMENTATION.md`
 
 ---
 
@@ -368,12 +389,41 @@ Thông tin hiệu năng và GPU.
   }
   ```
 
-#### `GET /api/history?limit=10`
-Lấy lịch sử OCR.
+#### `GET /api/history`
+Lấy lịch sử OCR với filtering.
+
+**Query Parameters (Required):**
+- `start_time`: Thời gian bắt đầu (YYYY-MM-DD hoặc YYYY-MM-DD HH:MM:SS)
+- `end_time`: Thời gian kết thúc (YYYY-MM-DD hoặc YYYY-MM-DD HH:MM:SS)
+
+**Query Parameters (Optional):**
+- `machine_code`: Lọc theo mã máy (ví dụ: "IE-F1-CWA01")
+- `area`: Lọc theo khu vực (ví dụ: "F1", "F4")
+- `screen_id`: Lọc theo screen ID (ví dụ: "Production_Data")
+- `limit`: Số lượng kết quả tối đa (mặc định: 100)
+
+**Example:**
+```bash
+curl "http://localhost:5000/api/history?start_time=2025-11-01&end_time=2025-11-05&machine_code=IE-F1-CWA01&limit=50"
+```
+
+**Response:**
+```json
+{
+  "history": [...],
+  "count": 25,
+  "limit": 50,
+  "filters_applied": {
+    "start_time": "2025-11-01",
+    "end_time": "2025-11-05",
+    "machine_code": "IE-F1-CWA01"
+  }
+}
+```
 
 ---
 
-### 2. Image Processing Endpoints (8 endpoints)
+### 2. Image Processing Endpoints (5 endpoints)
 
 #### `POST /api/images`
 Upload và xử lý ảnh HMI.
@@ -422,17 +472,8 @@ Lấy file ảnh cụ thể.
 #### `DELETE /api/images/<filename>`
 Xóa file ảnh.
 
-#### `GET /api/images/processed_roi/<filename>`
-Lấy ảnh ROI đã xử lý.
-
-#### `GET /api/images/hmi_refined/<filename>`
-Lấy ảnh HMI đã tinh chỉnh.
-
-#### `GET /api/images/aligned/<filename>`
-Lấy ảnh đã căn chỉnh perspective.
-
 #### `GET /api/images/hmi_detection/<filename>`
-Lấy ảnh kết quả phát hiện HMI.
+Lấy ảnh visualization kết quả phát hiện HMI.
 
 ---
 
@@ -497,7 +538,7 @@ Kiểm tra trạng thái cấu hình máy/màn hình.
 
 ---
 
-### 4. Decimal Configuration Endpoints (7 endpoints)
+### 4. Decimal Configuration Endpoints (10 endpoints)
 
 #### `GET /api/decimal_places`
 Lấy tất cả cấu hình số thập phân.
@@ -532,6 +573,34 @@ Cập nhật cấu hình cho màn hình cụ thể.
 
 #### `POST /api/set_all_decimal_values`
 Đặt tất cả giá trị số thập phân cho màn hình.
+
+#### `GET /api/decimal_places/<machine_type>/Reject_Summary/<machine_code>`
+Lấy decimal places cho tất cả sub-pages của một machine_code trong Reject_Summary.
+
+**Example:**
+```bash
+curl "http://localhost:5000/api/decimal_places/F1/Reject_Summary/IE-F1-CWA01"
+```
+
+#### `GET /api/decimal_places/<machine_type>/Reject_Summary/<machine_code>/<sub_page>`
+Lấy decimal places cho một sub-page cụ thể của Reject_Summary.
+
+**Example:**
+```bash
+curl "http://localhost:5000/api/decimal_places/F1/Reject_Summary/IE-F1-CWA01/1"
+```
+
+#### `POST /api/decimal_places/<machine_type>/Reject_Summary/<machine_code>/<sub_page>`
+Cập nhật decimal places cho một sub-page cụ thể của Reject_Summary.
+
+**Request (JSON):**
+```json
+{
+  "tested": 0,
+  "reject": 0,
+  "phantram": 0
+}
+```
 
 ---
 

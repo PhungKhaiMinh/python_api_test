@@ -186,6 +186,11 @@ def detect_sub_page_from_special_region(image, machine_type, machine_code, scree
 def upload_image():
     """Upload image và thực hiện OCR"""
     try:
+        from utils.swagger_specs import get_upload_image_spec
+        upload_image.__doc__ = get_upload_image_spec().strip()
+    except:
+        pass
+    try:
         # Check file
         if 'file' not in request.files:
             return jsonify({"error": "No file provided"}), 400
@@ -243,10 +248,10 @@ def upload_image():
         
         print(f"[OK] Detected: {machine_type} - {screen_id}")
         
-        # BƯỚC 3: Detect sub-page nếu là màn hình "Reject Summary"
+        # BƯỚC 3: Detect sub-page nếu là màn hình "Reject_Summary"
         sub_page = None
-        if screen_id == "Reject Summary":
-            print("[*] Detecting sub-page for Reject Summary...")
+        if screen_id == "Reject_Summary":
+            print("[*] Detecting sub-page for Reject_Summary...")
             # ← QUAN TRỌNG: Sử dụng hmi_image (HMI đã tách) để phát hiện sub-page
             sub_page = detect_sub_page_from_special_region(hmi_image, machine_type, machine_code, screen_id)
             if sub_page:
@@ -375,6 +380,11 @@ def upload_image():
 def get_images():
     """Get list of uploaded images"""
     try:
+        from utils.swagger_specs import get_images_list_spec
+        get_images.__doc__ = get_images_list_spec().strip()
+    except:
+        pass
+    try:
         if not os.path.exists(UPLOAD_FOLDER):
             return jsonify({"images": []}), 200
         
@@ -390,6 +400,11 @@ def get_images():
 def get_image(filename):
     """Get specific image file"""
     try:
+        from utils.swagger_specs import get_image_spec
+        get_image.__doc__ = get_image_spec().strip()
+    except:
+        pass
+    try:
         return send_from_directory(UPLOAD_FOLDER, filename)
     except:
         abort(404)
@@ -398,6 +413,11 @@ def get_image(filename):
 @image_bp.route('/api/images/<filename>', methods=['DELETE'])
 def delete_image(filename):
     """Delete image file"""
+    try:
+        from utils.swagger_specs import get_delete_image_spec
+        delete_image.__doc__ = get_delete_image_spec().strip()
+    except:
+        pass
     try:
         filepath = os.path.join(UPLOAD_FOLDER, filename)
         if os.path.exists(filepath):
@@ -408,38 +428,14 @@ def delete_image(filename):
         return jsonify({"error": str(e)}), 500
 
 
-@image_bp.route('/api/images/processed_roi/<filename>', methods=['GET'])
-def get_processed_roi(filename):
-    """Get processed ROI image"""
-    processed_folder = os.path.join(UPLOAD_FOLDER, 'processed_roi')
-    try:
-        return send_from_directory(processed_folder, filename)
-    except:
-        abort(404)
-
-
-@image_bp.route('/api/images/hmi_refined/<filename>', methods=['GET'])
-def get_hmi_refined_image(filename):
-    """Get HMI refined image"""
-    try:
-        return send_from_directory(HMI_REFINED_FOLDER, filename)
-    except:
-        abort(404)
-
-
-@image_bp.route('/api/images/aligned/<filename>', methods=['GET'])
-def get_aligned_image(filename):
-    """Get aligned image"""
-    aligned_folder = os.path.join(UPLOAD_FOLDER, 'aligned')
-    try:
-        return send_from_directory(aligned_folder, filename)
-    except:
-        abort(404)
-
-
 @image_bp.route('/api/images/hmi_detection/<filename>', methods=['GET'])
 def get_hmi_detection_image(filename):
     """Get HMI detection image"""
+    try:
+        from utils.swagger_specs import get_hmi_detection_spec
+        get_hmi_detection_image.__doc__ = get_hmi_detection_spec().strip()
+    except:
+        pass
     try:
         return send_from_directory(UPLOAD_FOLDER, filename)
     except:

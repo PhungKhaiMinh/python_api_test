@@ -1,6 +1,6 @@
 {
   "F1": {
-    "Production Data": {
+    "Production_Data": {
       "Total_time hour": 0,
       "Total_time minute": 0,
       "Total_time second": 0,
@@ -29,7 +29,7 @@
       "Line OEE": 2,
       "Machine OEE": 2
     },
-    "Feeders and Conveyors": {
+    "Feeders_and_Conveyors": {
       "FC 03.04 Linear Empty": 0,
       "FC 03.04 Linear No Empty": 0,
       "FC 03.05 Linear Full": 0,
@@ -38,7 +38,7 @@
       "375.A1 Linear": 0,
       "EV 03.06 Clamp": 0
     },
-    "Main Machine Parameters": {
+    "Main_Machine_Parameters": {
       "Enable": 0,
       "Brake": 0,
       "EN.Home": 0,
@@ -63,7 +63,7 @@
       "Jerk_3": 0,
       "Start_3": 0
     },
-    "Reject Summary": {
+    "Reject_Summary": {
       "ROI_0": 0,
       "IE-F1-CWA01": {
         "1": {

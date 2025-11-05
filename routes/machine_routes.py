@@ -18,6 +18,11 @@ machine_bp = Blueprint('machine', __name__)
 def get_machine_info_route():
     """Get machine information"""
     try:
+        from utils.swagger_specs import get_machines_spec
+        get_machine_info_route.__doc__ = get_machines_spec().strip()
+    except:
+        pass
+    try:
         machine_screens_path = os.path.join(get_roi_data_folder(), 'machine_screens.json')
         
         if not os.path.exists(machine_screens_path):
@@ -50,6 +55,11 @@ def get_machine_info_route():
 def get_machines_by_area(area_code):
     """Get machines for specific area"""
     try:
+        from utils.swagger_specs import get_machines_by_area_spec
+        get_machines_by_area.__doc__ = get_machines_by_area_spec().strip()
+    except:
+        pass
+    try:
         machine_screens_path = os.path.join(get_roi_data_folder(), 'machine_screens.json')
         
         with open(machine_screens_path, 'r', encoding='utf-8') as f:
@@ -73,6 +83,11 @@ def get_machines_by_area(area_code):
 @machine_bp.route('/api/machine_screens/<machine_code>', methods=['GET'])
 def get_machine_screens(machine_code):
     """Get screens for specific machine"""
+    try:
+        from utils.swagger_specs import get_machine_screens_spec
+        get_machine_screens.__doc__ = get_machine_screens_spec().strip()
+    except:
+        pass
     try:
         machine_screens_path = os.path.join(get_roi_data_folder(), 'machine_screens.json')
         
@@ -108,6 +123,11 @@ def get_machine_screens(machine_code):
 def set_machine_screen():
     """Set current machine and screen"""
     try:
+        from utils.swagger_specs import get_set_machine_screen_spec
+        set_machine_screen.__doc__ = get_set_machine_screen_spec().strip()
+    except:
+        pass
+    try:
         if not request.is_json:
             return jsonify({"error": "Request must be JSON"}), 400
         
@@ -138,6 +158,11 @@ def set_machine_screen():
 def get_current_machine_screen():
     """Get current machine and screen"""
     try:
+        from utils.swagger_specs import get_current_machine_screen_spec
+        get_current_machine_screen.__doc__ = get_current_machine_screen_spec().strip()
+    except:
+        pass
+    try:
         machine_info = get_current_machine_info()
         
         return jsonify(machine_info), 200
@@ -149,6 +174,11 @@ def get_current_machine_screen():
 @machine_bp.route('/api/machine_screen_status', methods=['GET'])
 def check_machine_screen_status():
     """Check if machine and screen are configured"""
+    try:
+        from utils.swagger_specs import get_machine_screen_status_spec
+        check_machine_screen_status.__doc__ = get_machine_screen_status_spec().strip()
+    except:
+        pass
     try:
         machine_info = get_current_machine_info()
         
@@ -170,6 +200,11 @@ def check_machine_screen_status():
 @machine_bp.route('/api/update_machine_screen', methods=['POST'])
 def update_machine_screen():
     """Update machine and screen with parameter_order_value.txt"""
+    try:
+        from utils.swagger_specs import get_update_machine_screen_spec
+        update_machine_screen.__doc__ = get_update_machine_screen_spec().strip()
+    except:
+        pass
     try:
         if 'machine_code' not in request.form or 'screen_id' not in request.form:
             return jsonify({

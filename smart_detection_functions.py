@@ -336,13 +336,13 @@ def detect_hmi_screen_optimized(image: np.ndarray) -> Tuple[Optional[np.ndarray]
             # Step 6: Extend lines
             extended_h_lines = extend_lines(horizontal_lines, width, height)
             extended_v_lines = extend_lines(vertical_lines, width, height)
-            
+        
             # Step 7: Find intersections
             intersections = find_intersections(extended_h_lines, extended_v_lines)
-            
+        
             if len(intersections) < 4:
-                return None, time.time() - start_time
-            
+            return None, time.time() - start_time
+        
             # Step 8: Find largest rectangle from intersections
             largest_rectangle = find_largest_rectangle(intersections, image.shape)
             
@@ -1228,13 +1228,13 @@ def _normalize_screen_name(predicted_screen: str, machine_type: str) -> str:
     # Screen name mappings để fix inconsistency giữa classifier và config
     screen_mappings = {
         'F1': {
-            'main': 'Main Machine Parameters',
-            'feeder': 'Feeders and Conveyors', 
-            'feeders': 'Feeders and Conveyors',
-            'data': 'Production Data',
-            'production': 'Production Data',
-            'maintenance': 'Selectors and Maintenance',
-            'selectors': 'Selectors and Maintenance',
+            'main': 'Main_Machine_Parameters',
+            'feeder': 'Feeders_and_Conveyors', 
+            'feeders': 'Feeders_and_Conveyors',
+            'data': 'Production_Data',
+            'production': 'Production_Data',
+            'maintenance': 'Selectors_and_Maintenance',
+            'selectors': 'Selectors_and_Maintenance',
             'faults': 'Faults',
             'fault': 'Faults'
         },

@@ -9,6 +9,8 @@ import cv2
 import concurrent.futures
 from multiprocessing import cpu_count
 import threading
+from datetime import datetime
+import json
 
 # Import utils modules
 from utils import initialize_all_caches
@@ -92,6 +94,15 @@ if OPTIMIZATION_MODULES_AVAILABLE and is_gpu_available():
 # Initialize Flask app
 app = Flask(__name__)
 
+# Initialize Swagger UI
+try:
+    from utils.swagger_config import init_swagger
+    from utils.swagger_specs import get_history_spec
+    swagger = init_swagger(app)
+    SWAGGER_AVAILABLE = True
+except ImportError:
+    SWAGGER_AVAILABLE = False
+
 # Configuration
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
 ROI_DATA_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'roi_data')
@@ -126,6 +137,72 @@ init_ocr_globals(HAS_EASYOCR, reader, _gpu_accelerator, _ocr_thread_pool)
 init_image_routes(UPLOAD_FOLDER, HMI_REFINED_FOLDER, app.config['ALLOWED_EXTENSIONS'])
 init_reference_routes(REFERENCE_IMAGES_FOLDER, app.config['ALLOWED_EXTENSIONS'])
 
+# Inject Swagger docstrings before registering blueprints
+# This ensures Flasgger can read the docstrings when scanning routes
+if SWAGGER_AVAILABLE:
+    try:
+        from utils.swagger_specs import (
+            # Machine routes
+            get_machines_spec, get_machines_by_area_spec, get_machine_screens_spec,
+            get_set_machine_screen_spec, get_current_machine_screen_spec,
+            get_machine_screen_status_spec, get_update_machine_screen_spec,
+            # Reference routes
+            get_reference_images_post_spec, get_reference_images_list_spec,
+            get_reference_image_spec, get_delete_reference_image_spec,
+            # Image routes
+            get_upload_image_spec, get_images_list_spec, get_image_spec,
+            get_delete_image_spec, get_hmi_detection_spec,
+            # Decimal routes
+            get_decimal_places_all_spec, get_decimal_places_post_spec,
+            get_decimal_places_machine_spec, get_decimal_places_screen_spec,
+            get_decimal_places_screen_post_spec, get_set_decimal_value_spec,
+            get_set_all_decimal_values_spec, get_decimal_places_reject_summary_machine_spec,
+            get_decimal_places_reject_summary_subpage_get_spec, get_decimal_places_reject_summary_subpage_post_spec
+        )
+        
+        # Inject docstrings directly
+        from routes import machine_routes, reference_routes, image_routes, decimal_routes
+        
+        # Machine routes
+        machine_routes.get_machine_info_route.__doc__ = get_machines_spec().strip()
+        machine_routes.get_machines_by_area.__doc__ = get_machines_by_area_spec().strip()
+        machine_routes.get_machine_screens.__doc__ = get_machine_screens_spec().strip()
+        machine_routes.set_machine_screen.__doc__ = get_set_machine_screen_spec().strip()
+        machine_routes.get_current_machine_screen.__doc__ = get_current_machine_screen_spec().strip()
+        machine_routes.check_machine_screen_status.__doc__ = get_machine_screen_status_spec().strip()
+        machine_routes.update_machine_screen.__doc__ = get_update_machine_screen_spec().strip()
+        
+        # Reference routes
+        reference_routes.upload_reference_image.__doc__ = get_reference_images_post_spec().strip()
+        reference_routes.get_reference_images.__doc__ = get_reference_images_list_spec().strip()
+        reference_routes.get_reference_image.__doc__ = get_reference_image_spec().strip()
+        reference_routes.delete_reference_image.__doc__ = get_delete_reference_image_spec().strip()
+        
+        # Image routes
+        image_routes.upload_image.__doc__ = get_upload_image_spec().strip()
+        image_routes.get_images.__doc__ = get_images_list_spec().strip()
+        image_routes.get_image.__doc__ = get_image_spec().strip()
+        image_routes.delete_image.__doc__ = get_delete_image_spec().strip()
+        image_routes.get_hmi_detection_image.__doc__ = get_hmi_detection_spec().strip()
+        
+        # Decimal routes
+        decimal_routes.get_decimal_places.__doc__ = get_decimal_places_all_spec().strip()
+        decimal_routes.update_decimal_places.__doc__ = get_decimal_places_post_spec().strip()
+        decimal_routes.get_decimal_places_for_machine.__doc__ = get_decimal_places_machine_spec().strip()
+        decimal_routes.get_decimal_places_for_screen.__doc__ = get_decimal_places_screen_spec().strip()
+        decimal_routes.update_decimal_places_for_screen.__doc__ = get_decimal_places_screen_post_spec().strip()
+        decimal_routes.set_decimal_value.__doc__ = get_set_decimal_value_spec().strip()
+        decimal_routes.set_all_decimal_values.__doc__ = get_set_all_decimal_values_spec().strip()
+        decimal_routes.get_decimal_places_for_reject_summary_machine.__doc__ = get_decimal_places_reject_summary_machine_spec().strip()
+        decimal_routes.get_decimal_places_for_reject_summary_subpage.__doc__ = get_decimal_places_reject_summary_subpage_get_spec().strip()
+        decimal_routes.update_decimal_places_for_reject_summary_subpage.__doc__ = get_decimal_places_reject_summary_subpage_post_spec().strip()
+        
+        print("[OK] Swagger docstrings injected before route registration")
+    except Exception as e:
+        import traceback
+        print(f"[WARNING] Failed to pre-inject Swagger docs: {e}")
+        traceback.print_exc()
+
 # Register blueprints
 app.register_blueprint(image_bp)
 app.register_blueprint(machine_bp)
@@ -135,6 +212,7 @@ app.register_blueprint(reference_bp)
 # Basic routes
 @app.route('/')
 def home():
+    """Get server status and available endpoints"""
     return jsonify({
         "status": "Server is running",
         "version": "2.0 - Refactored",
@@ -204,30 +282,204 @@ def get_performance_stats():
 
 @app.route('/api/history', methods=['GET'])
 def get_history():
-    """Get OCR history"""
+    """Get OCR history with filtering support"""
     try:
-        limit = int(request.args.get('limit', 10))
+        # Required parameters
+        start_time_str = request.args.get('start_time', '').strip()
+        end_time_str = request.args.get('end_time', '').strip()
+        
+        if not start_time_str or not end_time_str:
+            return jsonify({
+                "error": "start_time and end_time are required parameters",
+                "example": "/api/history?start_time=2025-10-03&end_time=2025-10-05"
+            }), 400
+        
+        # Optional parameters
+        machine_code_filter = request.args.get('machine_code', '').strip().upper()
+        area_filter = request.args.get('area', '').strip().upper()
+        screen_id_filter = request.args.get('screen_id', '').strip()
+        limit = int(request.args.get('limit', 100))
+        
+        # Parse time filters
+        start_time = None
+        end_time = None
+        
+        try:
+            # Try parsing with seconds first
+            try:
+                start_time = datetime.strptime(start_time_str, "%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                # Fall back to date only
+                start_time = datetime.strptime(start_time_str, "%Y-%m-%d")
+        except ValueError:
+            return jsonify({
+                "error": "Invalid start_time format. Use YYYY-MM-DD or YYYY-MM-DD HH:MM:SS",
+                "received": start_time_str
+            }), 400
+        
+        try:
+            # Try parsing with seconds first
+            try:
+                end_time = datetime.strptime(end_time_str, "%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                # Fall back to date only
+                end_time = datetime.strptime(end_time_str, "%Y-%m-%d")
+                # If only date provided, set to end of day
+                end_time = end_time.replace(hour=23, minute=59, second=59)
+        except ValueError:
+            return jsonify({
+                "error": "Invalid end_time format. Use YYYY-MM-DD or YYYY-MM-DD HH:MM:SS",
+                "received": end_time_str
+            }), 400
+        
+        # Validate time range
+        if start_time > end_time:
+            return jsonify({
+                "error": "start_time cannot be greater than end_time",
+                "start_time": start_time_str,
+                "end_time": end_time_str
+            }), 400
         
         if not os.path.exists(OCR_RESULTS_FOLDER):
-            return jsonify({"history": []}), 200
+            return jsonify({
+                "history": [],
+                "count": 0,
+                "filters_applied": {
+                    "start_time": start_time_str,
+                    "end_time": end_time_str,
+                    "machine_code": machine_code_filter if machine_code_filter else None,
+                    "area": area_filter if area_filter else None,
+                    "screen_id": screen_id_filter if screen_id_filter else None
+                }
+            }), 200
         
+        # Get all JSON files
         files = [f for f in os.listdir(OCR_RESULTS_FOLDER) if f.endswith('.json')]
-        files.sort(reverse=True)  # Most recent first
-        files = files[:limit]
         
         history = []
         for filename in files:
             try:
-                import json
-                with open(os.path.join(OCR_RESULTS_FOLDER, filename), 'r', encoding='utf-8') as f:
+                file_path = os.path.join(OCR_RESULTS_FOLDER, filename)
+                with open(file_path, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                    history.append(data)
-            except:
+                
+                # Filter by timestamp (required)
+                file_timestamp_str = data.get('timestamp', '')
+                file_timestamp = None
+                
+                if file_timestamp_str:
+                    try:
+                        # Try parsing with seconds first
+                        try:
+                            file_timestamp = datetime.strptime(file_timestamp_str, "%Y-%m-%d %H:%M:%S")
+                        except ValueError:
+                            # Fall back to date only
+                            file_timestamp = datetime.strptime(file_timestamp_str, "%Y-%m-%d")
+                    except (ValueError, TypeError):
+                        pass
+                
+                # If no timestamp in file, try using file creation time
+                if file_timestamp is None:
+                    try:
+                        file_timestamp = datetime.fromtimestamp(os.path.getctime(file_path))
+                    except:
+                        continue
+                
+                # Check if timestamp is within range
+                if file_timestamp < start_time or file_timestamp > end_time:
+                    continue
+                
+                # Apply optional filters
+                # Filter by machine_code
+                if machine_code_filter:
+                    file_machine_code = data.get('machine_code', '').upper()
+                    if machine_code_filter not in file_machine_code and file_machine_code != machine_code_filter:
+                        continue
+                
+                # Filter by area
+                if area_filter:
+                    file_area = data.get('area', '').upper()
+                    if file_area != area_filter:
+                        continue
+                
+                # Filter by screen_id
+                if screen_id_filter:
+                    file_screen_id = data.get('screen_id', '')
+                    if file_screen_id != screen_id_filter:
+                        continue
+                
+                # Add filename for reference
+                data['filename'] = filename
+                history.append(data)
+                
+            except (json.JSONDecodeError, Exception) as e:
+                print(f"Error reading file {filename}: {str(e)}")
                 continue
         
-        return jsonify({"history": history}), 200
+        # Sort by timestamp (most recent first)
+        def get_sort_key(item):
+            timestamp_str = item.get('timestamp', '')
+            if timestamp_str:
+                try:
+                    try:
+                        return datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
+                    except ValueError:
+                        return datetime.strptime(timestamp_str, "%Y-%m-%d")
+                except:
+                    pass
+            # Fall back to filename if timestamp unavailable
+            return datetime.min
+        
+        history.sort(key=get_sort_key, reverse=True)
+        
+        # Apply limit
+        history = history[:limit]
+        
+        # Prepare response with filter info
+        filters_applied = {
+            "start_time": start_time_str,
+            "end_time": end_time_str
+        }
+        
+        if machine_code_filter:
+            filters_applied['machine_code'] = machine_code_filter
+        if area_filter:
+            filters_applied['area'] = area_filter
+        if screen_id_filter:
+            filters_applied['screen_id'] = screen_id_filter
+        
+        return jsonify({
+            "history": history,
+            "count": len(history),
+            "limit": limit,
+            "filters_applied": filters_applied
+        }), 200
+        
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
+
+# Inject Swagger docstrings for System and History routes
+# This ensures Flasgger can read the docstrings when scanning routes
+if SWAGGER_AVAILABLE:
+    try:
+        from utils.swagger_specs import (
+            get_home_spec, get_debug_spec, get_performance_spec, get_history_spec
+        )
+        
+        # Inject docstrings for System and History routes
+        home.__doc__ = get_home_spec().strip()
+        debug_info.__doc__ = get_debug_spec().strip()
+        get_performance_stats.__doc__ = get_performance_spec().strip()
+        get_history.__doc__ = get_history_spec().strip()
+        
+        print("[OK] Swagger docstrings injected for System and History routes")
+    except Exception as e:
+        import traceback
+        print(f"[WARNING] Failed to inject System/History Swagger docs: {e}")
+        traceback.print_exc()
 
 
 if __name__ == '__main__':

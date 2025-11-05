@@ -3302,7 +3302,7 @@
     },
     "F1": {
       "screens": {
-        "Production Data": [
+        "Production_Data": [
           {
             "name": "Total_time hour",
             "coordinates": [
@@ -3574,7 +3574,7 @@
             "allowed_values": []
           }
         ],
-        "Feeders and Conveyors": [
+        "Feeders_and_Conveyors": [
           {
             "name": "FC 03.04 Linear Empty",
             "coordinates": [
@@ -3646,7 +3646,7 @@
             "allowed_values": []
           }
         ],
-        "Main Machine Parameters": [
+        "Main_Machine_Parameters": [
           {
             "name": "Enable",
             "coordinates": [
@@ -3890,7 +3890,7 @@
             "allowed_values": []
           }
         ],
-        "Reject Summary": {
+        "Reject_Summary": {
           "sub_pages": {
             "IE-F1-CWA01": {
               "1": {
@@ -4014,7 +4014,7 @@
     },
     "null": {
       "screens": {
-        "Production Data": [
+        "Production_Data": [
           [
             0.6286458333333333,
             0.018359375,

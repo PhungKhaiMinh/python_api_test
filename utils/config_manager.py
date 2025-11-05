@@ -35,10 +35,10 @@ def get_roi_coordinates(machine_code, screen_id=None, machine_type=None):
         screen_name = None
         
         # Kiểm tra xem screen_id có phải là tên màn hình không
-        if isinstance(screen_id, str) and screen_id in ["Production Data", "Faults", "Feeders and Conveyors", 
-                                                  "Main Machine Parameters", "Selectors and Maintenance",
+        if isinstance(screen_id, str) and screen_id in ["Production_Data", "Faults", "Feeders_and_Conveyors", 
+                                                  "Main_Machine_Parameters", "Selectors_and_Maintenance",
                                                   "Setting", "Temp", "Plasticizer", "Overview", "Tracking", "Production", 
-                                                  "Clamp", "Ejector", "Injection"]:
+                                                  "Clamp", "Ejector", "Injection", "Reject_Summary"]:
             screen_name = screen_id
             print(f"Using screen_id as screen_name: {screen_name}")
         elif screen_id is not None:

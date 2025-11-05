@@ -2,7 +2,7 @@
 
 **Dành cho**: Developers và Technical Team  
 **Phiên bản**: 2.0 - Refactored  
-**Ngày cập nhật**: October 3, 2025
+**Ngày cập nhật**: November 5, 2025
 
 ---
 
@@ -47,7 +47,7 @@ File `app_original.py` ban đầu có **5758 dòng code** trong 1 file duy nhấ
 | **Maintainability** | ⭐⭐ (2/5) | ⭐⭐⭐⭐⭐ (5/5) | **+150%** |
 | **Testability** | ⭐⭐ (2/5) | ⭐⭐⭐⭐⭐ (5/5) | **+150%** |
 | **Performance** | ⚡⚡⚡⚡⚡ (5/5) | ⚡⚡⚡⚡⚡ (5/5) | **0% (preserved)** |
-| **API Endpoints** | 30 | 30 | **100% preserved** |
+| **API Endpoints** | 30 | 30 | **100% preserved + Swagger UI** |
 | **Functions** | 85+ | 85+ | **100% migrated** |
 
 ---
@@ -122,14 +122,11 @@ python_api_test/
 │   │
 │   ├── __init__.py                       # Export all routes
 │   │
-│   ├── image_routes.py (202 lines)      # 📷 Image APIs
+│   ├── image_routes.py (444 lines)      # 📷 Image APIs
 │   │   ├── POST   /api/images
 │   │   ├── GET    /api/images
 │   │   ├── GET    /api/images/<filename>
 │   │   ├── DELETE /api/images/<filename>
-│   │   ├── GET    /api/images/processed_roi/<filename>
-│   │   ├── GET    /api/images/hmi_refined/<filename>
-│   │   ├── GET    /api/images/aligned/<filename>
 │   │   └── GET    /api/images/hmi_detection/<filename>
 │   │
 │   ├── machine_routes.py (254 lines)    # 🏭 Machine Management APIs
@@ -141,14 +138,17 @@ python_api_test/
 │   │   ├── GET    /api/current_machine_screen
 │   │   └── GET    /api/machine_screen_status
 │   │
-│   ├── decimal_routes.py (227 lines)    # 🔢 Decimal Config APIs
+│   ├── decimal_routes.py (428 lines)    # 🔢 Decimal Config APIs
 │   │   ├── GET    /api/decimal_places
 │   │   ├── POST   /api/decimal_places
 │   │   ├── GET    /api/decimal_places/<machine_code>
 │   │   ├── GET    /api/decimal_places/<machine_code>/<screen_name>
 │   │   ├── POST   /api/decimal_places/<machine_code>/<screen_name>
 │   │   ├── POST   /api/set_decimal_value
-│   │   └── POST   /api/set_all_decimal_values
+│   │   ├── POST   /api/set_all_decimal_values
+│   │   ├── GET    /api/decimal_places/<machine_type>/Reject_Summary/<machine_code>
+│   │   ├── GET    /api/decimal_places/<machine_type>/Reject_Summary/<machine_code>/<sub_page>
+│   │   └── POST   /api/decimal_places/<machine_type>/Reject_Summary/<machine_code>/<sub_page>
 │   │
 │   └── reference_routes.py (144 lines)  # 🎯 Reference Images APIs
 │       ├── POST   /api/reference_images
@@ -338,11 +338,13 @@ Example: template_F41_Production.jpg
 | 1 | `/` | GET | app.py | ✅ |
 | 2 | `/debug` | GET | app.py | ✅ |
 | 3 | `/api/performance` | GET | app.py | ✅ |
-| 4 | `/api/history` | GET | app.py | ✅ |
-| 5-12 | Image endpoints (8) | * | routes/image_routes.py | ✅ |
-| 13-19 | Machine endpoints (7) | * | routes/machine_routes.py | ✅ |
-| 20-26 | Decimal endpoints (7) | * | routes/decimal_routes.py | ✅ |
+| 4 | `/api/history` | GET | app.py | ✅ (với filtering) |
+| 5-9 | Image endpoints (5) | * | routes/image_routes.py | ✅ |
+| 10-16 | Machine endpoints (7) | * | routes/machine_routes.py | ✅ |
+| 17-26 | Decimal endpoints (10) | * | routes/decimal_routes.py | ✅ (bao gồm Reject_Summary sub-pages) |
 | 27-30 | Reference endpoints (4) | * | routes/reference_routes.py | ✅ |
+
+**Swagger UI**: Tất cả 30 endpoints đã được document và có thể test tại `/apidocs`
 
 **Chi tiết đầy đủ**: Xem bảng trong file gốc
 

@@ -216,9 +216,9 @@ def apply_decimal_places_format(text, roi_name, machine_type, screen_id, machine
             machine_info = get_machine_info_cached()
             machine_code = machine_info.get('machine_code')
         
-        # Cấu trúc mới cho Reject Summary với sub-page:
+        # Cấu trúc mới cho Reject_Summary với sub-page:
         # machine_type > screen_id > machine_code > sub_page > roi_name
-        if screen_id == "Reject Summary" and sub_page and machine_code:
+        if screen_id == "Reject_Summary" and sub_page and machine_code:
             if machine_type in decimal_config:
                 if screen_id in decimal_config[machine_type]:
                     if machine_code in decimal_config[machine_type][screen_id]:

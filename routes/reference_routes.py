@@ -31,6 +31,11 @@ def allowed_file(filename):
 def upload_reference_image():
     """Upload reference image"""
     try:
+        from utils.swagger_specs import get_reference_images_post_spec
+        upload_reference_image.__doc__ = get_reference_images_post_spec().strip()
+    except:
+        pass
+    try:
         if 'file' not in request.files:
             return jsonify({"error": "No file provided"}), 400
         
@@ -74,6 +79,11 @@ def upload_reference_image():
 @reference_bp.route('/api/reference_images', methods=['GET'])
 def get_reference_images():
     """Get list of reference images"""
+    try:
+        from utils.swagger_specs import get_reference_images_list_spec
+        get_reference_images.__doc__ = get_reference_images_list_spec().strip()
+    except:
+        pass
     try:
         machine_type = request.args.get('machine_type')
         screen_id = request.args.get('screen_id')
@@ -119,6 +129,11 @@ def get_reference_images():
 def get_reference_image(filename):
     """Get specific reference image"""
     try:
+        from utils.swagger_specs import get_reference_image_spec
+        get_reference_image.__doc__ = get_reference_image_spec().strip()
+    except:
+        pass
+    try:
         return send_from_directory(REFERENCE_IMAGES_FOLDER, filename)
     except:
         abort(404)
@@ -127,6 +142,11 @@ def get_reference_image(filename):
 @reference_bp.route('/api/reference_images/<filename>', methods=['DELETE'])
 def delete_reference_image(filename):
     """Delete reference image"""
+    try:
+        from utils.swagger_specs import get_delete_reference_image_spec
+        delete_reference_image.__doc__ = get_delete_reference_image_spec().strip()
+    except:
+        pass
     try:
         filepath = os.path.join(REFERENCE_IMAGES_FOLDER, filename)
         if os.path.exists(filepath):
