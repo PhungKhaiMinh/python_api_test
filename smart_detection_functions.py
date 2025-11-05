@@ -341,7 +341,7 @@ def detect_hmi_screen_optimized(image: np.ndarray) -> Tuple[Optional[np.ndarray]
             intersections = find_intersections(extended_h_lines, extended_v_lines)
         
             if len(intersections) < 4:
-            return None, time.time() - start_time
+                return None, time.time() - start_time
         
             # Step 8: Find largest rectangle from intersections
             largest_rectangle = find_largest_rectangle(intersections, image.shape)
@@ -2609,5 +2609,4 @@ def _analyze_template_matching_enhanced(image: np.ndarray) -> Tuple[str, float, 
         return ("TemplateMatching", 0.5, 0.5, 0.35, f"Template matching failed: {str(e)}")
 
 if __name__ == "__main__":
-    main() 
     main() 
