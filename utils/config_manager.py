@@ -45,7 +45,7 @@ def get_roi_coordinates(machine_code, screen_id=None, machine_type=None):
             # Lấy tên màn hình từ screen_id (nếu là numeric id)
             machine_screens_path = os.path.join(get_roi_data_folder(), 'machine_screens.json')
             
-            with open(machine_screens_path, 'r', encoding='utf-8') as f:
+            with open(machine_screens_path, 'r', encoding='utf-8-sig') as f:
                 machine_screens = json.load(f)
             
             # Tìm trong areas
@@ -269,7 +269,7 @@ def get_machine_type(machine_code):
         if not os.path.exists(machine_screens_path):
             return None
         
-        with open(machine_screens_path, 'r', encoding='utf-8') as f:
+        with open(machine_screens_path, 'r', encoding='utf-8-sig') as f:
             data = json.load(f)
         
         # Tìm kiếm trong cấu trúc areas
@@ -296,7 +296,7 @@ def get_area_for_machine(machine_code):
         if not os.path.exists(machine_screens_path):
             return None
         
-        with open(machine_screens_path, 'r', encoding='utf-8') as f:
+        with open(machine_screens_path, 'r', encoding='utf-8-sig') as f:
             data = json.load(f)
         
         for area_code, area_info in data.get('areas', {}).items():
@@ -322,7 +322,7 @@ def get_machine_name_from_code(machine_code):
         if not os.path.exists(machine_screens_path):
             return None
         
-        with open(machine_screens_path, 'r', encoding='utf-8') as f:
+        with open(machine_screens_path, 'r', encoding='utf-8-sig') as f:
             data = json.load(f)
         
         for area_code, area_info in data.get('areas', {}).items():
@@ -349,7 +349,7 @@ def get_all_machine_types():
         if not os.path.exists(machine_screens_path):
             return []
         
-        with open(machine_screens_path, 'r', encoding='utf-8') as f:
+        with open(machine_screens_path, 'r', encoding='utf-8-sig') as f:
             data = json.load(f)
         
         machine_types = set()
@@ -385,7 +385,7 @@ def find_machine_code_from_template(template_filename):
         if not os.path.exists(machine_screens_path):
             return None, None
         
-        with open(machine_screens_path, 'r', encoding='utf-8') as f:
+        with open(machine_screens_path, 'r', encoding='utf-8-sig') as f:
             data = json.load(f)
         
         # Tìm machine_code đầu tiên có machine_type tương ứng
@@ -413,7 +413,7 @@ def get_screen_numeric_id(machine_type, screen_name):
         if not os.path.exists(machine_screens_path):
             return None
         
-        with open(machine_screens_path, 'r', encoding='utf-8') as f:
+        with open(machine_screens_path, 'r', encoding='utf-8-sig') as f:
             data = json.load(f)
         
         # Tìm trong machine_types
@@ -506,7 +506,7 @@ def get_decimal_places_config():
     decimal_config_path = os.path.join(get_roi_data_folder(), 'decimal_places.json')
     if os.path.exists(decimal_config_path):
         try:
-            with open(decimal_config_path, 'r', encoding='utf-8') as f:
+            with open(decimal_config_path, 'r', encoding='utf-8-sig') as f:
                 return json.load(f)
         except Exception as e:
             print(f"Error reading decimal places config: {str(e)}")
@@ -533,7 +533,7 @@ def get_current_machine_info():
     try:
         current_machine_file = os.path.join(os.path.dirname(get_roi_data_folder()), 'current_machine_screen.json')
         if os.path.exists(current_machine_file):
-            with open(current_machine_file, 'r', encoding='utf-8') as f:
+            with open(current_machine_file, 'r', encoding='utf-8-sig') as f:
                 return json.load(f)
         return {"machine_code": "F41", "screen_id": "Main"}
     except Exception as e:

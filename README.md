@@ -35,7 +35,7 @@
 ✅ **Căn chỉnh ảnh tự động**: SIFT-based perspective correction  
 ✅ **Xử lý song song**: Multi-threading với 24 workers  
 ✅ **Cache thông minh**: Template và configuration caching  
-✅ **RESTful API**: 30 API endpoints đầy đủ tính năng  
+✅ **RESTful API**: 26 API endpoints đầy đủ tính năng (unified decimal places API)  
 ✅ **Swagger UI**: Tài liệu API tương tác tại `/apidocs`  
 ✅ **Sub-page Detection**: Hỗ trợ Reject_Summary với nhiều sub-pages  
 ✅ **History Filtering**: Lọc lịch sử OCR theo machine_code, area, screen_id, time range
@@ -538,67 +538,150 @@ Kiểm tra trạng thái cấu hình máy/màn hình.
 
 ---
 
-### 4. Decimal Configuration Endpoints (10 endpoints)
+### 4. Decimal Configuration Endpoints (6 endpoints)
 
 #### `GET /api/decimal_places`
 Lấy tất cả cấu hình số thập phân.
+
+**Response:**
+```json
+{
+  "F1": {
+    "Production_Data": { "ROI_name": 0 },
+    "Reject_Summary": {
+      "ROI_0": 0,
+      "IE-F1-CWA01": {
+        "1": { "ST02_TESTED": 0 },
+        "2": { "ST14_1_TESTED": 0 }
+      }
+    }
+  }
+}
+```
 
 #### `POST /api/decimal_places`
 Cập nhật cấu hình số thập phân.
 
 **Request (JSON):**
-  ```json
-  {
+```json
+{
   "machine_code": "F41",
   "screen_id": "Production",
   "roi_config": {
     "Temperature": 1,
     "Pressure": 2,
     "Speed": 0
-      }
   }
-  ```
+}
+```
 
-#### `GET /api/decimal_places/<machine_code>`
-Lấy cấu hình theo máy.
+#### `GET /api/decimal_places/<machine_type>/<screen_name>` ⭐ UNIFIED API
+Lấy cấu hình decimal places theo machine type và screen name.
 
-#### `GET /api/decimal_places/<machine_code>/<screen_name>`
-Lấy cấu hình theo màn hình.
+**Path Parameters (BẮT BUỘC):**
+- `machine_type`: Loại máy (F1, F41, F42)
+- `screen_name`: Tên màn hình (Production_Data, Reject_Summary, Injection, etc.)
 
-#### `POST /api/decimal_places/<machine_code>/<screen_name>`
-Cập nhật cấu hình cho màn hình cụ thể.
+**Query Parameters (TÙY CHỌN):**
+- `machine_code`: Mã máy (e.g., IE-F1-CWA01) - chỉ dùng cho Reject_Summary
+- `sub_page`: Số trang con (1, 2) - chỉ dùng cho Reject_Summary với machine_code
+
+**Examples:**
+```bash
+# 1. Lấy config cho screen thông thường
+curl "http://localhost:5000/api/decimal_places/F41/Injection"
+
+# 2. Lấy toàn bộ Reject_Summary
+curl "http://localhost:5000/api/decimal_places/F1/Reject_Summary"
+
+# 3. Lấy Reject_Summary cho máy cụ thể
+curl "http://localhost:5000/api/decimal_places/F1/Reject_Summary?machine_code=IE-F1-CWA01"
+
+# 4. Lấy Reject_Summary cho máy + sub-page
+curl "http://localhost:5000/api/decimal_places/F1/Reject_Summary?machine_code=IE-F1-CWA01&sub_page=1"
+```
+
+**Response Example (Standard screen):**
+```json
+{
+  "machine_type": "F41",
+  "screen_name": "Injection",
+  "decimal_config": {
+    "Injection speed": 1,
+    "Charge speed": 1
+  }
+}
+```
+
+**Response Example (Reject_Summary với machine_code và sub_page):**
+```json
+{
+  "machine_type": "F1",
+  "screen_name": "Reject_Summary",
+  "machine_code": "IE-F1-CWA01",
+  "sub_page": "1",
+  "decimal_config": {
+    "ST02_TESTED": 0,
+    "ST02_REJECTS": 0,
+    "ST02_PERCENT": 2
+  }
+}
+```
+
+#### `POST /api/decimal_places/<machine_type>/<screen_name>` ⭐ UNIFIED API
+Cập nhật cấu hình decimal places.
+
+**Path Parameters (BẮT BUỘC):**
+- `machine_type`: Loại máy (F1, F41, F42)
+- `screen_name`: Tên màn hình
+
+**Query Parameters (TÙY CHỌN):**
+- `machine_code`: Mã máy - chỉ dùng cho Reject_Summary
+- `sub_page`: Số trang con - chỉ dùng cho Reject_Summary với machine_code
+
+**Examples:**
+```bash
+# 1. Update screen thông thường
+curl -X POST "http://localhost:5000/api/decimal_places/F41/Injection" \
+  -H "Content-Type: application/json" \
+  -d '{"Injection speed": 1, "Charge speed": 1}'
+
+# 2. Update Reject_Summary cho máy (tất cả sub-pages)
+curl -X POST "http://localhost:5000/api/decimal_places/F1/Reject_Summary?machine_code=IE-F1-CWA01" \
+  -H "Content-Type: application/json" \
+  -d '{"1": {"ST02_TESTED": 0}, "2": {"ST14_1_TESTED": 0}}'
+
+# 3. Update Reject_Summary cho máy + sub-page
+curl -X POST "http://localhost:5000/api/decimal_places/F1/Reject_Summary?machine_code=IE-F1-CWA01&sub_page=1" \
+  -H "Content-Type: application/json" \
+  -d '{"ST02_TESTED": 0, "ST02_REJECTS": 0}'
+```
 
 #### `POST /api/set_decimal_value`
 Đặt giá trị số thập phân cho ROI đơn lẻ.
 
+**Request (JSON):**
+```json
+{
+  "machine_code": "F41",
+  "screen_id": "Production",
+  "roi_index": "Temperature",
+  "decimal_places": 1
+}
+```
+
 #### `POST /api/set_all_decimal_values`
 Đặt tất cả giá trị số thập phân cho màn hình.
-
-#### `GET /api/decimal_places/<machine_type>/Reject_Summary/<machine_code>`
-Lấy decimal places cho tất cả sub-pages của một machine_code trong Reject_Summary.
-
-**Example:**
-```bash
-curl "http://localhost:5000/api/decimal_places/F1/Reject_Summary/IE-F1-CWA01"
-```
-
-#### `GET /api/decimal_places/<machine_type>/Reject_Summary/<machine_code>/<sub_page>`
-Lấy decimal places cho một sub-page cụ thể của Reject_Summary.
-
-**Example:**
-```bash
-curl "http://localhost:5000/api/decimal_places/F1/Reject_Summary/IE-F1-CWA01/1"
-```
-
-#### `POST /api/decimal_places/<machine_type>/Reject_Summary/<machine_code>/<sub_page>`
-Cập nhật decimal places cho một sub-page cụ thể của Reject_Summary.
 
 **Request (JSON):**
 ```json
 {
-  "tested": 0,
-  "reject": 0,
-  "phantram": 0
+  "machine_code": "F41",
+  "screen_id": "Production",
+  "decimal_config": {
+    "Temperature": 1,
+    "Pressure": 2
+  }
 }
 ```
 

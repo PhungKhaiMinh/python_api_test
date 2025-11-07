@@ -47,15 +47,31 @@ def upload_reference_image():
             return jsonify({"error": "File type not allowed"}), 400
         
         # Get params
-        machine_type = request.form.get('machine_type')
+        area = request.form.get('area')  # F1, F2, etc.
+        machine_code = request.form.get('machine_code')  # IE-F1-CWA01, etc.
+        machine_type = request.form.get('machine_type')  # F1, F41, F42
         screen_id = request.form.get('screen_id')
+        sub_page = request.form.get('sub_page')  # Optional: 1, 2 (cho Reject_Summary)
         
         if not machine_type or not screen_id:
             return jsonify({"error": "Missing machine_type or screen_id"}), 400
         
-        # Create filename: template_{machine_type}_{screen_id}.jpg
+        # Create filename based on area
         ext = file.filename.rsplit('.', 1)[1].lower()
-        filename = f"template_{machine_type}_{screen_id}.{ext}"
+        
+        # ====== AREA F1: Mỗi machine_code có template riêng ======
+        if area == "F1" and machine_code:
+            if sub_page:
+                # Format: template_F1_{machine_code}_{screen_id}_page{N}.jpg
+                filename = f"template_F1_{machine_code}_{screen_id}_page{sub_page}.{ext}"
+            else:
+                # Format: template_F1_{machine_code}_{screen_id}.jpg
+                filename = f"template_F1_{machine_code}_{screen_id}.{ext}"
+        else:
+            # ====== AREA KHÁC: Dùng machine_type chung ======
+            # Format: template_{machine_type}_{screen_id}.jpg
+            filename = f"template_{machine_type}_{screen_id}.{ext}"
+        
         filepath = os.path.join(REFERENCE_IMAGES_FOLDER, filename)
         
         # Save file
@@ -65,12 +81,19 @@ def upload_reference_image():
         from utils.cache_manager import clear_cache
         clear_cache('template')
         
-        return jsonify({
+        response_data = {
             "message": "Reference image uploaded successfully",
             "filename": filename,
             "machine_type": machine_type,
             "screen_id": screen_id
-        }), 200
+        }
+        if area == "F1" and machine_code:
+            response_data["area"] = area
+            response_data["machine_code"] = machine_code
+        if sub_page:
+            response_data["sub_page"] = sub_page
+        
+        return jsonify(response_data), 200
         
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -85,6 +108,8 @@ def get_reference_images():
     except:
         pass
     try:
+        area = request.args.get('area')
+        machine_code = request.args.get('machine_code')
         machine_type = request.args.get('machine_type')
         screen_id = request.args.get('screen_id')
         
@@ -94,30 +119,50 @@ def get_reference_images():
         files = [f for f in os.listdir(REFERENCE_IMAGES_FOLDER)
                 if os.path.isfile(os.path.join(REFERENCE_IMAGES_FOLDER, f)) and allowed_file(f)]
         
-        # Filter by machine_type and screen_id if provided
-        if machine_type:
+        # Filter by area and machine_code for F1
+        if area == "F1" and machine_code:
+            files = [f for f in files if f.startswith(f"template_F1_{machine_code}_")]
+        elif machine_type:
             files = [f for f in files if f.startswith(f"template_{machine_type}_")]
         
         if screen_id:
-            if machine_type:
-                files = [f for f in files if f.startswith(f"template_{machine_type}_{screen_id}.")]
-            else:
-                files = [f for f in files if f"_{screen_id}." in f]
+            files = [f for f in files if f"_{screen_id}." in f or f"_{screen_id}_page" in f]
         
         # Parse filenames to get metadata
         image_list = []
         for filename in files:
-            # Format: template_{machine_type}_{screen_id}.ext
-            parts = filename.replace('template_', '').rsplit('.', 1)
-            if len(parts) == 2:
-                name_parts = parts[0].split('_', 1)
+            metadata = {"filename": filename, "path": f"/api/reference_images/{filename}"}
+            
+            # Parse format: template_F1_{machine_code}_{screen_id}_page{N}.ext
+            if filename.startswith("template_F1_"):
+                parts = filename.replace('template_F1_', '').rsplit('.', 1)[0]
+                # Split by _ to get machine_code and rest
+                sections = parts.split('_', 1)
+                if len(sections) == 2:
+                    metadata["area"] = "F1"
+                    metadata["machine_code"] = sections[0]
+                    metadata["machine_type"] = "F1"
+                    
+                    # Check for sub_page
+                    remaining = sections[1]
+                    if "_page" in remaining:
+                        screen_parts = remaining.split("_page")
+                        metadata["screen_id"] = screen_parts[0]
+                        if len(screen_parts) > 1:
+                            metadata["sub_page"] = screen_parts[1]
+                    else:
+                        metadata["screen_id"] = remaining
+            
+            # Parse format: template_{machine_type}_{screen_id}.ext
+            elif filename.startswith("template_"):
+                parts = filename.replace('template_', '').rsplit('.', 1)[0]
+                name_parts = parts.split('_', 1)
                 if len(name_parts) == 2:
-                    image_list.append({
-                        "filename": filename,
-                        "machine_type": name_parts[0],
-                        "screen_id": name_parts[1],
-                        "path": f"/api/reference_images/{filename}"
-                    })
+                    metadata["machine_type"] = name_parts[0]
+                    metadata["screen_id"] = name_parts[1]
+            
+            if "screen_id" in metadata:  # Only add if successfully parsed
+                image_list.append(metadata)
         
         return jsonify({"images": image_list}), 200
         

@@ -51,7 +51,7 @@ def update_decimal_places():
         # Read current config
         decimal_config_path = os.path.join(get_roi_data_folder(), 'decimal_places.json')
         if os.path.exists(decimal_config_path):
-            with open(decimal_config_path, 'r', encoding='utf-8') as f:
+            with open(decimal_config_path, 'r', encoding='utf-8-sig') as f:
                 config = json.load(f)
         else:
             config = {}
@@ -90,110 +90,91 @@ def update_decimal_places():
         return jsonify({"error": str(e)}), 500
 
 
-@decimal_bp.route('/api/decimal_places/<machine_code>', methods=['GET'])
-def get_decimal_places_for_machine(machine_code):
-    """Get decimal places for specific machine (accepts machine_type or machine_code)"""
+@decimal_bp.route('/api/decimal_places/<machine_type>/<screen_name>', methods=['GET'])
+def get_decimal_places_unified(machine_type, screen_name):
+    """
+    [UNIFIED API] Get decimal places configuration
+    
+    Required path parameters:
+    - machine_type: Machine type (F1, F41, F42)
+    - screen_name: Screen name (Production_Data, Reject_Summary, etc.)
+    
+    Optional query parameters:
+    - machine_code: Machine code (e.g., IE-F1-CWA01) - only for Reject_Summary
+    - sub_page: Sub-page number (1, 2, etc.) - only for Reject_Summary with machine_code
+    
+    Examples:
+    1. Get all config for a screen:
+       GET /api/decimal_places/F41/Injection
+       
+    2. Get all Reject_Summary config:
+       GET /api/decimal_places/F1/Reject_Summary
+       
+    3. Get Reject_Summary for specific machine:
+       GET /api/decimal_places/F1/Reject_Summary?machine_code=IE-F1-CWA01
+       
+    4. Get Reject_Summary for specific machine and sub-page:
+       GET /api/decimal_places/F1/Reject_Summary?machine_code=IE-F1-CWA01&sub_page=1
+    """
     try:
-        from utils.swagger_specs import get_decimal_places_machine_spec
-        get_decimal_places_for_machine.__doc__ = get_decimal_places_machine_spec().strip()
+        from utils.swagger_specs import get_decimal_places_unified_spec
+        get_decimal_places_unified.__doc__ = get_decimal_places_unified_spec().strip()
     except:
         pass
+        
     try:
+        # Get optional query parameters
+        machine_code = request.args.get('machine_code')
+        sub_page = request.args.get('sub_page')
+        
+        # Load config
         config = get_decimal_places_config()
         
-        # Check if it's already a machine_type (F1, F41, F42)
-        if machine_code in config:
-            return jsonify(config[machine_code]), 200
-        
-        # Try to convert machine_code to machine_type
-        machine_type = get_machine_type(machine_code)
-        if machine_type and machine_type in config:
-            return jsonify(config[machine_type]), 200
-        
-        return jsonify({}), 200
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@decimal_bp.route('/api/decimal_places/<machine_code>/<screen_name>', methods=['GET'])
-def get_decimal_places_for_screen(machine_code, screen_name):
-    """Get decimal places for specific screen"""
-    try:
-        from utils.swagger_specs import get_decimal_places_screen_spec
-        get_decimal_places_for_screen.__doc__ = get_decimal_places_screen_spec().strip()
-    except:
-        pass
-    try:
-        config = get_decimal_places_config()
-        
-        # Check if it's already a machine_type (F1, F41, F42)
-        machine_type = machine_code if machine_code in config else None
-        
-        # Try to convert machine_code to machine_type if needed
-        if not machine_type:
-            machine_type = get_machine_type(machine_code)
-        
-        if machine_type and machine_type in config and screen_name in config[machine_type]:
-            return jsonify(config[machine_type][screen_name]), 200
-        
-        return jsonify({}), 200
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@decimal_bp.route('/api/decimal_places/<machine_code>/<screen_name>', methods=['POST'])
-def update_decimal_places_for_screen(machine_code, screen_name):
-    """Update decimal places for specific screen"""
-    try:
-        from utils.swagger_specs import get_decimal_places_screen_post_spec
-        update_decimal_places_for_screen.__doc__ = get_decimal_places_screen_post_spec().strip()
-    except:
-        pass
-    try:
-        if not request.is_json:
-            return jsonify({"error": "Request must be JSON"}), 400
-        
-        roi_config = request.json
-        
-        # Read current config
-        decimal_config_path = os.path.join(get_roi_data_folder(), 'decimal_places.json')
-        if os.path.exists(decimal_config_path):
-            with open(decimal_config_path, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-        else:
-            config = {}
-        
-        # Check if it's already a machine_type (F1, F41, F42)
-        machine_type = machine_code if machine_code in config else None
-        
-        # Try to convert machine_code to machine_type if needed
-        if not machine_type:
-            machine_type = get_machine_type(machine_code)
-            if not machine_type:
-                return jsonify({"error": f"Could not determine machine_type from machine_code: {machine_code}"}), 400
-        
-        # Update config
+        # Validate machine_type exists
         if machine_type not in config:
-            config[machine_type] = {}
+            return jsonify({"error": f"Machine type '{machine_type}' not found"}), 404
+        
+        # Validate screen_name exists
         if screen_name not in config[machine_type]:
-            config[machine_type][screen_name] = {}
+            return jsonify({"error": f"Screen '{screen_name}' not found for machine type '{machine_type}'"}), 404
         
-        for roi_name, decimal_places in roi_config.items():
-            config[machine_type][screen_name][roi_name] = int(decimal_places)
+        screen_config = config[machine_type][screen_name]
         
-        # Save config
-        with open(decimal_config_path, 'w', encoding='utf-8') as f:
-            json.dump(config, f, indent=2, ensure_ascii=False)
+        # CASE 1: Reject_Summary with machine_code and sub_page
+        if screen_name == "Reject_Summary" and machine_code and sub_page:
+            if machine_code not in screen_config:
+                return jsonify({"error": f"Machine code '{machine_code}' not found in Reject_Summary"}), 404
+            
+            if sub_page not in screen_config[machine_code]:
+                return jsonify({"error": f"Sub-page '{sub_page}' not found for machine '{machine_code}'"}), 404
+            
+            return jsonify({
+                "machine_type": machine_type,
+                "screen_name": screen_name,
+                "machine_code": machine_code,
+                "sub_page": sub_page,
+                "decimal_config": screen_config[machine_code][sub_page]
+            }), 200
         
-        # Clear cache
-        clear_cache('decimal')
+        # CASE 2: Reject_Summary with machine_code only (all sub-pages)
+        elif screen_name == "Reject_Summary" and machine_code:
+            if machine_code not in screen_config:
+                return jsonify({"error": f"Machine code '{machine_code}' not found in Reject_Summary"}), 404
+            
+            return jsonify({
+                "machine_type": machine_type,
+                "screen_name": screen_name,
+                "machine_code": machine_code,
+                "decimal_config": screen_config[machine_code]
+            }), 200
         
-        return jsonify({
-            "message": "Decimal places updated successfully",
-            "config": config[machine_type][screen_name]
-        }), 200
+        # CASE 3: Standard screen or Reject_Summary without filters (full config)
+        else:
+            return jsonify({
+                "machine_type": machine_type,
+                "screen_name": screen_name,
+                "decimal_config": screen_config
+            }), 200
         
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -223,7 +204,7 @@ def set_decimal_value():
         # Read current config
         decimal_config_path = os.path.join(get_roi_data_folder(), 'decimal_places.json')
         if os.path.exists(decimal_config_path):
-            with open(decimal_config_path, 'r', encoding='utf-8') as f:
+            with open(decimal_config_path, 'r', encoding='utf-8-sig') as f:
                 config = json.load(f)
         else:
             config = {}
@@ -288,7 +269,7 @@ def set_all_decimal_values():
         # Read current config
         decimal_config_path = os.path.join(get_roi_data_folder(), 'decimal_places.json')
         if os.path.exists(decimal_config_path):
-            with open(decimal_config_path, 'r', encoding='utf-8') as f:
+            with open(decimal_config_path, 'r', encoding='utf-8-sig') as f:
                 config = json.load(f)
         else:
             config = {}
@@ -327,100 +308,139 @@ def set_all_decimal_values():
         return jsonify({"error": str(e)}), 500
 
 
-@decimal_bp.route('/api/decimal_places/<machine_type>/Reject_Summary/<machine_code>', methods=['GET'])
-def get_decimal_places_for_reject_summary_machine(machine_type, machine_code):
-    """Get decimal places for all sub-pages of a specific machine_code in Reject_Summary"""
+@decimal_bp.route('/api/decimal_places/<machine_type>/<screen_name>', methods=['POST'])
+def update_decimal_places_unified(machine_type, screen_name):
+    """
+    [UNIFIED API] Update decimal places configuration
+    
+    Required path parameters:
+    - machine_type: Machine type (F1, F41, F42)
+    - screen_name: Screen name (Production_Data, Reject_Summary, etc.)
+    
+    Optional query parameters:
+    - machine_code: Machine code (e.g., IE-F1-CWA01) - required for Reject_Summary
+    - sub_page: Sub-page number (1, 2, etc.) - optional for Reject_Summary
+    
+    Request body: JSON object with ROI names as keys and decimal places as values
+    
+    Examples:
+    1. Update standard screen config:
+       POST /api/decimal_places/F41/Injection
+       Body: {"Injection speed": 1, "Charge speed": 1, ...}
+       
+    2. Update Reject_Summary for specific machine (all sub-pages):
+       POST /api/decimal_places/F1/Reject_Summary?machine_code=IE-F1-CWA01
+       Body: {"1": {...}, "2": {...}}
+       
+    3. Update Reject_Summary for specific machine and sub-page:
+       POST /api/decimal_places/F1/Reject_Summary?machine_code=IE-F1-CWA01&sub_page=1
+       Body: {"ST02_TESTED": 0, "ST02_REJECTS": 0, ...}
+    """
     try:
-        from utils.swagger_specs import get_decimal_places_reject_summary_machine_spec
-        get_decimal_places_for_reject_summary_machine.__doc__ = get_decimal_places_reject_summary_machine_spec().strip()
+        from utils.swagger_specs import get_decimal_places_unified_post_spec
+        update_decimal_places_unified.__doc__ = get_decimal_places_unified_post_spec().strip()
     except:
         pass
-    try:
-        config = get_decimal_places_config()
         
-        if machine_type in config:
-            if "Reject_Summary" in config[machine_type]:
-                if machine_code in config[machine_type]["Reject_Summary"]:
-                    return jsonify(config[machine_type]["Reject_Summary"][machine_code]), 200
-        
-        return jsonify({}), 200
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@decimal_bp.route('/api/decimal_places/<machine_type>/Reject_Summary/<machine_code>/<sub_page>', methods=['GET'])
-def get_decimal_places_for_reject_summary_subpage(machine_type, machine_code, sub_page):
-    """Get decimal places for a specific sub-page of Reject_Summary"""
-    try:
-        from utils.swagger_specs import get_decimal_places_reject_summary_subpage_get_spec
-        get_decimal_places_for_reject_summary_subpage.__doc__ = get_decimal_places_reject_summary_subpage_get_spec().strip()
-    except:
-        pass
-    try:
-        config = get_decimal_places_config()
-        
-        if machine_type in config:
-            if "Reject_Summary" in config[machine_type]:
-                if machine_code in config[machine_type]["Reject_Summary"]:
-                    if sub_page in config[machine_type]["Reject_Summary"][machine_code]:
-                        return jsonify(config[machine_type]["Reject_Summary"][machine_code][sub_page]), 200
-        
-        return jsonify({}), 200
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@decimal_bp.route('/api/decimal_places/<machine_type>/Reject_Summary/<machine_code>/<sub_page>', methods=['POST'])
-def update_decimal_places_for_reject_summary_subpage(machine_type, machine_code, sub_page):
-    """Update decimal places for a specific sub-page of Reject_Summary"""
-    try:
-        from utils.swagger_specs import get_decimal_places_reject_summary_subpage_post_spec
-        update_decimal_places_for_reject_summary_subpage.__doc__ = get_decimal_places_reject_summary_subpage_post_spec().strip()
-    except:
-        pass
     try:
         if not request.is_json:
             return jsonify({"error": "Request must be JSON"}), 400
+        
+        # Get optional query parameters
+        machine_code = request.args.get('machine_code')
+        sub_page = request.args.get('sub_page')
         
         roi_config = request.json
         
         # Read current config
         decimal_config_path = os.path.join(get_roi_data_folder(), 'decimal_places.json')
         if os.path.exists(decimal_config_path):
-            with open(decimal_config_path, 'r', encoding='utf-8') as f:
+            with open(decimal_config_path, 'r', encoding='utf-8-sig') as f:
                 config = json.load(f)
         else:
             config = {}
         
-        # Update config - Cấu trúc: machine_type > "Reject_Summary" > machine_code > sub_page > roi_name
+        # Initialize machine_type if not exists
         if machine_type not in config:
             config[machine_type] = {}
-        if "Reject_Summary" not in config[machine_type]:
-            config[machine_type]["Reject_Summary"] = {}
-        if machine_code not in config[machine_type]["Reject_Summary"]:
-            config[machine_type]["Reject_Summary"][machine_code] = {}
-        if sub_page not in config[machine_type]["Reject_Summary"][machine_code]:
-            config[machine_type]["Reject_Summary"][machine_code][sub_page] = {}
         
-        for roi_name, decimal_places in roi_config.items():
-            config[machine_type]["Reject_Summary"][machine_code][sub_page][roi_name] = int(decimal_places)
+        # CASE 1: Reject_Summary with machine_code and sub_page
+        if screen_name == "Reject_Summary" and machine_code and sub_page:
+            if screen_name not in config[machine_type]:
+                config[machine_type][screen_name] = {}
+            if machine_code not in config[machine_type][screen_name]:
+                config[machine_type][screen_name][machine_code] = {}
+            if sub_page not in config[machine_type][screen_name][machine_code]:
+                config[machine_type][screen_name][machine_code][sub_page] = {}
+            
+            # Update config
+            for roi_name, decimal_places in roi_config.items():
+                config[machine_type][screen_name][machine_code][sub_page][roi_name] = int(decimal_places)
+            
+            # Save and return
+            with open(decimal_config_path, 'w', encoding='utf-8') as f:
+                json.dump(config, f, indent=2, ensure_ascii=False)
+            
+            clear_cache('decimal')
+            
+            return jsonify({
+                "message": "Decimal places updated successfully",
+                "machine_type": machine_type,
+                "screen_name": screen_name,
+                "machine_code": machine_code,
+                "sub_page": sub_page,
+                "config": config[machine_type][screen_name][machine_code][sub_page]
+            }), 200
         
-        # Save config
-        with open(decimal_config_path, 'w', encoding='utf-8') as f:
-            json.dump(config, f, indent=2, ensure_ascii=False)
+        # CASE 2: Reject_Summary with machine_code only (update all sub-pages)
+        elif screen_name == "Reject_Summary" and machine_code:
+            if not machine_code:
+                return jsonify({"error": "machine_code is required for Reject_Summary"}), 400
+            
+            if screen_name not in config[machine_type]:
+                config[machine_type][screen_name] = {}
+            if machine_code not in config[machine_type][screen_name]:
+                config[machine_type][screen_name][machine_code] = {}
+            
+            # Update config (roi_config should contain sub-pages)
+            for sub_page_key, sub_page_config in roi_config.items():
+                config[machine_type][screen_name][machine_code][sub_page_key] = sub_page_config
+            
+            # Save and return
+            with open(decimal_config_path, 'w', encoding='utf-8') as f:
+                json.dump(config, f, indent=2, ensure_ascii=False)
+            
+            clear_cache('decimal')
+            
+            return jsonify({
+                "message": "Decimal places updated successfully",
+                "machine_type": machine_type,
+                "screen_name": screen_name,
+                "machine_code": machine_code,
+                "config": config[machine_type][screen_name][machine_code]
+            }), 200
         
-        # Clear cache
-        clear_cache('decimal')
-        
-        return jsonify({
-            "message": "Decimal places updated successfully",
-            "machine_type": machine_type,
-            "machine_code": machine_code,
-            "sub_page": sub_page,
-            "config": config[machine_type]["Reject_Summary"][machine_code][sub_page]
-        }), 200
+        # CASE 3: Standard screen
+        else:
+            if screen_name not in config[machine_type]:
+                config[machine_type][screen_name] = {}
+            
+            # Update config
+            for roi_name, decimal_places in roi_config.items():
+                config[machine_type][screen_name][roi_name] = int(decimal_places)
+            
+            # Save and return
+            with open(decimal_config_path, 'w', encoding='utf-8') as f:
+                json.dump(config, f, indent=2, ensure_ascii=False)
+            
+            clear_cache('decimal')
+            
+            return jsonify({
+                "message": "Decimal places updated successfully",
+                "machine_type": machine_type,
+                "screen_name": screen_name,
+                "config": config[machine_type][screen_name]
+            }), 200
         
     except Exception as e:
         return jsonify({"error": str(e)}), 500

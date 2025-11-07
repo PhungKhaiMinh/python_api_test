@@ -47,7 +47,7 @@ File `app_original.py` ban đầu có **5758 dòng code** trong 1 file duy nhấ
 | **Maintainability** | ⭐⭐ (2/5) | ⭐⭐⭐⭐⭐ (5/5) | **+150%** |
 | **Testability** | ⭐⭐ (2/5) | ⭐⭐⭐⭐⭐ (5/5) | **+150%** |
 | **Performance** | ⚡⚡⚡⚡⚡ (5/5) | ⚡⚡⚡⚡⚡ (5/5) | **0% (preserved)** |
-| **API Endpoints** | 30 | 30 | **100% preserved + Swagger UI** |
+| **API Endpoints** | 30 | 26 | **Optimized (unified decimal API) + Swagger UI** |
 | **Functions** | 85+ | 85+ | **100% migrated** |
 
 ---
@@ -118,7 +118,7 @@ python_api_test/
 │       ├── format_working_hours()
 │       └── save_roi_image_with_result()
 │
-├── routes/ (827 total lines)             # 🛣️ API Routes
+├── routes/ (1290 total lines)            # 🛣️ API Routes (optimized with unified decimal API)
 │   │
 │   ├── __init__.py                       # Export all routes
 │   │
@@ -138,17 +138,13 @@ python_api_test/
 │   │   ├── GET    /api/current_machine_screen
 │   │   └── GET    /api/machine_screen_status
 │   │
-│   ├── decimal_routes.py (428 lines)    # 🔢 Decimal Config APIs
+│   ├── decimal_routes.py (448 lines)    # 🔢 Decimal Config APIs (UNIFIED)
 │   │   ├── GET    /api/decimal_places
 │   │   ├── POST   /api/decimal_places
-│   │   ├── GET    /api/decimal_places/<machine_code>
-│   │   ├── GET    /api/decimal_places/<machine_code>/<screen_name>
-│   │   ├── POST   /api/decimal_places/<machine_code>/<screen_name>
+│   │   ├── GET    /api/decimal_places/<machine_type>/<screen_name> ⭐ UNIFIED
+│   │   ├── POST   /api/decimal_places/<machine_type>/<screen_name> ⭐ UNIFIED
 │   │   ├── POST   /api/set_decimal_value
-│   │   ├── POST   /api/set_all_decimal_values
-│   │   ├── GET    /api/decimal_places/<machine_type>/Reject_Summary/<machine_code>
-│   │   ├── GET    /api/decimal_places/<machine_type>/Reject_Summary/<machine_code>/<sub_page>
-│   │   └── POST   /api/decimal_places/<machine_type>/Reject_Summary/<machine_code>/<sub_page>
+│   │   └── POST   /api/set_all_decimal_values
 │   │
 │   └── reference_routes.py (144 lines)  # 🎯 Reference Images APIs
 │       ├── POST   /api/reference_images
@@ -331,7 +327,7 @@ Example: template_F41_Production.jpg
 
 ## ✅ Báo Cáo Xác Minh
 
-### API Endpoints: 30/30 ✅
+### API Endpoints: 26/26 ✅
 
 | # | Endpoint | Method | Location | Migrated |
 |---|----------|--------|----------|----------|
@@ -341,10 +337,12 @@ Example: template_F41_Production.jpg
 | 4 | `/api/history` | GET | app.py | ✅ (với filtering) |
 | 5-9 | Image endpoints (5) | * | routes/image_routes.py | ✅ |
 | 10-16 | Machine endpoints (7) | * | routes/machine_routes.py | ✅ |
-| 17-26 | Decimal endpoints (10) | * | routes/decimal_routes.py | ✅ (bao gồm Reject_Summary sub-pages) |
-| 27-30 | Reference endpoints (4) | * | routes/reference_routes.py | ✅ |
+| 17-22 | Decimal endpoints (6) | * | routes/decimal_routes.py | ✅ **UNIFIED API** |
+| 23-26 | Reference endpoints (4) | * | routes/reference_routes.py | ✅ |
 
-**Swagger UI**: Tất cả 30 endpoints đã được document và có thể test tại `/apidocs`
+**Swagger UI**: Tất cả 26 endpoints đã được document và có thể test tại `/apidocs`
+
+**Note**: Decimal places API đã được tối ưu từ 10 endpoints xuống còn 6 endpoints thông qua unified API `/api/decimal_places/<machine_type>/<screen_name>` với query parameters tùy chọn.
 
 **Chi tiết đầy đủ**: Xem bảng trong file gốc
 

@@ -356,94 +356,10 @@ def get_decimal_places_post_spec():
     """
 
 
-def get_decimal_places_machine_spec():
-    """Swagger spec for GET /api/decimal_places/<machine_code>"""
-    return """
-    Get decimal places for specific machine (accepts machine_type or machine_code)
-    ---
-    tags:
-      - Decimal Places
-    parameters:
-      - name: machine_code
-        in: path
-        type: string
-        required: true
-        description: Machine type (F1, F41, F42) or machine code (IE-F1-CWA01)
-        example: "F1"
-    responses:
-      200:
-        description: Successfully retrieved decimal places
-        schema:
-          type: object
-      500:
-        description: Server error
-    """
-
-
-def get_decimal_places_screen_spec():
-    """Swagger spec for GET /api/decimal_places/<machine_code>/<screen_name>"""
-    return """
-    Get decimal places for specific screen
-    ---
-    tags:
-      - Decimal Places
-    parameters:
-      - name: machine_code
-        in: path
-        type: string
-        required: true
-        description: Machine type (F1, F41, F42) or machine code
-        example: "F1"
-      - name: screen_name
-        in: path
-        type: string
-        required: true
-        description: Screen name (e.g., "Production_Data", "Overview")
-        example: "Production_Data"
-    responses:
-      200:
-        description: Successfully retrieved decimal places
-        schema:
-          type: object
-      500:
-        description: Server error
-    """
-
-
-def get_decimal_places_screen_post_spec():
-    """Swagger spec for POST /api/decimal_places/<machine_code>/<screen_name>"""
-    return """
-    Update decimal places for specific screen
-    ---
-    tags:
-      - Decimal Places
-    parameters:
-      - name: machine_code
-        in: path
-        type: string
-        required: true
-        description: Machine type or machine code
-        example: "F1"
-      - name: screen_name
-        in: path
-        type: string
-        required: true
-        description: Screen name
-        example: "Production_Data"
-      - name: body
-        in: body
-        required: true
-        schema:
-          type: object
-          example: {"ROI_name": 2}
-    responses:
-      200:
-        description: Successfully updated
-      400:
-        description: Bad request
-      500:
-        description: Server error
-    """
+# ====== OLD SPECS REMOVED - REPLACED BY UNIFIED API ======
+# The following specs were removed as they are replaced by:
+# - get_decimal_places_unified_spec()
+# - get_decimal_places_unified_post_spec()
 
 
 def get_set_decimal_value_spec():
@@ -517,10 +433,14 @@ def get_set_all_decimal_values_spec():
     """
 
 
-def get_decimal_places_reject_summary_machine_spec():
-    """Swagger spec for GET /api/decimal_places/<machine_type>/Reject_Summary/<machine_code>"""
+# ====== REJECT_SUMMARY OLD SPECS REMOVED ======
+# These specs were also replaced by the unified API
+
+
+def get_decimal_places_unified_spec():
+    """Swagger spec for GET /api/decimal_places/<machine_type>/<screen_name> (UNIFIED)"""
     return """
-    Get decimal places for all sub-pages of a specific machine_code in Reject_Summary
+    [UNIFIED API] Get decimal places configuration
     ---
     tags:
       - Decimal Places
@@ -529,64 +449,58 @@ def get_decimal_places_reject_summary_machine_spec():
         in: path
         type: string
         required: true
-        description: Machine type (e.g., "F1", "F41", "F42")
+        description: Machine type (F1, F41, F42)
         example: "F1"
+      - name: screen_name
+        in: path
+        type: string
+        required: true
+        description: Screen name (Production_Data, Reject_Summary, Injection, etc.)
+        example: "Production_Data"
       - name: machine_code
-        in: path
+        in: query
         type: string
-        required: true
-        description: Machine code (e.g., "IE-F1-CWA01")
-        example: "IE-F1-CWA01"
-    responses:
-      200:
-        description: Successfully retrieved decimal places for all sub-pages
-        schema:
-          type: object
-      500:
-        description: Server error
-    """
-
-
-def get_decimal_places_reject_summary_subpage_get_spec():
-    """Swagger spec for GET /api/decimal_places/<machine_type>/Reject_Summary/<machine_code>/<sub_page>"""
-    return """
-    Get decimal places for a specific sub-page of Reject_Summary
-    ---
-    tags:
-      - Decimal Places
-    parameters:
-      - name: machine_type
-        in: path
-        type: string
-        required: true
-        description: Machine type (e.g., "F1", "F41", "F42")
-        example: "F1"
-      - name: machine_code
-        in: path
-        type: string
-        required: true
-        description: Machine code (e.g., "IE-F1-CWA01")
+        required: false
+        description: Machine code (e.g., IE-F1-CWA01) - required for Reject_Summary
         example: "IE-F1-CWA01"
       - name: sub_page
-        in: path
+        in: query
         type: string
-        required: true
-        description: Sub-page number (e.g., "1", "2")
+        required: false
+        description: Sub-page number (1, 2, etc.) - optional for Reject_Summary
         example: "1"
     responses:
       200:
-        description: Successfully retrieved decimal places for sub-page
+        description: Successfully retrieved decimal places
         schema:
           type: object
+          properties:
+            machine_type:
+              type: string
+              example: "F1"
+            screen_name:
+              type: string
+              example: "Production_Data"
+            machine_code:
+              type: string
+              example: "IE-F1-CWA01"
+            sub_page:
+              type: string
+              example: "1"
+            decimal_config:
+              type: object
+              example: {"Total Parts": 0, "Good Parts": 0}
+      404:
+        description: Machine type or screen not found
       500:
         description: Server error
     """
 
 
-def get_decimal_places_reject_summary_subpage_post_spec():
-    """Swagger spec for POST /api/decimal_places/<machine_type>/Reject_Summary/<machine_code>/<sub_page>"""
+def get_decimal_places_unified_post_spec():
+    """Swagger spec for POST /api/decimal_places/<machine_type>/<screen_name> (UNIFIED)"""
     return """
-    Update decimal places for a specific sub-page of Reject_Summary
+    [UNIFIED API] Update decimal places configuration
     ---
     tags:
       - Decimal Places
@@ -595,26 +509,43 @@ def get_decimal_places_reject_summary_subpage_post_spec():
         in: path
         type: string
         required: true
-        description: Machine type (e.g., "F1", "F41", "F42")
+        description: Machine type (F1, F41, F42)
         example: "F1"
-      - name: machine_code
+      - name: screen_name
         in: path
         type: string
         required: true
-        description: Machine code (e.g., "IE-F1-CWA01")
+        description: Screen name (Production_Data, Reject_Summary, Injection, etc.)
+        example: "Production_Data"
+      - name: machine_code
+        in: query
+        type: string
+        required: false
+        description: Machine code (e.g., IE-F1-CWA01) - required for Reject_Summary
         example: "IE-F1-CWA01"
       - name: sub_page
-        in: path
+        in: query
         type: string
-        required: true
-        description: Sub-page number (e.g., "1", "2")
+        required: false
+        description: Sub-page number (1, 2, etc.) - optional for Reject_Summary
         example: "1"
       - name: body
         in: body
         required: true
+        description: |
+          ROI configuration object. Content depends on the context:
+          
+          1. Standard screen: {"ROI_name": decimal_places}
+             Example: {"Injection speed": 1, "Charge speed": 1}
+          
+          2. Reject_Summary with machine_code only: {"sub_page": {...}}
+             Example: {"1": {"ST02_TESTED": 0}, "2": {"ST14_1_TESTED": 0}}
+          
+          3. Reject_Summary with machine_code and sub_page: {"ROI_name": decimal_places}
+             Example: {"ST02_TESTED": 0, "ST02_REJECTS": 0}
         schema:
           type: object
-          example: {"tested": 0, "reject": 0, "phantram": 0}
+          example: {"Total Parts": 0, "Good Parts": 0}
     responses:
       200:
         description: Successfully updated decimal places
@@ -623,19 +554,24 @@ def get_decimal_places_reject_summary_subpage_post_spec():
           properties:
             message:
               type: string
+              example: "Decimal places updated successfully"
             machine_type:
               type: string
-            machine_code:
+              example: "F1"
+            screen_name:
               type: string
-            sub_page:
-              type: string
+              example: "Production_Data"
             config:
               type: object
       400:
-        description: Bad request
+        description: Bad request (invalid JSON or missing required fields)
       500:
         description: Server error
     """
+
+
+# ====== POST SPEC FOR REJECT_SUMMARY SUB-PAGE REMOVED ======
+# Replaced by get_decimal_places_unified_post_spec()
 
 
 # ==================== MACHINE MANAGEMENT ENDPOINTS ====================

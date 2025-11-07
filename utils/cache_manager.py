@@ -56,11 +56,11 @@ def initialize_all_caches():
                     cached_count += 1
             print(f"[OK] Template images pre-cached: {cached_count}/{len(template_files)} files")
         else:
-            print("ℹ️  Reference images folder not found - skipping template pre-caching")
+            print("[INFO] Reference images folder not found - skipping template pre-caching")
     except Exception as e:
         print(f"[ERROR] Error pre-caching template images: {e}")
     
-    print("🎯 Cache initialization completed!\n")
+    print("[OK] Cache initialization completed!\n")
 
 
 def get_template_image_cached(template_path):
@@ -94,7 +94,7 @@ def get_roi_info_cached():
                 if not os.path.exists(roi_json_path):
                     roi_json_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'roi_data/roi_info.json')
                 
-                with open(roi_json_path, 'r', encoding='utf-8') as f:
+                with open(roi_json_path, 'r', encoding='utf-8-sig') as f:
                     _roi_info_cache = json.load(f)
                 print("[OK] ROI info cached successfully")
             except Exception as e:
@@ -113,7 +113,7 @@ def get_decimal_places_config_cached():
             try:
                 config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'roi_data', 'decimal_places.json')
                 if os.path.exists(config_path):
-                    with open(config_path, 'r', encoding='utf-8') as f:
+                    with open(config_path, 'r', encoding='utf-8-sig') as f:
                         _decimal_places_cache = json.load(f)
                 else:
                     _decimal_places_cache = {}
@@ -135,7 +135,7 @@ def get_machine_info_cached():
                 # Đọc từ current machine screen file
                 current_machine_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'current_machine_screen.json')
                 if os.path.exists(current_machine_file):
-                    with open(current_machine_file, 'r', encoding='utf-8') as f:
+                    with open(current_machine_file, 'r', encoding='utf-8-sig') as f:
                         _machine_info_cache = json.load(f)
                 else:
                     _machine_info_cache = {"machine_code": "F41", "screen_id": "Main"}

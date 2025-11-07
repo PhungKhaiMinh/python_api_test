@@ -233,7 +233,7 @@ def get_machine_type_from_config_smart(area, machine_code):
         # Sử dụng đường dẫn tuyệt đối dựa trên vị trí file hiện tại
         current_dir = os.path.dirname(os.path.abspath(__file__))
         config_path = os.path.join(current_dir, 'roi_data', 'machine_screens.json')
-        with open(config_path, 'r', encoding='utf-8') as f:
+        with open(config_path, 'r', encoding='utf-8-sig') as f:
             config = json.load(f)
         
         if area in config['areas'] and machine_code in config['areas'][area]['machines']:
@@ -999,7 +999,7 @@ def get_valid_screen_types_for_machine(area, machine_code):
     try:
         current_dir = os.path.dirname(os.path.abspath(__file__))
         config_path = os.path.join(current_dir, 'roi_data', 'machine_screens.json')
-        with open(config_path, 'r', encoding='utf-8') as f:
+        with open(config_path, 'r', encoding='utf-8-sig') as f:
             config = json.load(f)
         
         # Lấy machine info từ areas
@@ -1024,9 +1024,16 @@ def get_valid_screen_types_for_machine(area, machine_code):
         print(f"[ERROR] Error getting valid screen types: {e}")
         return None, []
 
-def filter_reference_images_by_machine_type(machine_type, valid_screen_types):
+def filter_reference_images_by_machine_type(machine_type, valid_screen_types, area=None, machine_code=None):
     """
     Lọc reference images chỉ lấy những cái thuộc machine type và screen types hợp lệ
+    
+    Đặc biệt với area F1:
+    - Format: template_F1_{machine_code}_{screen_id}.jpg
+    - Format với sub-page: template_F1_{machine_code}_{screen_id}_page{N}.jpg
+    
+    Các area khác (F41, F42...):
+    - Format: template_{machine_type}_{screen_id}.jpg
     """
     current_dir = os.path.dirname(os.path.abspath(__file__))
     reference_dir = os.path.join(current_dir, 'roi_data', 'reference_images')
@@ -1035,7 +1042,60 @@ def filter_reference_images_by_machine_type(machine_type, valid_screen_types):
     if not os.path.exists(reference_dir):
         return filtered_templates
     
-    # Tìm tất cả file template cho machine type này
+    # ====== TRƯỜNG HỢP ĐỶC BIỆT: AREA F1 ======
+    # Mỗi machine_code có template riêng
+    if area == "F1" and machine_code:
+        print(f"[*] Filtering F1-specific templates for machine_code: {machine_code}")
+        
+        for filename in os.listdir(reference_dir):
+            if not filename.endswith(('.png', '.jpg')):
+                continue
+            
+            # Format: template_F1_{machine_code}_{screen_id}.jpg
+            # hoặc: template_F1_{machine_code}_{screen_id}_page{N}.jpg
+            if filename.startswith(f"template_F1_{machine_code}_"):
+                # Loại bỏ prefix và extension
+                remaining = filename.replace(f"template_F1_{machine_code}_", "")
+                remaining = remaining.replace(".jpg", "").replace(".png", "")
+                
+                # Kiểm tra có sub-page không
+                sub_page = None
+                if "_page" in remaining:
+                    parts = remaining.split("_page")
+                    screen_id = parts[0]
+                    sub_page = parts[1] if len(parts) > 1 else None
+                else:
+                    screen_id = remaining
+                
+                # Chỉ lấy những screen types hợp lệ
+                if screen_id in valid_screen_types:
+                    template_path = os.path.join(reference_dir, filename)
+                    template_info = {
+                        'path': template_path,
+                        'filename': filename,
+                        'machine_type': machine_type,
+                        'area': area,
+                        'machine_code': machine_code,
+                        'screen_id': screen_id
+                    }
+                    if sub_page:
+                        template_info['sub_page'] = sub_page
+                    
+                    filtered_templates.append(template_info)
+        
+        # Format template names for display
+        template_names = []
+        for t in filtered_templates:
+            name = t['screen_id']
+            if t.get('sub_page'):
+                name += f"_page{t['sub_page']}"
+            template_names.append(name)
+        
+        print(f"[OK] Filtered F1 templates for {machine_code}: {template_names}")
+        return filtered_templates
+    
+    # ====== TRƯỜNG HỢP THÔNG THƯỜNG: AREA KHÁC (F41, F42...) ======
+    # Dùng machine_type chung
     for filename in os.listdir(reference_dir):
         if filename.startswith(f"template_{machine_type}_") and filename.endswith(('.png', '.jpg')):
             # Extract screen_id from filename: template_F41_Clamp.jpg -> Clamp
@@ -1096,10 +1156,10 @@ def auto_detect_machine_and_screen_smart(image, area=None, machine_code=None):
             return _auto_detect_with_general_ensemble(image, area, machine_code, classifier)
     
     # ====== BƯỚC 2: LỌC REFERENCE TEMPLATES ======
-    filtered_templates = filter_reference_images_by_machine_type(target_machine_type, valid_screen_types)
+    filtered_templates = filter_reference_images_by_machine_type(target_machine_type, valid_screen_types, area, machine_code)
     
     if not filtered_templates:
-        print(f"[ERROR] No reference templates found for {target_machine_type}, using fallback")
+        print(f"[ERROR] No reference templates found for {target_machine_type}/{machine_code}, using fallback")
         return _auto_detect_legacy_fallback(image, area, machine_code)
     
     # ====== BƯỚC 3: OPTIMIZED FOCUSED TEMPLATE MATCHING (SKIP ENSEMBLE) ======
@@ -1813,7 +1873,7 @@ def _format_detection_result(candidate, area, machine_code, machine_type, score,
     try:
         current_dir = os.path.dirname(os.path.abspath(__file__))
         config_path = os.path.join(current_dir, 'roi_data', 'machine_screens.json')
-        with open(config_path, 'r', encoding='utf-8') as f:
+        with open(config_path, 'r', encoding='utf-8-sig') as f:
             config = json.load(f)
         
         if machine_type in config['machine_types']:
@@ -1829,7 +1889,7 @@ def _format_detection_result(candidate, area, machine_code, machine_type, score,
     try:
         current_dir = os.path.dirname(os.path.abspath(__file__))
         config_path = os.path.join(current_dir, 'roi_data', 'machine_screens.json')
-        with open(config_path, 'r', encoding='utf-8') as f:
+        with open(config_path, 'r', encoding='utf-8-sig') as f:
             config = json.load(f)
         
         if area in config['areas'] and machine_code in config['areas'][area]['machines']:

@@ -28,7 +28,7 @@ def get_machine_info_route():
         if not os.path.exists(machine_screens_path):
             return jsonify({"error": "Machine screens config not found"}), 404
         
-        with open(machine_screens_path, 'r', encoding='utf-8') as f:
+        with open(machine_screens_path, 'r', encoding='utf-8-sig') as f:
             data = json.load(f)
         
         # Get specific machine if requested
@@ -62,7 +62,7 @@ def get_machines_by_area(area_code):
     try:
         machine_screens_path = os.path.join(get_roi_data_folder(), 'machine_screens.json')
         
-        with open(machine_screens_path, 'r', encoding='utf-8') as f:
+        with open(machine_screens_path, 'r', encoding='utf-8-sig') as f:
             data = json.load(f)
         
         if area_code not in data.get('areas', {}):
@@ -91,7 +91,7 @@ def get_machine_screens(machine_code):
     try:
         machine_screens_path = os.path.join(get_roi_data_folder(), 'machine_screens.json')
         
-        with open(machine_screens_path, 'r', encoding='utf-8') as f:
+        with open(machine_screens_path, 'r', encoding='utf-8-sig') as f:
             data = json.load(f)
         
         # Find machine in areas
@@ -228,7 +228,7 @@ def update_machine_screen():
         if not os.path.exists(machine_screens_path):
             return jsonify({"error": "Machine screens configuration not found"}), 404
         
-        with open(machine_screens_path, 'r', encoding='utf-8') as f:
+        with open(machine_screens_path, 'r', encoding='utf-8-sig') as f:
             data = json.load(f)
         
         # Validate area

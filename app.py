@@ -152,12 +152,10 @@ if SWAGGER_AVAILABLE:
             # Image routes
             get_upload_image_spec, get_images_list_spec, get_image_spec,
             get_delete_image_spec, get_hmi_detection_spec,
-            # Decimal routes
+            # Decimal routes (UNIFIED API)
             get_decimal_places_all_spec, get_decimal_places_post_spec,
-            get_decimal_places_machine_spec, get_decimal_places_screen_spec,
-            get_decimal_places_screen_post_spec, get_set_decimal_value_spec,
-            get_set_all_decimal_values_spec, get_decimal_places_reject_summary_machine_spec,
-            get_decimal_places_reject_summary_subpage_get_spec, get_decimal_places_reject_summary_subpage_post_spec
+            get_decimal_places_unified_spec, get_decimal_places_unified_post_spec,
+            get_set_decimal_value_spec, get_set_all_decimal_values_spec
         )
         
         # Inject docstrings directly
@@ -185,17 +183,13 @@ if SWAGGER_AVAILABLE:
         image_routes.delete_image.__doc__ = get_delete_image_spec().strip()
         image_routes.get_hmi_detection_image.__doc__ = get_hmi_detection_spec().strip()
         
-        # Decimal routes
+        # Decimal routes (UNIFIED API)
         decimal_routes.get_decimal_places.__doc__ = get_decimal_places_all_spec().strip()
         decimal_routes.update_decimal_places.__doc__ = get_decimal_places_post_spec().strip()
-        decimal_routes.get_decimal_places_for_machine.__doc__ = get_decimal_places_machine_spec().strip()
-        decimal_routes.get_decimal_places_for_screen.__doc__ = get_decimal_places_screen_spec().strip()
-        decimal_routes.update_decimal_places_for_screen.__doc__ = get_decimal_places_screen_post_spec().strip()
+        decimal_routes.get_decimal_places_unified.__doc__ = get_decimal_places_unified_spec().strip()
+        decimal_routes.update_decimal_places_unified.__doc__ = get_decimal_places_unified_post_spec().strip()
         decimal_routes.set_decimal_value.__doc__ = get_set_decimal_value_spec().strip()
         decimal_routes.set_all_decimal_values.__doc__ = get_set_all_decimal_values_spec().strip()
-        decimal_routes.get_decimal_places_for_reject_summary_machine.__doc__ = get_decimal_places_reject_summary_machine_spec().strip()
-        decimal_routes.get_decimal_places_for_reject_summary_subpage.__doc__ = get_decimal_places_reject_summary_subpage_get_spec().strip()
-        decimal_routes.update_decimal_places_for_reject_summary_subpage.__doc__ = get_decimal_places_reject_summary_subpage_post_spec().strip()
         
         print("[OK] Swagger docstrings injected before route registration")
     except Exception as e:
@@ -360,7 +354,7 @@ def get_history():
         for filename in files:
             try:
                 file_path = os.path.join(OCR_RESULTS_FOLDER, filename)
-                with open(file_path, 'r', encoding='utf-8') as f:
+                with open(file_path, 'r', encoding='utf-8-sig') as f:
                     data = json.load(f)
                 
                 # Filter by timestamp (required)

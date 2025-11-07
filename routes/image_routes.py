@@ -64,6 +64,16 @@ def detect_sub_page_from_special_region(image, machine_type, machine_code, scree
                 "1": ["ST02", "WING", "PRESENCE"],  # ST02 - WING PRESENCE CHECK
                 "2": ["ST14", "LEAK", "TEST"]       # ST14 - LEAK TEST CHECK 1
             },
+            "IE-F1-CTF01": {
+                "1": ["ST06", "CATHETER", "TIP"]      # ST06 - CATHETER TIP CHECK
+            },
+            "IE-F1-CFA01": {
+                "1": ["ST02", "NEEDLE", "PRESENCE"],  # ST02 - NEEDLE PRESENCE CHECK
+                "2": ["ST13", "CLIP", "ORIENTATION"]       # ST13 - CLIP ORIENTATION CHECK
+            },
+            "IE-F1-CSN01": {
+                "1": ["ST02", "LUER", "LOCK"]  # ST02 - LUER LOCK CHECK
+            }
             # TODO: Thêm điều kiện cho máy khác
         }
         
