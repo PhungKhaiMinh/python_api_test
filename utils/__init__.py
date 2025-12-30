@@ -1,55 +1,106 @@
 """
-Utils package for HMI OCR API
-Contains utility modules for caching, config, image processing, and OCR
+Utils package - PaddleOCR Edition
 """
 
-from .cache_manager import *
-from .config_manager import *
-from .image_processor import *
-from .ocr_processor import *
+from .config_manager import (
+    get_roi_coordinates,
+    get_roi_coordinates_with_subpage,
+    get_machine_type,
+    get_area_for_machine,
+    get_machine_name_from_code,
+    get_all_machine_types,
+    get_decimal_places_config,
+    get_current_machine_info,
+    save_current_machine_info,
+    is_named_roi_format,
+    get_roi_data_folder
+)
+
+from .cache_manager import (
+    get_roi_info_cached,
+    get_decimal_places_cached,
+    get_machine_info_cached,
+    clear_cache,
+    initialize_all_caches
+)
+
+from .image_processor import (
+    detect_hmi_screen,
+    preprocess_hmi_image,
+    preprocess_roi_for_ocr,
+    check_image_quality,
+    enhance_image_quality,
+    enhance_image,
+    ImageAligner
+)
+
+from .ocr_processor import (
+    perform_ocr_on_roi,
+    perform_ocr_on_roi_optimized,
+    apply_decimal_places_format,
+    init_ocr_globals,
+    perform_full_image_ocr
+)
+
+from .paddleocr_engine import (
+    get_paddleocr_instance,
+    read_image_with_paddleocr,
+    extract_ocr_data,
+    find_matching_screen,
+    filter_ocr_by_roi,
+    post_process_ocr_text,
+    load_roi_info,
+    init_paddleocr_globals,
+    detect_hmi_screen_paddle,
+    HAS_PADDLEOCR
+)
 
 __all__ = [
-    # Cache Manager
-    'initialize_all_caches',
-    'get_template_image_cached',
-    'get_roi_info_cached',
-    'get_decimal_places_config_cached',
-    'get_machine_info_cached',
-    
     # Config Manager
     'get_roi_coordinates',
     'get_roi_coordinates_with_subpage',
-    'get_special_region_coordinates',
     'get_machine_type',
     'get_area_for_machine',
     'get_machine_name_from_code',
     'get_all_machine_types',
-    'find_machine_code_from_template',
-    'get_screen_numeric_id',
-    'get_reference_template_path',
-    'get_reference_template_path_with_subpage',
     'get_decimal_places_config',
-    'is_named_roi_format',
     'get_current_machine_info',
+    'save_current_machine_info',
+    'is_named_roi_format',
+    'get_roi_data_folder',
+    
+    # Cache Manager
+    'get_roi_info_cached',
+    'get_decimal_places_cached',
+    'get_machine_info_cached',
+    'clear_cache',
+    'initialize_all_caches',
     
     # Image Processor
-    'ImageAligner',
-    'preprocess_hmi_image_with_alignment',
+    'detect_hmi_screen',
     'preprocess_hmi_image',
     'preprocess_roi_for_ocr',
     'check_image_quality',
     'enhance_image_quality',
     'enhance_image',
-    'adaptive_edge_detection',
-    'detect_hmi_screen',
-    'extract_content_region',
-    'fine_tune_hmi_screen',
+    'ImageAligner',
     
     # OCR Processor
-    'process_single_roi_optimized',
-    'process_roi_with_retry_logic_optimized',
-    'perform_ocr_on_roi_optimized',
     'perform_ocr_on_roi',
-    'process_roi_with_retry_logic',
+    'perform_ocr_on_roi_optimized',
+    'apply_decimal_places_format',
+    'init_ocr_globals',
+    'perform_full_image_ocr',
+    
+    # PaddleOCR Engine
+    'get_paddleocr_instance',
+    'read_image_with_paddleocr',
+    'extract_ocr_data',
+    'find_matching_screen',
+    'filter_ocr_by_roi',
+    'post_process_ocr_text',
+    'load_roi_info',
+    'init_paddleocr_globals',
+    'detect_hmi_screen_paddle',
+    'HAS_PADDLEOCR'
 ]
-

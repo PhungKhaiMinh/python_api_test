@@ -1,11 +1,11 @@
 """
 Cache Manager Module
-Handles all caching logic for ROI info, decimal places, machine info, and template images
+Handles all caching logic for ROI info, decimal places, and machine info
+PaddleOCR Edition - Template image caching removed
 """
 
 import os
 import json
-import cv2
 import threading
 
 # Global cache variables
@@ -15,12 +15,10 @@ _decimal_places_cache = None
 _decimal_places_cache_lock = threading.Lock()
 _machine_info_cache = None
 _machine_info_cache_lock = threading.Lock()
-_template_image_cache = {}
-_template_cache_lock = threading.Lock()
 
 
 def initialize_all_caches():
-    """Khởi tạo tất cả cache ngay khi chương trình bắt đầu để tránh delay lần đầu gọi API"""
+    """Initialize all caches at startup to avoid delay on first API call"""
     print("\n[*] Initializing all caches at startup...")
     
     try:
@@ -44,47 +42,11 @@ def initialize_all_caches():
     except Exception as e:
         print(f"[ERROR] Error caching machine info: {e}")
     
-    try:
-        # Pre-cache common template images từ reference_images folder
-        reference_folder = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'roi_data', 'reference_images')
-        if os.path.exists(reference_folder):
-            template_files = [f for f in os.listdir(reference_folder) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
-            cached_count = 0
-            for template_file in template_files[:]:  # Cache tất cả template
-                template_path = os.path.join(reference_folder, template_file)
-                if get_template_image_cached(template_path) is not None:
-                    cached_count += 1
-            print(f"[OK] Template images pre-cached: {cached_count}/{len(template_files)} files")
-        else:
-            print("[INFO] Reference images folder not found - skipping template pre-caching")
-    except Exception as e:
-        print(f"[ERROR] Error pre-caching template images: {e}")
-    
     print("[OK] Cache initialization completed!\n")
 
 
-def get_template_image_cached(template_path):
-    """Cache template images để tránh đọc lại từ disk"""
-    if not template_path or not os.path.exists(template_path):
-        return None
-        
-    with _template_cache_lock:
-        if template_path not in _template_image_cache:
-            try:
-                template_img = cv2.imread(template_path)
-                if template_img is not None:
-                    _template_image_cache[template_path] = template_img
-                    print(f"[OK] Template image cached: {os.path.basename(template_path)}")
-                return template_img
-            except Exception as e:
-                print(f"[ERROR] Error caching template image: {e}")
-                return None
-        
-        return _template_image_cache[template_path]
-
-
 def get_roi_info_cached():
-    """Cache ROI info để tránh đọc file JSON nhiều lần"""
+    """Cache ROI info to avoid reading JSON file multiple times"""
     global _roi_info_cache
     
     with _roi_info_cache_lock:
@@ -105,7 +67,7 @@ def get_roi_info_cached():
 
 
 def get_decimal_places_config_cached():
-    """Cache decimal places config để tránh đọc file nhiều lần"""
+    """Cache decimal places config to avoid reading file multiple times"""
     global _decimal_places_cache
     
     with _decimal_places_cache_lock:
@@ -125,14 +87,18 @@ def get_decimal_places_config_cached():
         return _decimal_places_cache
 
 
+# Alias for compatibility
+get_decimal_places_cached = get_decimal_places_config_cached
+
+
 def get_machine_info_cached():
-    """Cache machine info để tránh gọi hàm nặng nhiều lần"""
+    """Cache machine info to avoid calling heavy functions multiple times"""
     global _machine_info_cache
     
     with _machine_info_cache_lock:
         if _machine_info_cache is None:
             try:
-                # Đọc từ current machine screen file
+                # Read from current machine screen file
                 current_machine_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'current_machine_screen.json')
                 if os.path.exists(current_machine_file):
                     with open(current_machine_file, 'r', encoding='utf-8-sig') as f:
@@ -149,12 +115,12 @@ def get_machine_info_cached():
 
 def clear_cache(cache_type='all'):
     """
-    Xóa cache để force reload data mới
+    Clear cache to force reload data
     
     Args:
-        cache_type: 'all', 'roi', 'decimal', 'machine', 'template'
+        cache_type: 'all', 'roi', 'decimal', 'machine'
     """
-    global _roi_info_cache, _decimal_places_cache, _machine_info_cache, _template_image_cache
+    global _roi_info_cache, _decimal_places_cache, _machine_info_cache
     
     if cache_type in ['all', 'roi']:
         with _roi_info_cache_lock:
@@ -170,9 +136,3 @@ def clear_cache(cache_type='all'):
         with _machine_info_cache_lock:
             _machine_info_cache = None
             print("[OK] Machine info cache cleared")
-    
-    if cache_type in ['all', 'template']:
-        with _template_cache_lock:
-            _template_image_cache.clear()
-            print("[OK] Template image cache cleared")
-

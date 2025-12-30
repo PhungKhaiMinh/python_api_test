@@ -1,36 +1,75 @@
 """
 OCR Processor Module
-Handles all OCR processing operations including EasyOCR integration,
+Handles all OCR processing operations using PaddleOCR,
 parallel processing, and result formatting
+
+Refactored to use PaddleOCR instead of EasyOCR for better accuracy
 """
 
 import cv2
 import numpy as np
 import re
 import os
+import time
 from .cache_manager import get_decimal_places_config_cached, get_roi_info_cached, get_machine_info_cached
 from .config_manager import get_machine_type
 
+# Import PaddleOCR engine
+from .paddleocr_engine import (
+    get_paddleocr_instance, 
+    is_paddleocr_available,
+    read_image_with_paddleocr,
+    extract_ocr_data,
+    post_process_ocr_text,
+    find_matching_screen,
+    filter_ocr_by_roi,
+    normalize_text,
+    fuzzy_match,
+    calculate_iou,
+    polygon_to_normalized_bbox,
+    IOU_THRESHOLD
+)
+
 
 # Global variables - will be set by app
-HAS_EASYOCR = False
-reader = None
+HAS_PADDLEOCR = False
 _gpu_accelerator = None
 _ocr_thread_pool = None
 
 
-def init_ocr_globals(easyocr_available, ocr_reader, gpu_acc, thread_pool):
+def init_ocr_globals(paddleocr_available=True, ocr_reader=None, gpu_acc=None, thread_pool=None):
     """Initialize global OCR variables from app"""
-    global HAS_EASYOCR, reader, _gpu_accelerator, _ocr_thread_pool
-    HAS_EASYOCR = easyocr_available
-    reader = ocr_reader
+    global HAS_PADDLEOCR, _gpu_accelerator, _ocr_thread_pool
+    
+    # Try to initialize PaddleOCR
+    try:
+        paddle_instance = get_paddleocr_instance()
+        HAS_PADDLEOCR = paddle_instance is not None
+    except Exception as e:
+        print(f"[WARNING] PaddleOCR initialization failed: {e}")
+        HAS_PADDLEOCR = False
+    
     _gpu_accelerator = gpu_acc
     _ocr_thread_pool = thread_pool
+    
+    if HAS_PADDLEOCR:
+        print("[OK] OCR Processor initialized with PaddleOCR")
+    else:
+        print("[WARNING] PaddleOCR not available")
 
 
-def process_single_roi_optimized(args):
-    """Xử lý OCR cho một ROI đơn lẻ - GPU accelerated"""
-    # Unpack args - có thể có hoặc không có machine_code và sub_page
+def process_single_roi_paddleocr(args):
+    """
+    Process OCR for a single ROI using PaddleOCR
+    
+    Args:
+        args: tuple containing (roi_image, roi_name, machine_type, allowed_values, 
+              is_special_on_off_case, screen_id, machine_code, sub_page)
+    
+    Returns:
+        dict: OCR result with text, confidence, and metadata
+    """
+    # Unpack args
     if len(args) == 8:
         (roi_image, roi_name, machine_type, allowed_values, is_special_on_off_case, screen_id, machine_code, sub_page) = args
     else:
@@ -39,7 +78,7 @@ def process_single_roi_optimized(args):
         sub_page = None
     
     try:
-        # Trường hợp đặc biệt ON/OFF - phân tích màu sắc
+        # Special ON/OFF case - color analysis
         if is_special_on_off_case and machine_type != "F1":
             b, g, r = cv2.split(roi_image)
             
@@ -59,7 +98,7 @@ def process_single_roi_optimized(args):
                 "has_text": True
             }
         
-        if not HAS_EASYOCR or reader is None:
+        if not HAS_PADDLEOCR:
             return {
                 "roi_index": roi_name,
                 "text": "OCR_NOT_AVAILABLE",
@@ -68,7 +107,7 @@ def process_single_roi_optimized(args):
                 "original_value": ""
             }
         
-        # Resize nếu ROI quá nhỏ
+        # Resize if ROI is too small
         height, width = roi_image.shape[:2]
         if height < 30 or width < 30:
             scale_factor = max(30/height, 30/width)
@@ -80,7 +119,7 @@ def process_single_roi_optimized(args):
             else:
                 roi_image = cv2.resize(roi_image, (new_width, new_height), cv2.INTER_CUBIC)
         
-        # Convert to grayscale
+        # Preprocess image for better OCR
         if len(roi_image.shape) == 3:
             if _gpu_accelerator:
                 roi_processed = _gpu_accelerator.cvt_color_gpu(roi_image, cv2.COLOR_BGR2GRAY)
@@ -95,25 +134,18 @@ def process_single_roi_optimized(args):
         else:
             roi_processed = cv2.GaussianBlur(roi_processed, (3, 3), 0)
         
-        # Thực hiện OCR
-        ocr_results = reader.readtext(
-            roi_processed,
-            allowlist='0123456789.-ABCDEFGHIKLNORTUabcdefghiklnortu',
-            detail=1,
-            paragraph=False,
-            batch_size=1,
-            text_threshold=0.4,
-            link_threshold=0.2,
-            low_text=0.3,
-            mag_ratio=2,
-            slope_ths=0.05,
-            decoder='beamsearch'
-        )
+        # Convert back to BGR for PaddleOCR
+        roi_for_ocr = cv2.cvtColor(roi_processed, cv2.COLOR_GRAY2BGR) if len(roi_processed.shape) == 2 else roi_processed
         
-        if ocr_results and len(ocr_results) > 0:
-            best_result = max(ocr_results, key=lambda x: x[2])
-            best_text = best_result[1]
-            best_confidence = best_result[2]
+        # Perform OCR with PaddleOCR
+        results, img_width, img_height = read_image_with_paddleocr(roi_for_ocr)
+        ocr_data = extract_ocr_data(results)
+        
+        if ocr_data and len(ocr_data) > 0:
+            # Find best result by confidence
+            best_result = max(ocr_data, key=lambda x: x['confidence'])
+            best_text = best_result['text']
+            best_confidence = best_result['confidence']
             original_value = best_text
             has_text = True
             
@@ -144,7 +176,7 @@ def process_single_roi_optimized(args):
             }
             
     except Exception as e:
-        print(f"Error in process_single_roi_optimized: {str(e)}")
+        print(f"[ERROR] process_single_roi_paddleocr: {str(e)}")
         return {
             "roi_index": roi_name,
             "text": "ERROR",
@@ -153,44 +185,6 @@ def process_single_roi_optimized(args):
             "original_value": "",
             "error": str(e)
         }
-
-
-def post_process_ocr_text(text, allowed_values=None):
-    """Post-process OCR text - convert common mistakes"""
-    if not text:
-        return text
-    
-    # Convert single 'O' to '0'
-    if len(text) == 1 and text.upper() == 'O':
-        return '0'
-    
-    # Handle common character confusions
-    if len(text) >= 2:
-        chars_to_check = '01OUouIilC'
-        suspicious_count = sum(1 for char in text if char in chars_to_check)
-        
-        if suspicious_count >= 2 and suspicious_count / len(text) >= 0.3:
-            upper_text = text.upper()
-            upper_no_dot = upper_text.replace('.', '')
-            
-            if re.search(r'[IUO0Q]{2}', upper_no_dot):
-                temp_text = upper_text.replace('U', '0').replace('I', '1').replace('O', '0').replace('C', '0').replace('Q', '0')
-                if temp_text.replace('.', '').replace('-', '').isdigit():
-                    return temp_text
-            
-            # Check if mostly digit-like characters
-            digit_like_count = sum(1 for char in upper_text if char in 'OUICL')
-            if digit_like_count / len(text) >= 0.7:
-                cleaned = upper_text
-                cleaned = cleaned.replace('O', '0').replace('U', '0').replace('Q', '0')
-                cleaned = cleaned.replace('I', '1').replace('L', '1')
-                cleaned = cleaned.replace('C', '0').replace('D', '0')
-                cleaned = cleaned.replace(' ', '')
-                
-                if cleaned.replace('.', '').replace('-', '').isdigit():
-                    return cleaned
-    
-    return text
 
 
 def apply_decimal_places_format(text, roi_name, machine_type, screen_id, machine_code=None, sub_page=None):
@@ -216,7 +210,7 @@ def apply_decimal_places_format(text, roi_name, machine_type, screen_id, machine
             machine_info = get_machine_info_cached()
             machine_code = machine_info.get('machine_code')
         
-        # Cấu trúc mới cho Reject_Summary với sub-page:
+        # New structure for Reject_Summary with sub-page:
         # machine_type > screen_id > machine_code > sub_page > roi_name
         if screen_id == "Reject_Summary" and sub_page and machine_code:
             if machine_type in decimal_config:
@@ -226,7 +220,7 @@ def apply_decimal_places_format(text, roi_name, machine_type, screen_id, machine
                             if roi_name in decimal_config[machine_type][screen_id][machine_code][sub_page]:
                                 decimal_places = decimal_config[machine_type][screen_id][machine_code][sub_page][roi_name]
         else:
-            # Cấu trúc thường: machine_type > screen_id > roi_name
+            # Standard structure: machine_type > screen_id > roi_name
             if machine_type in decimal_config:
                 if screen_id in decimal_config[machine_type]:
                     if roi_name in decimal_config[machine_type][screen_id]:
@@ -255,7 +249,7 @@ def apply_decimal_places_format(text, roi_name, machine_type, screen_id, machine
         return text
         
     except Exception as e:
-        print(f"Error applying decimal format: {e}")
+        print(f"[ERROR] apply_decimal_format: {e}")
         return text
 
 
@@ -278,16 +272,17 @@ def format_working_hours(text):
 
 
 def process_roi_with_retry_logic_optimized(roi_args, original_filename):
-    """Process ROI with retry logic - optimized version"""
-    # For now, call single process directly
-    # Can add retry logic later if needed
-    return process_single_roi_optimized(roi_args)
+    """Process ROI with retry logic - optimized version using PaddleOCR"""
+    return process_single_roi_paddleocr(roi_args)
 
 
 def perform_ocr_on_roi_optimized(image, roi_coordinates, original_filename, 
                                  template_path=None, roi_names=None, machine_code=None, screen_id=None, sub_page=None):
     """
-    Phiên bản tối ưu của perform_ocr_on_roi với parallel processing
+    Optimized OCR on ROIs using PaddleOCR with parallel processing
+    
+    This is the main entry point for performing OCR on detected ROIs.
+    Uses PaddleOCR engine for text recognition.
     """
     try:
         if roi_coordinates is None or len(roi_coordinates) == 0:
@@ -296,7 +291,8 @@ def perform_ocr_on_roi_optimized(image, roi_coordinates, original_filename,
         if roi_names is None or len(roi_names) != len(roi_coordinates):
             roi_names = [f"ROI_{i}" for i in range(len(roi_coordinates))]
         
-        if not HAS_EASYOCR or reader is None:
+        if not HAS_PADDLEOCR:
+            print("[WARNING] PaddleOCR not available, returning empty results")
             return [{"roi_index": roi_names[i], "text": "OCR_NOT_AVAILABLE", "confidence": 0} 
                    for i in range(len(roi_coordinates))]
         
@@ -311,7 +307,7 @@ def perform_ocr_on_roi_optimized(image, roi_coordinates, original_filename,
         roi_info = get_roi_info_cached()
         machine_type = get_machine_type(machine_code)
         
-        # Prepare ROI args for parallel processing
+        # Prepare ROI args for processing
         roi_args = []
         
         for i, coords in enumerate(roi_coordinates):
@@ -358,30 +354,164 @@ def perform_ocr_on_roi_optimized(image, roi_coordinates, original_filename,
                 roi_args.append((roi_image, roi_name, machine_type, allowed_values, is_special_on_off_case, screen_id, machine_code, sub_page))
                 
             except Exception as e:
-                print(f"Error preparing ROI {i}: {e}")
+                print(f"[ERROR] Preparing ROI {i}: {e}")
                 continue
         
-        # Process ROIs in parallel
+        # Process ROIs in parallel if thread pool available
         if _ocr_thread_pool:
-            results = list(_ocr_thread_pool.map(process_single_roi_optimized, roi_args))
+            results = list(_ocr_thread_pool.map(process_single_roi_paddleocr, roi_args))
         else:
-            results = [process_single_roi_optimized(args) for args in roi_args]
+            results = [process_single_roi_paddleocr(args) for args in roi_args]
         
         return results
         
     except Exception as e:
-        print(f"Error in perform_ocr_on_roi_optimized: {e}")
+        print(f"[ERROR] perform_ocr_on_roi_optimized: {e}")
         return []
 
 
-# Alias for backward compatibility
+def perform_full_image_ocr(image, roi_info, area=None, machine_code=None):
+    """
+    Perform full image OCR with screen detection and ROI filtering
+    Uses PaddleOCR algorithm from paddleocr_reader.py
+    
+    Args:
+        image: OpenCV image (numpy array BGR)
+        roi_info: ROI data from roi_info.json
+        area: Selected area (F1, F4, etc.) - optional
+        machine_code: Selected machine code - optional
+    
+    Returns:
+        dict: OCR results with screen detection info
+    """
+    try:
+        if not HAS_PADDLEOCR:
+            return {
+                "success": False,
+                "error": "PaddleOCR not available",
+                "ocr_results": []
+            }
+        
+        start_time = time.time()
+        img_height, img_width = image.shape[:2]
+        
+        # Step 1: Full image OCR
+        print("[*] Performing full image OCR with PaddleOCR...")
+        results, _, _ = read_image_with_paddleocr(image)
+        ocr_data = extract_ocr_data(results)
+        
+        ocr_time = time.time() - start_time
+        print(f"[OK] PaddleOCR found {len(ocr_data)} text items in {ocr_time:.2f}s")
+        
+        # Step 2: Find matching screen
+        # Returns: (machine_type, machine_code, screen_name, sub_page, sub_page_data, match_count, match_percentage)
+        match_start = time.time()
+        matched_machine_type, matched_machine, screen_name, sub_page, sub_page_data, match_count, match_percentage = find_matching_screen(
+            ocr_data, roi_info,
+            selected_area=area,
+            selected_machine=machine_code,
+            debug=True
+        )
+        match_time = time.time() - match_start
+        
+        if screen_name:
+            print(f"[OK] Matched screen: {matched_machine_type}/{matched_machine}/{screen_name} (sub-page {sub_page})")
+            print(f"[OK] Match: {match_count} Special_rois ({match_percentage:.1f}%)")
+            
+            # Step 3: Filter OCR results by IoU with ROIs
+            filter_start = time.time()
+            filtered_results = filter_ocr_by_roi(ocr_data, sub_page_data, img_width, img_height)
+            filter_time = time.time() - filter_start
+            
+            print(f"[OK] Filtered to {len(filtered_results)} results matching ROIs (IoU >= {IOU_THRESHOLD:.0%})")
+            
+            # Use matched_machine_type from find_matching_screen
+            machine_type = matched_machine_type if matched_machine_type else get_machine_type(matched_machine)
+            
+            # Convert to standard output format
+            ocr_results = []
+            for item in filtered_results:
+                # Apply post-processing and decimal formatting
+                text = post_process_ocr_text(item['text'])
+                text = apply_decimal_places_format(text, item['matched_roi'], machine_type, screen_name, matched_machine, sub_page)
+                
+                ocr_results.append({
+                    "roi_index": item['matched_roi'],
+                    "text": text,
+                    "confidence": float(item['confidence']),
+                    "has_text": True,
+                    "original_value": item['text'],
+                    "iou": float(item['iou'])
+                })
+            
+            total_time = time.time() - start_time
+            
+            return {
+                "success": True,
+                "area": matched_machine_type,  # machine_type serves as area identifier
+                "machine_code": matched_machine,
+                "machine_type": machine_type,
+                "screen_id": screen_name,
+                "sub_page": sub_page,
+                "match_count": match_count,
+                "match_percentage": match_percentage,
+                "ocr_results": ocr_results,
+                "roi_count": len(ocr_results),
+                "processing_time": {
+                    "ocr": ocr_time,
+                    "matching": match_time,
+                    "filtering": filter_time,
+                    "total": total_time
+                }
+            }
+        else:
+            print("[WARNING] No matching screen found")
+            
+            # Return all OCR results without filtering
+            ocr_results = []
+            for item in ocr_data:
+                text = post_process_ocr_text(item['text'])
+                ocr_results.append({
+                    "roi_index": f"OCR_{len(ocr_results)}",
+                    "text": text,
+                    "confidence": float(item['confidence']),
+                    "has_text": True,
+                    "original_value": item['text']
+                })
+            
+            return {
+                "success": True,
+                "area": area,
+                "machine_code": machine_code,
+                "screen_id": None,
+                "sub_page": None,
+                "match_count": 0,
+                "match_percentage": 0,
+                "ocr_results": ocr_results,
+                "roi_count": len(ocr_results),
+                "warning": "No matching screen found - returning all OCR results"
+            }
+            
+    except Exception as e:
+        print(f"[ERROR] perform_full_image_ocr: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": False,
+            "error": str(e),
+            "ocr_results": []
+        }
+
+
+# Backward compatibility aliases
+process_single_roi_optimized = process_single_roi_paddleocr
 perform_ocr_on_roi = perform_ocr_on_roi_optimized
 process_roi_with_retry_logic = process_roi_with_retry_logic_optimized
 
 
 def save_roi_image_with_result(roi, roi_name, original_filename, detected_text, 
                                confidence, original_value, is_text_result=False, upload_folder='uploads'):
-    """Lưu ảnh ROI với kết quả OCR overlay"""
+    """Save ROI image with OCR result overlay"""
     try:
         processed_folder = os.path.join(upload_folder, 'processed_roi')
         os.makedirs(processed_folder, exist_ok=True)
@@ -420,6 +550,5 @@ def save_roi_image_with_result(roi, roi_name, original_filename, detected_text,
         return roi_result_path
         
     except Exception as e:
-        print(f"Error saving ROI image: {e}")
+        print(f"[ERROR] save_roi_image_with_result: {e}")
         return None
-

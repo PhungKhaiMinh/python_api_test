@@ -1,21 +1,20 @@
 """
 Main Flask Application
-HMI OCR API Server - Refactored for better maintainability
+HMI OCR API Server - PaddleOCR Edition
+Uses PaddleOCR exclusively for OCR processing
 """
 
 from flask import Flask, request, jsonify
 import os
-import cv2
 import concurrent.futures
 from multiprocessing import cpu_count
-import threading
 from datetime import datetime
 import json
 
 # Import utils modules
 from utils import initialize_all_caches
-from utils.image_processor import init_cv2_detectors
 from utils.ocr_processor import init_ocr_globals
+from utils.paddleocr_engine import get_paddleocr_instance, init_paddleocr_globals
 
 # Import route blueprints
 from routes import image_bp, machine_bp, decimal_bp, reference_bp
@@ -26,70 +25,44 @@ from routes.reference_routes import init_reference_routes
 try:
     from gpu_accelerator import get_gpu_accelerator, is_gpu_available, get_gpu_info
     from parallel_processor import (
-        get_ocr_thread_pool, get_image_thread_pool, get_roi_processor,
-        parallel_map, get_system_stats, ParallelROIProcessor
+        get_ocr_thread_pool, get_image_thread_pool,
+        get_system_stats
     )
     OPTIMIZATION_MODULES_AVAILABLE = True
-    print("[OK] GPU Accelerator và Parallel Processor modules loaded")
+    print("[OK] GPU Accelerator and Parallel Processor modules loaded")
 except ImportError as e:
     OPTIMIZATION_MODULES_AVAILABLE = False
     print(f"[WARNING] Optimization modules not available: {e}")
 
-# Import EasyOCR
+# Initialize PaddleOCR
+print("[*] Initializing PaddleOCR...")
 try:
-    import easyocr
-    HAS_EASYOCR = True
-    reader = easyocr.Reader(['en'], gpu=True)
-    print("[OK] EasyOCR initialized with GPU")
-except ImportError:
-    print("[WARNING] EasyOCR not installed")
-    HAS_EASYOCR = False
-    reader = None
-
-# Initialize OpenCV detectors
-try:
-    sift_detector = cv2.SIFT_create()
-    print("[OK] SIFT detector initialized")
+    paddle_reader = get_paddleocr_instance()
+    HAS_PADDLEOCR = paddle_reader is not None
+    if HAS_PADDLEOCR:
+        print("[OK] PaddleOCR initialized successfully")
+    else:
+        print("[WARNING] PaddleOCR initialization failed")
 except Exception as e:
-    print(f"[ERROR] SIFT detector failed: {e}")
-    sift_detector = None
-
-try:
-    orb_detector = cv2.ORB_create(nfeatures=500)
-    bf_matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
-    print("[OK] ORB detector and BFMatcher initialized")
-except Exception as e:
-    print(f"[ERROR] ORB detector failed: {e}")
-    orb_detector = None
-    bf_matcher = None
-
-try:
-    FLANN_INDEX_KDTREE = 1
-    flann_index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=5)
-    flann_search_params = dict(checks=50)
-    flann_matcher = cv2.FlannBasedMatcher(flann_index_params, flann_search_params)
-    print("[OK] FLANN matcher initialized")
-except Exception as e:
-    print(f"[ERROR] FLANN matcher failed: {e}")
-    flann_matcher = None
+    print(f"[WARNING] PaddleOCR not available: {e}")
+    HAS_PADDLEOCR = False
+    paddle_reader = None
 
 # Thread pools
 if OPTIMIZATION_MODULES_AVAILABLE:
     _ocr_thread_pool = get_ocr_thread_pool()
     _image_thread_pool = get_image_thread_pool()
-    _roi_processor = get_roi_processor()
     print("[OK] Enhanced thread pools initialized")
 else:
     _ocr_thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=max(4, cpu_count()))
     _image_thread_pool = concurrent.futures.ThreadPoolExecutor(max_workers=max(4, cpu_count()))
-    _roi_processor = None
-    print(f"[WARNING] Standard thread pool with {max(4, cpu_count())} workers")
+    print(f"[OK] Standard thread pool with {max(4, cpu_count())} workers")
 
 # GPU Accelerator
 _gpu_accelerator = None
 if OPTIMIZATION_MODULES_AVAILABLE and is_gpu_available():
     _gpu_accelerator = get_gpu_accelerator()
-    print(f"[OK] GPU Accelerator ready: {get_gpu_info()}")
+    print(f"[OK] GPU Accelerator ready")
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -107,18 +80,16 @@ except ImportError:
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
 ROI_DATA_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'roi_data')
 OCR_RESULTS_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ocr_results')
-REFERENCE_IMAGES_FOLDER = os.path.join(ROI_DATA_FOLDER, 'reference_images')
 HMI_REFINED_FOLDER = os.path.join(UPLOAD_FOLDER, 'hmi_refined')
 
 # Create directories
-for folder in [UPLOAD_FOLDER, ROI_DATA_FOLDER, OCR_RESULTS_FOLDER, REFERENCE_IMAGES_FOLDER, HMI_REFINED_FOLDER]:
+for folder in [UPLOAD_FOLDER, ROI_DATA_FOLDER, OCR_RESULTS_FOLDER, HMI_REFINED_FOLDER]:
     os.makedirs(folder, exist_ok=True)
 
 # App config
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['ROI_DATA_FOLDER'] = ROI_DATA_FOLDER
 app.config['OCR_RESULTS_FOLDER'] = OCR_RESULTS_FOLDER
-app.config['REFERENCE_IMAGES_FOLDER'] = REFERENCE_IMAGES_FOLDER
 app.config['HMI_REFINED_FOLDER'] = HMI_REFINED_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB
 app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
@@ -132,13 +103,12 @@ def after_request(response):
     return response
 
 # Initialize modules
-init_cv2_detectors(sift_detector, flann_matcher)
-init_ocr_globals(HAS_EASYOCR, reader, _gpu_accelerator, _ocr_thread_pool)
+init_paddleocr_globals(_gpu_accelerator)
+init_ocr_globals(HAS_PADDLEOCR, paddle_reader, _gpu_accelerator, _ocr_thread_pool)
 init_image_routes(UPLOAD_FOLDER, HMI_REFINED_FOLDER, app.config['ALLOWED_EXTENSIONS'])
-init_reference_routes(REFERENCE_IMAGES_FOLDER, app.config['ALLOWED_EXTENSIONS'])
+init_reference_routes(ROI_DATA_FOLDER, app.config['ALLOWED_EXTENSIONS'])
 
 # Inject Swagger docstrings before registering blueprints
-# This ensures Flasgger can read the docstrings when scanning routes
 if SWAGGER_AVAILABLE:
     try:
         from utils.swagger_specs import (
@@ -191,11 +161,10 @@ if SWAGGER_AVAILABLE:
         decimal_routes.set_decimal_value.__doc__ = get_set_decimal_value_spec().strip()
         decimal_routes.set_all_decimal_values.__doc__ = get_set_all_decimal_values_spec().strip()
         
-        print("[OK] Swagger docstrings injected before route registration")
+        print("[OK] Swagger docstrings injected")
     except Exception as e:
         import traceback
-        print(f"[WARNING] Failed to pre-inject Swagger docs: {e}")
-        traceback.print_exc()
+        print(f"[WARNING] Failed to inject Swagger docs: {e}")
 
 # Register blueprints
 app.register_blueprint(image_bp)
@@ -209,12 +178,13 @@ def home():
     """Get server status and available endpoints"""
     return jsonify({
         "status": "Server is running",
-        "version": "2.0 - Refactored",
+        "version": "3.0 - PaddleOCR Edition",
+        "ocr_engine": "PaddleOCR",
         "endpoints": [
             "/api/images",
+            "/api/images/ocr",
             "/api/machines",
-            "/api/decimal_places",
-            "/api/reference_images"
+            "/api/decimal_places"
         ]
     }), 200
 
@@ -236,7 +206,8 @@ def debug_info():
             "roi_data_folder": ROI_DATA_FOLDER,
             "optimization_enabled": OPTIMIZATION_MODULES_AVAILABLE,
             "gpu_available": is_gpu_available() if OPTIMIZATION_MODULES_AVAILABLE else False,
-            "easyocr_available": HAS_EASYOCR
+            "paddleocr_available": HAS_PADDLEOCR,
+            "ocr_engine": "PaddleOCR"
         },
         "routes": routes
     })
@@ -250,7 +221,8 @@ def get_performance_stats():
         stats = {
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
             "gpu_available": False,
-            "optimization_enabled": OPTIMIZATION_MODULES_AVAILABLE
+            "optimization_enabled": OPTIMIZATION_MODULES_AVAILABLE,
+            "ocr_engine": "PaddleOCR"
         }
         
         if OPTIMIZATION_MODULES_AVAILABLE and is_gpu_available():
@@ -265,8 +237,8 @@ def get_performance_stats():
             stats["system"] = {"cpu_count": cpu_count()}
         
         stats["ocr"] = {
-            "easyocr_available": HAS_EASYOCR,
-            "gpu_enabled": HAS_EASYOCR and reader is not None
+            "paddleocr_available": HAS_PADDLEOCR,
+            "engine": "PaddleOCR"
         }
         
         return jsonify(stats), 200
@@ -299,11 +271,9 @@ def get_history():
         end_time = None
         
         try:
-            # Try parsing with seconds first
             try:
                 start_time = datetime.strptime(start_time_str, "%Y-%m-%d %H:%M:%S")
             except ValueError:
-                # Fall back to date only
                 start_time = datetime.strptime(start_time_str, "%Y-%m-%d")
         except ValueError:
             return jsonify({
@@ -312,13 +282,10 @@ def get_history():
             }), 400
         
         try:
-            # Try parsing with seconds first
             try:
                 end_time = datetime.strptime(end_time_str, "%Y-%m-%d %H:%M:%S")
             except ValueError:
-                # Fall back to date only
                 end_time = datetime.strptime(end_time_str, "%Y-%m-%d")
-                # If only date provided, set to end of day
                 end_time = end_time.replace(hour=23, minute=59, second=59)
         except ValueError:
             return jsonify({
@@ -326,7 +293,6 @@ def get_history():
                 "received": end_time_str
             }), 400
         
-        # Validate time range
         if start_time > end_time:
             return jsonify({
                 "error": "start_time cannot be greater than end_time",
@@ -340,10 +306,7 @@ def get_history():
                 "count": 0,
                 "filters_applied": {
                     "start_time": start_time_str,
-                    "end_time": end_time_str,
-                    "machine_code": machine_code_filter if machine_code_filter else None,
-                    "area": area_filter if area_filter else None,
-                    "screen_id": screen_id_filter if screen_id_filter else None
+                    "end_time": end_time_str
                 }
             }), 200
         
@@ -357,57 +320,46 @@ def get_history():
                 with open(file_path, 'r', encoding='utf-8-sig') as f:
                     data = json.load(f)
                 
-                # Filter by timestamp (required)
                 file_timestamp_str = data.get('timestamp', '')
                 file_timestamp = None
                 
                 if file_timestamp_str:
                     try:
-                        # Try parsing with seconds first
                         try:
                             file_timestamp = datetime.strptime(file_timestamp_str, "%Y-%m-%d %H:%M:%S")
                         except ValueError:
-                            # Fall back to date only
                             file_timestamp = datetime.strptime(file_timestamp_str, "%Y-%m-%d")
                     except (ValueError, TypeError):
                         pass
                 
-                # If no timestamp in file, try using file creation time
                 if file_timestamp is None:
                     try:
                         file_timestamp = datetime.fromtimestamp(os.path.getctime(file_path))
                     except:
                         continue
                 
-                # Check if timestamp is within range
                 if file_timestamp < start_time or file_timestamp > end_time:
                     continue
                 
-                # Apply optional filters
-                # Filter by machine_code
                 if machine_code_filter:
                     file_machine_code = data.get('machine_code', '').upper()
                     if machine_code_filter not in file_machine_code and file_machine_code != machine_code_filter:
                         continue
                 
-                # Filter by area
                 if area_filter:
                     file_area = data.get('area', '').upper()
                     if file_area != area_filter:
                         continue
                 
-                # Filter by screen_id
                 if screen_id_filter:
                     file_screen_id = data.get('screen_id', '')
                     if file_screen_id != screen_id_filter:
                         continue
                 
-                # Add filename for reference
                 data['filename'] = filename
                 history.append(data)
                 
-            except (json.JSONDecodeError, Exception) as e:
-                print(f"Error reading file {filename}: {str(e)}")
+            except (json.JSONDecodeError, Exception):
                 continue
         
         # Sort by timestamp (most recent first)
@@ -421,15 +373,11 @@ def get_history():
                         return datetime.strptime(timestamp_str, "%Y-%m-%d")
                 except:
                     pass
-            # Fall back to filename if timestamp unavailable
             return datetime.min
         
         history.sort(key=get_sort_key, reverse=True)
-        
-        # Apply limit
         history = history[:limit]
         
-        # Prepare response with filter info
         filters_applied = {
             "start_time": start_time_str,
             "end_time": end_time_str
@@ -456,24 +404,20 @@ def get_history():
 
 
 # Inject Swagger docstrings for System and History routes
-# This ensures Flasgger can read the docstrings when scanning routes
 if SWAGGER_AVAILABLE:
     try:
         from utils.swagger_specs import (
             get_home_spec, get_debug_spec, get_performance_spec, get_history_spec
         )
         
-        # Inject docstrings for System and History routes
         home.__doc__ = get_home_spec().strip()
         debug_info.__doc__ = get_debug_spec().strip()
         get_performance_stats.__doc__ = get_performance_spec().strip()
         get_history.__doc__ = get_history_spec().strip()
         
-        print("[OK] Swagger docstrings injected for System and History routes")
+        print("[OK] Swagger docstrings injected for System routes")
     except Exception as e:
-        import traceback
-        print(f"[WARNING] Failed to inject System/History Swagger docs: {e}")
-        traceback.print_exc()
+        print(f"[WARNING] Failed to inject System Swagger docs: {e}")
 
 
 if __name__ == '__main__':
@@ -481,15 +425,15 @@ if __name__ == '__main__':
     initialize_all_caches()
     
     print("\n" + "="*70)
-    print("HMI OCR API SERVER - REFACTORED v2.0")
+    print("HMI OCR API SERVER - v3.0 PaddleOCR Edition")
     print("="*70)
     print(f"Upload folder: {UPLOAD_FOLDER}")
     print(f"ROI data folder: {ROI_DATA_FOLDER}")
     print(f"GPU available: {is_gpu_available() if OPTIMIZATION_MODULES_AVAILABLE else False}")
-    print(f"EasyOCR available: {HAS_EASYOCR}")
+    print(f"PaddleOCR available: {HAS_PADDLEOCR}")
+    print(f"OCR Engine: PaddleOCR (exclusively)")
     print("="*70)
     print("Starting server on http://0.0.0.0:5000")
     print("="*70 + "\n")
     
     app.run(host='0.0.0.0', port=5000, debug=True)
-

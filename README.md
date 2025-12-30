@@ -563,17 +563,17 @@ Lấy tất cả cấu hình số thập phân.
 Cập nhật cấu hình số thập phân.
 
 **Request (JSON):**
-```json
-{
+  ```json
+  {
   "machine_code": "F41",
   "screen_id": "Production",
   "roi_config": {
     "Temperature": 1,
     "Pressure": 2,
     "Speed": 0
+      }
   }
-}
-```
+  ```
 
 #### `GET /api/decimal_places/<machine_type>/<screen_name>` ⭐ UNIFIED API
 Lấy cấu hình decimal places theo machine type và screen name.

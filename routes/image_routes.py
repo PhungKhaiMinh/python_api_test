@@ -1,6 +1,7 @@
 """
 Image Routes Module
 Handles image upload, retrieval, and deletion endpoints
+Uses PaddleOCR exclusively for OCR processing
 """
 
 from flask import Blueprint, request, jsonify, send_from_directory, abort
@@ -8,12 +9,15 @@ from werkzeug.utils import secure_filename
 import os
 import cv2
 import time
-from smart_detection_functions import auto_detect_machine_and_screen_smart
 from utils import (
-    get_roi_coordinates, get_roi_coordinates_with_subpage, get_special_region_coordinates,
-    get_template_image_cached, get_reference_template_path, get_reference_template_path_with_subpage,
-    ImageAligner, perform_ocr_on_roi_optimized, detect_hmi_screen
+    get_roi_info_cached, get_machine_type, perform_full_image_ocr,
+    detect_hmi_screen
 )
+from utils.paddleocr_engine import (
+    read_image_with_paddleocr, extract_ocr_data, find_matching_screen,
+    filter_ocr_by_roi, post_process_ocr_text, get_paddleocr_instance
+)
+from utils.ocr_processor import apply_decimal_places_format
 
 image_bp = Blueprint('image', __name__)
 
@@ -36,170 +40,23 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
-def detect_sub_page_from_special_region(image, machine_type, machine_code, screen_name):
-    """
-    Phát hiện sub-page dựa trên vùng đặc biệt
-    
-    Args:
-        image: Ảnh HMI
-        machine_type: Loại máy (F1, F41, F42)
-        machine_code: Mã máy cụ thể (IE-F1-CWA01)
-        screen_name: Tên màn hình
-        
-    Returns:
-        str: Sub-page ("1", "2") hoặc None nếu không phát hiện được
-    """
-    try:
-        import time
-        from difflib import SequenceMatcher
-        
-        def similarity_ratio(a, b):
-            """Tính độ tương đồng giữa 2 chuỗi (0.0 - 1.0)"""
-            return SequenceMatcher(None, a.upper(), b.upper()).ratio()
-        
-        # Định nghĩa điều kiện cho từng máy (keywords quan trọng)
-        # Mỗi sub-page có nhiều keywords, chỉ cần match một số là được
-        sub_page_conditions = {
-            "IE-F1-CWA01": {
-                "1": ["ST02", "WING", "PRESENCE"],  # ST02 - WING PRESENCE CHECK
-                "2": ["ST14", "LEAK", "TEST"]       # ST14 - LEAK TEST CHECK 1
-            },
-            "IE-F1-CTF01": {
-                "1": ["ST06", "CATHETER", "TIP"]      # ST06 - CATHETER TIP CHECK
-            },
-            "IE-F1-CFA01": {
-                "1": ["ST02", "NEEDLE", "PRESENCE"],  # ST02 - NEEDLE PRESENCE CHECK
-                "2": ["ST13", "CLIP", "ORIENTATION"]       # ST13 - CLIP ORIENTATION CHECK
-            },
-            "IE-F1-CSN01": {
-                "1": ["ST02", "LUER", "LOCK"]  # ST02 - LUER LOCK CHECK
-            }
-            # TODO: Thêm điều kiện cho máy khác
-        }
-        
-        if machine_code not in sub_page_conditions:
-            print(f"[WARNING] Sub-page detection not configured for machine: {machine_code}")
-            return None
-        
-        conditions = sub_page_conditions[machine_code]
-        best_match = None
-        best_score = 0.0
-        ocr_texts = {}
-        
-        # Thử đọc special_region của cả 2 sub-pages
-        for sub_page in ["1", "2"]:
-            try:
-                # Lấy tọa độ vùng đặc biệt của sub-page này
-                special_regions = get_special_region_coordinates(machine_type, machine_code, screen_name, sub_page)
-                
-                if not special_regions:
-                    print(f"[DEBUG] No special regions found for sub-page {sub_page}")
-                    continue
-                
-                # Sử dụng vùng đầu tiên
-                region = special_regions[0]
-                
-                # Chuyển đổi tọa độ chuẩn hóa sang pixel
-                height, width = image.shape[:2]
-                x1 = int(region[0] * width)
-                y1 = int(region[1] * height)
-                x2 = int(region[2] * width)
-                y2 = int(region[3] * height)
-                
-                # Lưu ảnh ROI special_regions để debug
-                timestamp = int(time.time())
-                roi_filename = f"special_region_{machine_code}_page{sub_page}_{timestamp}.jpg"
-                roi_save_path = os.path.join("D:\\python_WREMBLY_test-main\\anhHMI", roi_filename)
-                
-                roi = image[y1:y2, x1:x2]
-                
-                try:
-                    cv2.imwrite(roi_save_path, roi)
-                    print(f"[DEBUG] Saved special region ROI (page {sub_page}) to: {roi_save_path}")
-                    print(f"[DEBUG] ROI coordinates: ({x1}, {y1}) to ({x2}, {y2}), size: {roi.shape}")
-                except Exception as e:
-                    print(f"[ERROR] Failed to save ROI: {e}")
-                
-                # OCR trên vùng đặc biệt - Sử dụng toàn bộ image và để perform_ocr_on_roi_optimized xử lý
-                # Không cắt ROI trước, để hàm OCR tự cắt và xử lý như ROI bình thường
-                ocr_results = perform_ocr_on_roi_optimized(
-                    image, [region], f"special_region_{machine_code}_page{sub_page}",
-                    roi_names=[f"special_region_page{sub_page}"]
-                )
-                
-                # Lấy kết quả OCR
-                if ocr_results and len(ocr_results) > 0:
-                    ocr_result = ocr_results[0]
-                    text = ocr_result.get('text', '').upper().strip()
-                    ocr_texts[sub_page] = text
-                    print(f"[DEBUG] OCR text from sub-page {sub_page}: '{text}'")
-                    
-                    if not text:
-                        continue
-                    
-                    # Tính điểm tương đồng với điều kiện của sub-page này
-                    page_conditions = conditions.get(sub_page, [])
-                    total_score = 0.0
-                    matched_keywords = []
-                    
-                    for keyword in page_conditions:
-                        # Kiểm tra xem có chứa keyword không (exact match)
-                        if keyword in text:
-                            total_score += 1.0
-                            matched_keywords.append(keyword)
-                        else:
-                            # Tính độ tương đồng fuzzy
-                            # Kiểm tra từng từ trong text
-                            words = text.split()
-                            max_word_similarity = 0.0
-                            for word in words:
-                                similarity = similarity_ratio(word, keyword)
-                                max_word_similarity = max(max_word_similarity, similarity)
-                            
-                            # Chỉ tính điểm nếu similarity > 0.6 (60%)
-                            if max_word_similarity > 0.6:
-                                total_score += max_word_similarity
-                                matched_keywords.append(f"{keyword}~{max_word_similarity:.2f}")
-                    
-                    # Normalize score (chia cho số keywords)
-                    avg_score = total_score / len(page_conditions) if page_conditions else 0.0
-                    
-                    print(f"[DEBUG] Sub-page {sub_page}: score={avg_score:.3f}, matched={matched_keywords}")
-                    
-                    # Cập nhật best match nếu điểm cao hơn
-                    if avg_score > best_score:
-                        best_score = avg_score
-                        best_match = sub_page
-                
-            except Exception as e:
-                print(f"[ERROR] Error processing sub-page {sub_page}: {e}")
-                continue
-        
-        # Quyết định sub-page dựa trên best score
-        if best_match and best_score > 0.3:  # Ngưỡng tối thiểu 30% tương đồng
-            print(f"[OK] Detected sub-page {best_match} with confidence {best_score:.3f}")
-            print(f"[INFO] OCR results: {ocr_texts}")
-            return best_match
-        else:
-            print(f"[WARNING] Cannot determine sub-page. Best score: {best_score:.3f}")
-            print(f"[INFO] OCR results: {ocr_texts}")
-            return None
-        
-    except Exception as e:
-        print(f"[ERROR] Error detecting sub-page: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return None
-
-
 @image_bp.route('/api/images', methods=['POST'])
 def upload_image():
-    """Upload image và thực hiện OCR"""
+    """
+    Upload image and perform OCR using PaddleOCR
+    
+    Uses the new PaddleOCR algorithm:
+    1. Detect and extract HMI screen
+    2. Full image OCR with PaddleOCR
+    3. Match screen based on Special_rois
+    4. Filter OCR results by IoU with ROIs
+    """
     try:
         from utils.swagger_specs import get_upload_image_spec
         upload_image.__doc__ = get_upload_image_spec().strip()
     except:
         pass
+    
     try:
         # Check file
         if 'file' not in request.files:
@@ -231,156 +88,130 @@ def upload_image():
         if uploaded_image is None:
             return jsonify({"error": "Failed to read image"}), 400
         
-        # BƯỚC 1: PHÁT HIỆN VÀ TÁCH HMI SCREEN (quan trọng!)
-        # ROI info được vẽ trên ảnh HMI đã tách, nên phải tách HMI trước khi OCR
-        print(f"[*] Detecting and extracting HMI screen from image...")
-        hmi_screen, processing_time = detect_hmi_screen(uploaded_image)
+        start_time = time.time()
+        
+        # STEP 1: DETECT AND EXTRACT HMI SCREEN
+        print(f"[*] Step 1: Detecting and extracting HMI screen...")
+        hmi_screen, hmi_time = detect_hmi_screen(uploaded_image)
         
         hmi_detected = False
-        hmi_image = uploaded_image  # Default: dùng ảnh gốc
+        hmi_image = uploaded_image  # Default: use original image
         
         if hmi_screen is not None and hmi_screen.size > 0:
             hmi_detected = True
-            hmi_image = hmi_screen  # ← QUAN TRỌNG: Sử dụng HMI đã tách
-            print(f"[OK] HMI screen extracted successfully in {processing_time:.2f}s, size: {hmi_image.shape}")
+            hmi_image = hmi_screen
+            print(f"[OK] HMI screen extracted in {hmi_time:.2f}s, size: {hmi_image.shape}")
         else:
-            print(f"[WARN] Could not extract HMI screen in {processing_time:.2f}s, using original image")
+            print(f"[WARN] Could not extract HMI screen, using original image")
         
-        # BƯỚC 2: Auto detect machine and screen (trên HMI đã tách)
-        print(f"[*] Auto-detecting machine and screen for {area}/{machine_code}...")
-        detection_result = auto_detect_machine_and_screen_smart(
-            hmi_image, area=area, machine_code=machine_code
+        img_height, img_width = hmi_image.shape[:2]
+        
+        # STEP 2: FULL IMAGE OCR WITH PADDLEOCR
+        print(f"[*] Step 2: Performing full image OCR with PaddleOCR...")
+        ocr_start = time.time()
+        results, _, _ = read_image_with_paddleocr(hmi_image)
+        ocr_data = extract_ocr_data(results)
+        ocr_time = time.time() - ocr_start
+        print(f"[OK] PaddleOCR found {len(ocr_data)} text items in {ocr_time:.2f}s")
+        
+        # STEP 3: MATCH SCREEN BASED ON SPECIAL_ROIS
+        print(f"[*] Step 3: Matching screen for {area}/{machine_code}...")
+        roi_info = get_roi_info_cached()
+        
+        match_start = time.time()
+        matched_machine_type, matched_machine, screen_name, sub_page, sub_page_data, match_count, match_percentage = find_matching_screen(
+            ocr_data, roi_info,
+            selected_area=area,
+            selected_machine=machine_code,
+            debug=True
         )
+        match_time = time.time() - match_start
         
-        machine_type = detection_result.get('machine_type', 'F41')
-        screen_id = detection_result.get('screen_id', 'Main')
-        template_path = detection_result.get('template_path')
+        # STEP 4: FILTER OCR RESULTS BY IOI WITH ROIS
+        ocr_results = []
         
-        print(f"[OK] Detected: {machine_type} - {screen_id}")
-        
-        # BƯỚC 3: Detect sub-page nếu là màn hình "Reject_Summary"
-        sub_page = None
-        if screen_id == "Reject_Summary":
-            print("[*] Detecting sub-page for Reject_Summary...")
-            # ← QUAN TRỌNG: Sử dụng hmi_image (HMI đã tách) để phát hiện sub-page
-            sub_page = detect_sub_page_from_special_region(hmi_image, machine_type, machine_code, screen_id)
-            if sub_page:
-                print(f"[OK] Detected sub-page: {sub_page}")
-            else:
-                print("[WARN] Could not detect sub-page, using default")
-                sub_page = "1"  # Default to page 1
-        
-        # BƯỚC 4: Get ROI coordinates (với sub-page nếu có)
-        if sub_page:
-            roi_coordinates, roi_names = get_roi_coordinates_with_subpage(machine_type, screen_id, sub_page, machine_code)
-        else:
-            roi_coordinates, roi_names = get_roi_coordinates(machine_code, screen_id, machine_type)
-        
-        if not roi_coordinates:
-            error_msg = f"No ROI coordinates for {machine_code}/{screen_id}"
-            if sub_page:
-                error_msg += f" (sub_page: {sub_page})"
-            return jsonify({"error": error_msg}), 404
-        
-        # BƯỚC 5: Align image if template available
-        # ← QUAN TRỌNG: Sử dụng hmi_image (HMI đã tách) cho alignment và OCR
-        image = hmi_image
-        if template_path:
-            # Sử dụng template riêng cho từng trang nếu có sub_page
-            if sub_page:
-                subpage_template_path = get_reference_template_path_with_subpage(machine_type, screen_id, sub_page)
-                if subpage_template_path:
-                    print(f"[*] Using sub-page template: {subpage_template_path}")
-                    template_img = get_template_image_cached(subpage_template_path)
-                else:
-                    print(f"[WARN] No sub-page template found, using general template")
-                    template_img = get_template_image_cached(template_path)
-            else:
-                template_img = get_template_image_cached(template_path)
+        if screen_name and sub_page_data:
+            print(f"[OK] Matched: {matched_machine_type}/{matched_machine}/{screen_name} (sub-page {sub_page})")
+            print(f"[OK] Match: {match_count} Special_rois ({match_percentage:.1f}%)")
             
-            if template_img is not None:
-                aligner = ImageAligner(template_img, image)
-                aligned_image = aligner.align_images()
-                image = aligned_image
-        
-        # BƯỚC 6: Lưu ảnh từng vùng ROI để kiểm tra (trước khi OCR)
-        print(f"[*] Saving individual ROI images for verification...")
-        import time as time_module
-        timestamp = int(time_module.time())
-        
-        # Tạo thư mục nếu chưa có
-        roi_debug_dir = "D:\\python_WREMBLY_test-main\\anhHMI"
-        os.makedirs(roi_debug_dir, exist_ok=True)
-        
-        # Lưu từng ROI
-        for i, roi_coord in enumerate(roi_coordinates):
-            try:
-                # Tính toán tọa độ thực tế
-                height, width = image.shape[:2]
-                x1 = int(roi_coord[0] * width)
-                y1 = int(roi_coord[1] * height)
-                x2 = int(roi_coord[2] * width)
-                y2 = int(roi_coord[3] * height)
+            print(f"[*] Step 4: Filtering OCR results by IoU with ROIs...")
+            filter_start = time.time()
+            filtered_results = filter_ocr_by_roi(ocr_data, sub_page_data, img_width, img_height)
+            filter_time = time.time() - filter_start
+            
+            print(f"[OK] Filtered to {len(filtered_results)} results matching ROIs")
+            
+            # Get machine_type
+            machine_type = matched_machine_type if matched_machine_type else get_machine_type(matched_machine)
+            
+            # Convert to standard output format
+            for item in filtered_results:
+                text = post_process_ocr_text(item['text'])
+                text = apply_decimal_places_format(text, item['matched_roi'], machine_type, screen_name, matched_machine, sub_page)
                 
-                # Cắt ROI từ ảnh đã aligned
-                roi_img = image[y1:y2, x1:x2]
-                
-                # Tạo tên file
-                roi_name = roi_names[i] if i < len(roi_names) else f"ROI_{i}"
-                roi_filename = f"{roi_name}_{machine_code}_{screen_id}"
-                if sub_page:
-                    roi_filename += f"_page{sub_page}"
-                roi_filename += f"_{timestamp}_{i}.jpg"
-                
-                # Lưu ảnh
-                roi_save_path = os.path.join(roi_debug_dir, roi_filename)
-                cv2.imwrite(roi_save_path, roi_img)
-                
-                print(f"[DEBUG] Saved ROI {i+1}/{len(roi_coordinates)}: {roi_filename}")
-                print(f"[DEBUG] ROI coordinates: ({x1}, {y1}) to ({x2}, {y2}), size: {roi_img.shape}")
-                
-            except Exception as e:
-                print(f"[ERROR] Failed to save ROI {i+1}: {e}")
-        cv2.imwrite(os.path.join(roi_debug_dir, f"hmi_aligned_{timestamp}.jpg"), image)
-        print(f"[OK] All ROI images saved to: {roi_debug_dir}")
+                ocr_results.append({
+                    "roi_index": item['matched_roi'],
+                    "text": text,
+                    "confidence": float(item['confidence']),
+                    "has_text": True,
+                    "original_value": item['text'],
+                    "iou": float(item['iou'])
+                })
+        else:
+            print(f"[WARN] No matching screen found - returning all OCR results")
+            
+            # Return all OCR results without filtering
+            for i, item in enumerate(ocr_data):
+                text = post_process_ocr_text(item['text'])
+                ocr_results.append({
+                    "roi_index": f"OCR_{i}",
+                    "text": text,
+                    "confidence": float(item['confidence']),
+                    "has_text": True,
+                    "original_value": item['text']
+                })
+            
+            machine_type = get_machine_type(machine_code) if machine_code else area
         
-        # BƯỚC 7: Perform OCR (trên HMI đã tách và đã aligned)
-        ocr_results = perform_ocr_on_roi_optimized(
-            image, roi_coordinates, filename_with_timestamp,
-            template_path=template_path,
-            roi_names=roi_names,
-            machine_code=machine_code,
-            screen_id=screen_id,
-            sub_page=sub_page
-        )
+        total_time = time.time() - start_time
         
+        # Build response
         response_data = {
             "success": True,
             "filename": filename_with_timestamp,
-            "machine_code": machine_code,
+            "machine_code": matched_machine or machine_code,
             "machine_type": machine_type,
-            "screen_id": screen_id,
-            "area": area,
-            "detection_method": detection_result.get('detection_method'),
-            "similarity_score": detection_result.get('similarity_score', 0),
+            "screen_id": screen_name,
+            "area": matched_machine_type or area,
             "hmi_detection": {
                 "hmi_extracted": hmi_detected,
-                "hmi_size": f"{hmi_image.shape[1]}x{hmi_image.shape[0]}",
-                "extraction_status": "HMI screen extracted successfully" if hmi_detected else "Using original image"
+                "hmi_size": f"{img_width}x{img_height}",
+                "extraction_time": round(hmi_time, 2)
+            },
+            "screen_matching": {
+                "matched": screen_name is not None,
+                "match_count": match_count,
+                "match_percentage": round(match_percentage, 1)
             },
             "ocr_results": ocr_results,
-            "roi_count": len(ocr_results)
+            "roi_count": len(ocr_results),
+            "ocr_engine": "PaddleOCR",
+            "processing_time": {
+                "hmi_detection": round(hmi_time, 2),
+                "ocr": round(ocr_time, 2),
+                "matching": round(match_time, 2),
+                "total": round(total_time, 2)
+            }
         }
         
-        # Thêm thông tin sub-page nếu có
+        # Add sub-page info if available
         if sub_page:
             response_data["sub_page"] = sub_page
-            response_data["sub_page_detected"] = True
         
         return jsonify(response_data), 200
         
     except Exception as e:
-        print(f"Error in upload_image: {e}")
+        print(f"[ERROR] upload_image: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({"error": f"Upload failed: {str(e)}"}), 500
@@ -451,3 +282,85 @@ def get_hmi_detection_image(filename):
     except:
         abort(404)
 
+
+@image_bp.route('/api/images/ocr', methods=['POST'])
+def perform_ocr_on_image():
+    """
+    Perform full OCR on image with automatic screen detection and ROI matching
+    Uses PaddleOCR algorithm exclusively
+    
+    Request body:
+        - file: Image file (required)
+        - area: Area code (optional, e.g., "F1", "F4")
+        - machine_code: Machine code (optional, e.g., "IE-F1-CWA01")
+    
+    Returns:
+        JSON with OCR results, screen detection info, and matched ROIs
+    """
+    try:
+        # Check file
+        if 'file' not in request.files:
+            return jsonify({"error": "No file provided"}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({"error": "Empty filename"}), 400
+        
+        if not allowed_file(file.filename):
+            return jsonify({"error": "File type not allowed"}), 400
+        
+        # Get optional params
+        area = request.form.get('area')
+        machine_code = request.form.get('machine_code')
+        
+        # Save file temporarily
+        filename = secure_filename(file.filename)
+        timestamp = int(time.time())
+        filename_with_timestamp = f"{timestamp}_{filename}"
+        filepath = os.path.join(UPLOAD_FOLDER, filename_with_timestamp)
+        file.save(filepath)
+        
+        # Read image
+        uploaded_image = cv2.imread(filepath)
+        if uploaded_image is None:
+            return jsonify({"error": "Failed to read image"}), 400
+        
+        # Step 1: HMI Detection
+        print(f"[*] Detecting HMI screen...")
+        hmi_screen, hmi_time = detect_hmi_screen(uploaded_image)
+        
+        if hmi_screen is not None and hmi_screen.size > 0:
+            image_for_ocr = hmi_screen
+            hmi_detected = True
+            print(f"[OK] HMI extracted in {hmi_time:.2f}s")
+        else:
+            image_for_ocr = uploaded_image
+            hmi_detected = False
+            print(f"[WARN] No HMI detected, using original image")
+        
+        # Step 2: Full Image OCR with screen matching
+        roi_info = get_roi_info_cached()
+        
+        ocr_result = perform_full_image_ocr(
+            image_for_ocr, 
+            roi_info, 
+            area=area, 
+            machine_code=machine_code
+        )
+        
+        # Add additional info to response
+        ocr_result["filename"] = filename_with_timestamp
+        ocr_result["hmi_detection"] = {
+            "hmi_extracted": hmi_detected,
+            "hmi_size": f"{image_for_ocr.shape[1]}x{image_for_ocr.shape[0]}",
+            "extraction_time": round(hmi_time, 2)
+        }
+        ocr_result["ocr_engine"] = "PaddleOCR"
+        
+        return jsonify(ocr_result), 200
+        
+    except Exception as e:
+        print(f"[ERROR] perform_ocr_on_image: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"OCR failed: {str(e)}"}), 500
