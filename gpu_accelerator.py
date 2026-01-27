@@ -26,7 +26,7 @@ HAS_CUPY = False
 HAS_OPENCV_CUDA = False
 HAS_TORCH_CUDA = False
 
-# Try to import CuPy
+# Try to import CuPy (before torch to avoid DLL conflicts)
 try:
     import cupy as cp
     HAS_CUPY = True
@@ -50,17 +50,9 @@ try:
 except:
     print("[WARNING] OpenCV not compiled with CUDA support")
 
-# Check PyTorch CUDA
-try:
-    import torch
-    if torch.cuda.is_available():
-        HAS_TORCH_CUDA = True
-        print(f"[OK] PyTorch CUDA available - {torch.cuda.device_count()} device(s)")
-        print(f"   - Device: {torch.cuda.get_device_name(0)}")
-    else:
-        print("[WARNING] PyTorch CUDA not available")
-except:
-    print("[WARNING] PyTorch not installed")
+# Skip PyTorch check to avoid DLL conflicts with PaddlePaddle GPU
+# PaddlePaddle and PyTorch use different CUDA library versions that can conflict
+print("[INFO] PyTorch CUDA check skipped (using PaddlePaddle GPU instead)")
 
 
 class GPUAccelerator:
@@ -387,14 +379,15 @@ def get_gpu_info():
         except:
             pass
     
-    if HAS_TORCH_CUDA:
-        try:
-            import torch
-            info['torch_cuda_devices'] = torch.cuda.device_count()
-            if torch.cuda.device_count() > 0:
-                info['torch_gpu_name'] = torch.cuda.get_device_name(0)
-        except:
-            pass
+    # PyTorch CUDA check disabled to avoid DLL conflicts with PaddlePaddle
+    # if HAS_TORCH_CUDA:
+    #     try:
+    #         import torch
+    #         info['torch_cuda_devices'] = torch.cuda.device_count()
+    #         if torch.cuda.device_count() > 0:
+    #             info['torch_gpu_name'] = torch.cuda.get_device_name(0)
+    #     except:
+    #         pass
     
     return info
 

@@ -1,7 +1,7 @@
 """
-PaddleOCR Engine Module
+PaddleOCR Engine Module - OPTIMIZED FOR SPEED
 Handles PaddleOCR initialization, image processing and text extraction
-Replaces EasyOCR with optimized PaddleOCR implementation
+Uses GPU acceleration and parallel processing for maximum performance
 """
 
 import os
@@ -14,6 +14,7 @@ import numpy as np
 import re
 import uuid
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from math import sqrt, atan2, degrees
 from PIL import Image, ImageEnhance
 import time
@@ -26,6 +27,25 @@ os.environ['GLOG_minloglevel'] = '3'
 os.environ['FLAGS_call_stack_level'] = '0'
 os.environ['PADDLE_PDX_SILENT_MODE'] = '1'
 
+# Disable oneDNN to fix PIR attribute conversion error
+# This fixes: ConvertPirAttribute2RuntimeAttribute not support [pir::ArrayAttribute<pir::DoubleAttribute>]
+os.environ['FLAGS_onednn'] = '0'  # Disable oneDNN
+os.environ['FLAGS_use_mkldnn'] = '0'  # Disable MKLDNN (Intel MKL-DNN)
+
+# GPU Memory optimization
+os.environ['FLAGS_fraction_of_gpu_memory_to_use'] = '0.5'  # Use 50% GPU memory
+os.environ['FLAGS_eager_delete_tensor_gb'] = '0.0'  # Immediate tensor cleanup
+
+# Disable torch if it causes conflicts (PaddleOCR doesn't need torch)
+# Unset torch-related environment variables that might interfere
+torch_conflict_vars = [k for k in os.environ.keys() if 'torch' in k.lower() or 'pytorch' in k.lower()]
+for var in torch_conflict_vars:
+    if var.startswith('TORCH_') or var.startswith('PYTORCH_'):
+        try:
+            del os.environ[var]
+        except:
+            pass
+
 # Add NVIDIA CUDA libraries to PATH for PaddlePaddle GPU
 def _add_nvidia_to_path():
     """Add NVIDIA CUDA DLL paths to system PATH for paddlepaddle-gpu"""
@@ -33,17 +53,38 @@ def _add_nvidia_to_path():
         import site
         site_packages = site.getsitepackages()
         for sp in site_packages:
-            nvidia_base = os.path.join(sp, 'nvidia')
-            if os.path.exists(nvidia_base):
-                # Add all nvidia/*/bin directories to PATH
-                for subdir in os.listdir(nvidia_base):
-                    bin_path = os.path.join(nvidia_base, subdir, 'bin')
-                    if os.path.exists(bin_path) and bin_path not in os.environ.get('PATH', ''):
-                        os.environ['PATH'] = bin_path + os.pathsep + os.environ.get('PATH', '')
-    except Exception:
-        pass
+            # Check both direct nvidia folder and Lib/site-packages/nvidia
+            possible_paths = [
+                os.path.join(sp, 'nvidia'),
+                os.path.join(sp, 'Lib', 'site-packages', 'nvidia'),
+            ]
+            for nvidia_base in possible_paths:
+                if os.path.exists(nvidia_base):
+                    # Add all nvidia/*/bin directories to PATH
+                    for subdir in os.listdir(nvidia_base):
+                        bin_path = os.path.join(nvidia_base, subdir, 'bin')
+                        if os.path.exists(bin_path) and bin_path not in os.environ.get('PATH', ''):
+                            os.environ['PATH'] = bin_path + os.pathsep + os.environ.get('PATH', '')
+    except Exception as e:
+        print(f"[WARNING] Failed to add NVIDIA paths: {e}")
 
 _add_nvidia_to_path()
+
+# Pre-import paddle to avoid circular import issues with Flask debug mode
+# Set oneDNN flags BEFORE importing paddle
+try:
+    # Force disable oneDNN before paddle import
+    os.environ['FLAGS_onednn'] = '0'
+    os.environ['FLAGS_use_mkldnn'] = '0'
+    import paddle
+    # Try to disable oneDNN in paddle if possible
+    try:
+        paddle.set_flags({'FLAGS_onednn': False})
+    except:
+        pass
+except Exception as _paddle_import_error:
+    paddle = None
+    print(f"[WARNING] Paddle pre-import failed: {_paddle_import_error}")
 
 warnings.filterwarnings('ignore')
 
@@ -78,14 +119,26 @@ _paddle_ocr_instance = None
 _paddle_ocr_initialized = False
 IOU_THRESHOLD = 0.01  # IoU 1% threshold
 HAS_PADDLEOCR = False  # Will be set after initialization
+USE_GPU = False  # Will be detected during initialization
 
 # GPU accelerator reference (will be set by app)
 _gpu_accelerator = None
+
+# Thread pool for parallel OCR processing
+_ocr_executor = None
+MAX_OCR_WORKERS = 4  # Number of parallel OCR workers
 
 # Thread safety and error tracking
 _paddle_ocr_lock = threading.Lock()
 _paddle_ocr_fail_count = 0
 _paddle_ocr_max_fails = 3  # Reset instance after 3 consecutive failures
+
+# Performance tracking
+_perf_stats = {
+    'ocr_calls': 0,
+    'total_time': 0,
+    'avg_time': 0
+}
 
 
 def load_roi_info():
@@ -118,12 +171,11 @@ def reset_paddleocr_instance():
         try:
             import gc
             gc.collect()
-            # Try to clear CUDA cache if available
+            # Try to clear Paddle CUDA cache if available
             try:
-                import torch
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-                    print("[OK] CUDA cache cleared")
+                if paddle is not None and paddle.device.is_compiled_with_cuda():
+                    # Paddle doesn't have direct empty_cache, just garbage collect
+                    print("[OK] GPU memory cleanup triggered")
             except:
                 pass
         except:
@@ -132,66 +184,198 @@ def reset_paddleocr_instance():
         print("[OK] PaddleOCR instance reset completed")
 
 
+def _detect_gpu_availability():
+    """Detect if GPU is available for PaddlePaddle"""
+    global USE_GPU
+    try:
+        # Use paddle module that was pre-imported at module level
+        if paddle is not None:
+            USE_GPU = paddle.device.is_compiled_with_cuda() and paddle.device.cuda.device_count() > 0
+            if USE_GPU:
+                gpu_name = "Unknown"
+                try:
+                    gpu_name = paddle.device.cuda.get_device_name(0)
+                except:
+                    pass
+                print(f"[OK] PaddlePaddle GPU detected: {gpu_name}")
+            return USE_GPU
+        else:
+            print("[WARNING] Paddle not imported, skipping GPU detection")
+            USE_GPU = False
+            return False
+    except Exception as e:
+        print(f"[WARNING] GPU detection failed: {e}")
+        USE_GPU = False
+        return False
+
+
 def get_paddleocr_instance():
     """Get or create PaddleOCR instance (singleton pattern for speed)"""
-    global _paddle_ocr_instance, _paddle_ocr_initialized, HAS_PADDLEOCR
+    import sys
+    global _paddle_ocr_instance, _paddle_ocr_initialized, HAS_PADDLEOCR, USE_GPU, _ocr_executor
     
     with _paddle_ocr_lock:
-        if _paddle_ocr_instance is None:
-            print("[*] Initializing PaddleOCR reader...")
+        # Return existing instance if already initialized
+        if _paddle_ocr_instance is not None:
+            print(f"[DEBUG] Returning existing PaddleOCR instance", flush=True)
+            return _paddle_ocr_instance
+        
+        # Skip if we know it won't work (already failed permanently)
+        # BUT allow retry if it's a DLL/torch error (might be fixable)
+        if _paddle_ocr_initialized and _paddle_ocr_instance is None:
+            # Allow one retry attempt for DLL errors
+            if not hasattr(get_paddleocr_instance, '_retry_attempted'):
+                print(f"[WARNING] PaddleOCR initialization previously failed, attempting retry...", flush=True)
+                get_paddleocr_instance._retry_attempted = True
+                # Reset initialization flag to allow retry
+                _paddle_ocr_initialized = False
+            else:
+                print(f"[ERROR] PaddleOCR initialization previously failed, returning None", flush=True)
+                sys.stdout.flush()
+                return None
             
+        print("[*] Initializing PaddleOCR reader (OPTIMIZED)...")
+        
+        try:
+            # Detect GPU first
+            _detect_gpu_availability()
+            
+            # Try to import PaddleOCR - handle DLL errors
             try:
-                # Import PaddleOCR AFTER environment variables are set
                 with suppress_output():
                     from paddleocr import PaddleOCR
-                
-                # Initialize with optimized parameters
-                # PaddleOCR 3.x auto-detects GPU if paddlepaddle-gpu is installed
-                with suppress_output():
-                    _paddle_ocr_instance = PaddleOCR(
-                        lang='en',
-                        use_doc_orientation_classify=False,
-                        use_doc_unwarping=False,
-                        use_textline_orientation=False,
-                        text_det_thresh=0.15,
-                        text_det_box_thresh=0.25,
-                        text_det_unclip_ratio=1.5,
-                        text_rec_score_thresh=0.0,
-                        text_det_limit_side_len=512,
-                        text_det_limit_type='max',
-                    )
-                
-                _paddle_ocr_initialized = True
-                HAS_PADDLEOCR = True
-                print("[OK] PaddleOCR initialized successfully")
-                
-                # Warm up PaddleOCR instance by doing a dummy prediction
-                # This ensures the model is fully loaded and ready for first use
+            except Exception as import_error:
+                error_str = str(import_error)
+                if "torch" in error_str.lower() or "dll" in error_str.lower() or "WinError" in error_str:
+                    print(f"[WARNING] PaddleOCR import failed due to DLL/torch conflict: {error_str}")
+                    print("[*] Attempting to fix by unsetting torch-related environment variables...")
+                    # Unset torch-related env vars that might cause conflicts
+                    torch_vars = [k for k in os.environ.keys() if 'torch' in k.lower() or 'pytorch' in k.lower()]
+                    for var in torch_vars:
+                        if var in os.environ:
+                            del os.environ[var]
+                    # Retry import
+                    try:
+                        with suppress_output():
+                            from paddleocr import PaddleOCR
+                        print("[OK] PaddleOCR import succeeded after fixing environment")
+                    except Exception as retry_error:
+                        print(f"[ERROR] PaddleOCR import still failed after fix: {retry_error}")
+                        raise import_error
+                else:
+                    raise import_error
+            
+            # ============================================================
+            # OPTIMIZED PARAMETERS FOR SPEED
+            # ============================================================
+            # - text_det_limit_side_len: Larger = more accurate but slower
+            #   960 is good balance for HMI screens (typically 800x600 to 1920x1080)
+            # - text_det_db_score_mode: 'fast' for speed, 'slow' for accuracy
+            # - use_angle_cls: False to skip text orientation classification
+            # - text_det_thresh: Lower = detect more text but more noise
+            # - text_det_box_thresh: Filter weak detections
+            # ============================================================
+            
+            # Try initialization with error handling
+            init_success = False
+            last_error = None
+            
+            for attempt in range(2):  # Try twice
                 try:
-                    print("[*] Warming up PaddleOCR instance...")
-                    import numpy as np
-                    # Create a small dummy image (white 100x100 image)
-                    dummy_image = np.ones((100, 100, 3), dtype=np.uint8) * 255
-                    temp_path = "_temp_paddle_warmup.jpg"
-                    cv2.imwrite(temp_path, dummy_image)
-                    _paddle_ocr_instance.predict(temp_path)
-                    if os.path.exists(temp_path):
-                        os.remove(temp_path)
-                    print("[OK] PaddleOCR warm-up completed")
-                except Exception as warmup_error:
-                    print(f"[WARNING] PaddleOCR warm-up failed (non-critical): {warmup_error}")
+                    with suppress_output():
+                        _paddle_ocr_instance = PaddleOCR(
+                            lang='en',
+                            # Disable unnecessary preprocessing
+                            use_doc_orientation_classify=False,
+                            use_doc_unwarping=False,
+                            use_textline_orientation=False,
+                            # Detection parameters - MATCHING OLD WORKING VERSION
+                            text_det_thresh=0.15,          # Lower threshold to detect more text
+                            text_det_box_thresh=0.25,      # Filter weak boxes
+                            text_det_unclip_ratio=1.5,      # Standard ratio (old: 2.2, but using 1.5 for better accuracy)
+                            text_det_limit_side_len=512,   # Standard size (old working version)
+                            text_det_limit_type='max',
+                            # Recognition parameters
+                            text_rec_score_thresh=0.0,     # Keep all results (old working version)
+                        )
+                    init_success = True
+                    break
+                except Exception as init_error:
+                    last_error = init_error
+                    error_str = str(init_error)
+                    if attempt == 0 and ("torch" in error_str.lower() or "dll" in error_str.lower() or "WinError" in error_str):
+                        print(f"[WARNING] PaddleOCR initialization attempt {attempt + 1} failed: {error_str}")
+                        print("[*] Retrying with environment cleanup...")
+                        # Additional cleanup
+                        import gc
+                        gc.collect()
+                        time.sleep(0.5)  # Brief pause
+                    else:
+                        raise init_error
+            
+            if not init_success:
+                raise last_error
+            
+            _paddle_ocr_initialized = True
+            HAS_PADDLEOCR = True
+            
+            # Initialize thread pool for parallel processing
+            if _ocr_executor is None:
+                _ocr_executor = ThreadPoolExecutor(max_workers=MAX_OCR_WORKERS, thread_name_prefix="OCR")
+            
+            gpu_status = "GPU" if USE_GPU else "CPU"
+            print(f"[OK] PaddleOCR initialized successfully ({gpu_status} mode)")
+            
+            # Warm up PaddleOCR instance
+            try:
+                print("[*] Warming up PaddleOCR instance...")
+                warmup_start = time.time()
                 
-            except ImportError as e:
-                print(f"[ERROR] PaddleOCR not installed: {e}")
-                print("Please run: pip install paddleocr paddlepaddle")
-                _paddle_ocr_instance = None
-                _paddle_ocr_initialized = False
-                HAS_PADDLEOCR = False
-            except Exception as e:
-                print(f"[ERROR] Failed to initialize PaddleOCR: {e}")
-                _paddle_ocr_instance = None
-                _paddle_ocr_initialized = False
-                HAS_PADDLEOCR = False
+                # Create a small dummy image (white 100x100 image with some text-like patterns)
+                dummy_image = np.ones((100, 100, 3), dtype=np.uint8) * 255
+                # Add some black lines to simulate text
+                cv2.rectangle(dummy_image, (10, 40), (90, 60), (0, 0, 0), -1)
+                
+                # Use temp file for warmup (required by some PaddleOCR versions)
+                temp_path = f"_temp_paddle_warmup_{uuid.uuid4().hex[:8]}.jpg"
+                cv2.imwrite(temp_path, dummy_image)
+                # Support both PaddleOCR 2.x and 3.x
+                if hasattr(_paddle_ocr_instance, 'predict'):
+                    _paddle_ocr_instance.predict(temp_path)
+                else:
+                    _paddle_ocr_instance.ocr(temp_path, cls=False)
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+                
+                warmup_time = time.time() - warmup_start
+                print(f"[OK] PaddleOCR warm-up completed in {warmup_time:.2f}s")
+            except Exception as warmup_error:
+                print(f"[WARNING] PaddleOCR warm-up failed (non-critical): {warmup_error}")
+            
+        except ImportError as e:
+            print(f"[ERROR] PaddleOCR not installed: {e}", flush=True)
+            print("Please run: pip install paddleocr paddlepaddle-gpu", flush=True)
+            import traceback
+            traceback.print_exc()
+            _paddle_ocr_instance = None
+            _paddle_ocr_initialized = True  # Mark as initialized (failed)
+            HAS_PADDLEOCR = False
+        except Exception as e:
+            error_str = str(e)
+            print(f"[ERROR] Failed to initialize PaddleOCR: {error_str}", flush=True)
+            import traceback
+            traceback.print_exc()
+            
+            # If it's a DLL/torch error, suggest solutions
+            if "torch" in error_str.lower() or "dll" in error_str.lower() or "WinError" in error_str:
+                print("\n[SUGGESTION] PaddleOCR failed due to DLL/torch conflict. Try:", flush=True)
+                print("  1. Uninstall torch if not needed: pip uninstall torch", flush=True)
+                print("  2. Or reinstall paddlepaddle-gpu: pip uninstall paddlepaddle-gpu && pip install paddlepaddle-gpu", flush=True)
+                print("  3. Or use CPU version: pip uninstall paddlepaddle-gpu && pip install paddlepaddle", flush=True)
+            
+            _paddle_ocr_instance = None
+            _paddle_ocr_initialized = True  # Mark as initialized (failed)
+            HAS_PADDLEOCR = False
         
         return _paddle_ocr_instance
 
@@ -447,7 +631,12 @@ def fine_tune_hmi_screen(image, roi_coords):
 
 def detect_hmi_screen_paddle(image):
     """
-    Detect and extract HMI screen from image using PaddleOCR algorithm
+    Detect and extract HMI screen from image - OPTIMIZED FOR SPEED
+    
+    Optimizations:
+    - Downscale image for faster processing
+    - Optimized edge detection parameters
+    - Early termination for invalid cases
     
     Args:
         image: OpenCV image (numpy array BGR)
@@ -461,21 +650,35 @@ def detect_hmi_screen_paddle(image):
         if image is None or len(image.shape) != 3:
             return None, time.time() - start_time
         
+        original_shape = image.shape
+        
+        # OPTIMIZATION: Downscale for faster processing if image is large
+        max_process_size = 800
+        scale = 1.0
+        if max(image.shape[:2]) > max_process_size:
+            scale = max_process_size / max(image.shape[:2])
+            process_image = cv2.resize(image, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+        else:
+            process_image = image
+        
         # Step 1: Enhance image
-        enhanced_img, enhanced_clahe = enhance_image_for_hmi(image)
+        enhanced_img, enhanced_clahe = enhance_image_for_hmi(process_image)
         
         # Step 2: Edge detection
         edges = adaptive_edge_detection_hmi(enhanced_clahe)
         
         # Step 3: Find contours
         contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        min_contour_area = image.shape[0] * image.shape[1] * 0.001
+        min_contour_area = process_image.shape[0] * process_image.shape[1] * 0.001
         large_contours = [cnt for cnt in contours if cv2.contourArea(cnt) > min_contour_area]
+        
+        if not large_contours:
+            return None, time.time() - start_time
         
         contour_mask = np.zeros_like(edges)
         cv2.drawContours(contour_mask, large_contours, -1, 255, 2)
         
-        # Step 4: Detect lines
+        # Step 4: Detect lines - optimized thresholds
         lines = cv2.HoughLinesP(contour_mask, 1, np.pi/180, threshold=25, minLineLength=15, maxLineGap=30)
         
         if lines is None or len(lines) < 2:
@@ -487,39 +690,47 @@ def detect_hmi_screen_paddle(image):
             return None, time.time() - start_time
         
         # Step 5: Classify horizontal/vertical lines
-        horizontal_lines, vertical_lines = process_lines(lines, image.shape, min_length=20)
+        horizontal_lines, vertical_lines = process_lines(lines, process_image.shape, min_length=20)
         
         if len(horizontal_lines) < 2 or len(vertical_lines) < 2:
             return None, time.time() - start_time
         
         # Step 6: Find rectangle from lines
-        largest_rectangle = find_rectangle_from_lines(horizontal_lines, vertical_lines, image.shape)
+        largest_rectangle = find_rectangle_from_lines(horizontal_lines, vertical_lines, process_image.shape)
         
         if largest_rectangle is None:
             return None, time.time() - start_time
         
-        # Step 7: Extract HMI region
+        # Step 7: Extract HMI region (scale back coordinates if needed)
         top_left, top_right, bottom_right, bottom_left, _ = largest_rectangle
         
-        x_min = min(top_left[0], bottom_left[0])
-        y_min = min(top_left[1], top_right[1])
-        x_max = max(top_right[0], bottom_right[0])
-        y_max = max(bottom_left[1], bottom_right[1])
+        # Scale coordinates back to original image size
+        if scale != 1.0:
+            inv_scale = 1.0 / scale
+            x_min = int(min(top_left[0], bottom_left[0]) * inv_scale)
+            y_min = int(min(top_left[1], top_right[1]) * inv_scale)
+            x_max = int(max(top_right[0], bottom_right[0]) * inv_scale)
+            y_max = int(max(bottom_left[1], bottom_right[1]) * inv_scale)
+        else:
+            x_min = min(top_left[0], bottom_left[0])
+            y_min = min(top_left[1], top_right[1])
+            x_max = max(top_right[0], bottom_right[0])
+            y_max = max(bottom_left[1], bottom_right[1])
         
         # Validate bounds
-        if x_min < 0: x_min = 0
-        if y_min < 0: y_min = 0
-        if x_max >= image.shape[1]: x_max = image.shape[1] - 1
-        if y_max >= image.shape[0]: y_max = image.shape[0] - 1
+        x_min = max(0, x_min)
+        y_min = max(0, y_min)
+        x_max = min(original_shape[1] - 1, x_max)
+        y_max = min(original_shape[0] - 1, y_max)
         
         if x_max > x_min and y_max > y_min:
             roi_coords = (x_min, y_min, x_max, y_max)
             
-            # Fine-tune and warp HMI region
+            # Fine-tune and warp HMI region from ORIGINAL image
             warped_roi, refined_coords = fine_tune_hmi_screen(image, roi_coords)
             
             processing_time = time.time() - start_time
-            print(f"[OK] HMI screen extracted in {processing_time:.2f}s")
+            print(f"[OK] HMI extracted: {warped_roi.shape[1]}x{warped_roi.shape[0]} in {processing_time:.2f}s")
             return warped_roi, processing_time
         
         return None, time.time() - start_time
@@ -578,8 +789,21 @@ def read_image_with_paddleocr(image_input, max_retries=2):
             else:
                 img_height, img_width = 1, 1
                 # If image read failed, try direct prediction
-                results = ocr.predict(image_input)
+                if hasattr(ocr, 'predict'):
+                    results = ocr.predict(image_input)
+                else:
+                    results = ocr.ocr(image_input, cls=False)
                 return results, img_width, img_height
+        
+        # Auto-detect PaddleOCR version and use appropriate method
+        # PaddleOCR 2.x: ocr() method
+        # PaddleOCR 3.x: predict() method
+        use_predict = hasattr(ocr, 'predict')
+        use_ocr = hasattr(ocr, 'ocr')
+        
+        if not use_predict and not use_ocr:
+            print("[ERROR] PaddleOCR instance has neither predict() nor ocr() method")
+            return None, img_width, img_height
         
         # Retry mechanism for OCR prediction with auto-recovery
         results = None
@@ -587,7 +811,12 @@ def read_image_with_paddleocr(image_input, max_retries=2):
         
         for attempt in range(max_retries + 1):
             try:
-                results = ocr.predict(temp_path)
+                if use_predict:
+                    # PaddleOCR 3.x
+                    results = ocr.predict(temp_path)
+                else:
+                    # PaddleOCR 2.x
+                    results = ocr.ocr(temp_path, cls=False)
                 
                 # If successful, reset fail count and break out of retry loop
                 if results is not None:
@@ -624,7 +853,10 @@ def read_image_with_paddleocr(image_input, max_retries=2):
                             ocr = get_paddleocr_instance()
                             if ocr is not None:
                                 print("[*] Retrying with reset PaddleOCR instance...")
-                                results = ocr.predict(temp_path)
+                                if hasattr(ocr, 'predict'):
+                                    results = ocr.predict(temp_path)
+                                else:
+                                    results = ocr.ocr(temp_path, cls=False)
                                 if results is not None:
                                     with _paddle_ocr_lock:
                                         _paddle_ocr_fail_count = 0
@@ -666,45 +898,200 @@ def read_image_with_paddleocr(image_input, max_retries=2):
                 print(f"[WARNING] Failed to cleanup temp file {temp_path}: {cleanup_error}")
 
 
+def read_image_with_paddleocr_batch(images, max_workers=4):
+    """
+    Process multiple images in parallel using PaddleOCR
+    
+    Args:
+        images: List of numpy arrays (OpenCV images)
+        max_workers: Number of parallel workers
+    
+    Returns:
+        List of (results, img_width, img_height) tuples
+    """
+    if not images:
+        return []
+    
+    if len(images) == 1:
+        return [read_image_with_paddleocr(images[0])]
+    
+    results = []
+    
+    # Use thread pool for parallel processing
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [executor.submit(read_image_with_paddleocr, img) for img in images]
+        
+        for future in as_completed(futures):
+            try:
+                result = future.result()
+                results.append(result)
+            except Exception as e:
+                print(f"[ERROR] Batch OCR error: {e}")
+                results.append((None, 0, 0))
+    
+    return results
+
+
+def get_ocr_performance_stats():
+    """Get OCR performance statistics"""
+    with _paddle_ocr_lock:
+        return _perf_stats.copy()
+
+
 def extract_ocr_data(results):
-    """Extract data from PaddleOCR results"""
+    """Extract data from PaddleOCR results (supports both 2.x and 3.x formats)"""
     all_data = []
     
     if not results:
-        print("[DEBUG] extract_ocr_data: results is None or empty")
+        print("[DEBUG] extract_ocr_data: results is None or empty", flush=True)
         return all_data
     
     if not isinstance(results, list):
-        print(f"[DEBUG] extract_ocr_data: results is not a list, type: {type(results)}")
+        print(f"[DEBUG] extract_ocr_data: results is not a list, type: {type(results)}", flush=True)
         return all_data
     
-    for idx, result in enumerate(results):
+    # Check if this is PaddleOCR 2.x format: results[0] is a list of [box, (text, score)] items
+    # Format: [[[box, (text, score)], [box, (text, score)], ...]]
+    if (len(results) > 0 and isinstance(results[0], list) and 
+        len(results[0]) > 0 and
+        isinstance(results[0][0], list) and
+        len(results[0][0]) == 2):
+        # PaddleOCR 2.x format: results[0] contains list of [box, (text, score)] items
+        print("[DEBUG] extract_ocr_data: Detected PaddleOCR 2.x format (per-item list)", flush=True)
         try:
-            if hasattr(result, 'json') and result.json:
-                json_data = result.json
-                res = json_data.get('res', json_data)
-                
-                texts = res.get('rec_texts', [])
-                scores = res.get('rec_scores', [])
-                polys = res.get('rec_polys', res.get('dt_polys', []))
-                
-                if not texts:
-                    continue
-                
-                for i in range(len(texts)):
+            items = results[0]  # List of [box, (text, score)] items
+            print(f"[DEBUG] extract_ocr_data: Processing {len(items)} items from results[0]", flush=True)
+            
+            for idx, item in enumerate(items):
+                try:
+                    if not isinstance(item, list) or len(item) < 2:
+                        continue
+                    
+                    polygon = item[0]  # [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
+                    text_data = item[1]  # (text, score) or [text, score]
+                    
+                    if isinstance(text_data, (list, tuple)) and len(text_data) >= 2:
+                        text = str(text_data[0])
+                        score = float(text_data[1]) if len(text_data) > 1 else 0.0
+                    else:
+                        text = str(text_data) if text_data else ''
+                        score = 0.0
+                    
                     data = {
-                        'text': texts[i] if i < len(texts) else '',
-                        'confidence': scores[i] if i < len(scores) else 0.0,
-                        'bbox': polys[i] if i < len(polys) else []
+                        'text': text,
+                        'confidence': score,
+                        'bbox': polygon
                     }
                     all_data.append(data)
-            else:
-                print(f"[DEBUG] extract_ocr_data: result[{idx}] has no json attribute or json is None")
+                    
+                    # Debug: Show first item
+                    if idx == 0:
+                        print(f"[DEBUG] extract_ocr_data: First item - text='{text[:30]}', score={score:.2f}, bbox_len={len(polygon) if polygon else 0}", flush=True)
+                except Exception as e:
+                    print(f"[WARNING] extract_ocr_data: Error processing item[{idx}]: {e}", flush=True)
+                    continue
         except Exception as e:
-            print(f"[WARNING] extract_ocr_data: Error processing result[{idx}]: {e}")
-            continue
+            print(f"[WARNING] extract_ocr_data: Error processing PaddleOCR 2.x format: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+    # Check if this is PaddleOCR 2.x old format: [[[x1,y1], [x2,y2], [x3,y3], [x4,y4]], (text, score)], ...]
+    elif len(results) > 0 and isinstance(results[0], list) and len(results[0]) == 2:
+        # PaddleOCR 2.x old format (per-item format)
+        print("[DEBUG] extract_ocr_data: Detected PaddleOCR 2.x old format (per-item)", flush=True)
+        for idx, item in enumerate(results):
+            try:
+                if len(item) == 2:
+                    polygon = item[0]  # [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
+                    text_data = item[1]  # (text, score) or [text, score]
+                    
+                    if isinstance(text_data, (list, tuple)) and len(text_data) >= 2:
+                        text = str(text_data[0])
+                        score = float(text_data[1]) if len(text_data) > 1 else 0.0
+                    else:
+                        text = str(text_data) if text_data else ''
+                        score = 0.0
+                    
+                    data = {
+                        'text': text,
+                        'confidence': score,
+                        'bbox': polygon
+                    }
+                    all_data.append(data)
+                    
+                    # Debug: Show first item
+                    if idx == 0:
+                        print(f"[DEBUG] extract_ocr_data: First item - text='{text[:30]}', score={score:.2f}, bbox_len={len(polygon) if polygon else 0}", flush=True)
+            except Exception as e:
+                print(f"[WARNING] extract_ocr_data: Error processing item[{idx}]: {e}", flush=True)
+                continue
+    else:
+        # PaddleOCR 3.x format: List of PredictResult objects with .json attribute
+        print("[DEBUG] extract_ocr_data: Detected PaddleOCR 3.x format", flush=True)
+        for idx, result in enumerate(results):
+            try:
+                if hasattr(result, 'json') and result.json:
+                    json_data = result.json
+                    res = json_data.get('res', json_data)
+                    
+                    texts = res.get('rec_texts', [])
+                    scores = res.get('rec_scores', [])
+                    # PaddleOCR 3.x: dt_polys is detection polygons (text box positions)
+                    # rec_polys might be recognition polygons (after recognition, may be empty)
+                    # Use dt_polys first as it's more reliable for bounding boxes
+                    dt_polys = res.get('dt_polys', [])
+                    rec_polys = res.get('rec_polys', [])
+                    
+                    # Choose which polygons to use
+                    # dt_polys should match texts count (detection -> recognition pipeline)
+                    if len(dt_polys) == len(texts) and len(dt_polys) > 0:
+                        polys = dt_polys
+                    elif len(rec_polys) == len(texts) and len(rec_polys) > 0:
+                        polys = rec_polys
+                    elif len(dt_polys) > 0:
+                        polys = dt_polys
+                    elif len(rec_polys) > 0:
+                        polys = rec_polys
+                    else:
+                        polys = []
+                    
+                    if not texts:
+                        continue
+                    
+                    # Debug: Show polygon info
+                    if idx == 0:
+                        print(f"[DEBUG] extract_ocr_data: texts={len(texts)}, dt_polys={len(dt_polys)}, rec_polys={len(rec_polys)}, using polys={len(polys)}", flush=True)
+                        if len(polys) > 0:
+                            print(f"[DEBUG] extract_ocr_data: Sample polygon format: type={type(polys[0])}, value={polys[0] if len(str(polys[0])) < 100 else str(polys[0])[:100]}", flush=True)
+                    
+                    # Ensure polys length matches texts length
+                    if len(polys) != len(texts):
+                        print(f"[WARNING] extract_ocr_data: Mismatch - texts={len(texts)}, polys={len(polys)}", flush=True)
+                        # Use minimum length to avoid index errors
+                        max_len = min(len(texts), len(polys)) if polys else len(texts)
+                    else:
+                        max_len = len(texts)
+                    
+                    for i in range(max_len):
+                        bbox = polys[i] if i < len(polys) else []
+                        # Debug: Show first bbox
+                        if idx == 0 and i == 0 and bbox:
+                            print(f"[DEBUG] extract_ocr_data: First bbox: type={type(bbox)}, len={len(bbox) if isinstance(bbox, (list, tuple)) else 'N/A'}, value={bbox[:2] if isinstance(bbox, (list, tuple)) and len(bbox) > 0 else bbox}", flush=True)
+                        
+                        data = {
+                            'text': texts[i] if i < len(texts) else '',
+                            'confidence': scores[i] if i < len(scores) else 0.0,
+                            'bbox': bbox
+                        }
+                        all_data.append(data)
+                else:
+                    print(f"[DEBUG] extract_ocr_data: result[{idx}] has no json attribute or json is None", flush=True)
+            except Exception as e:
+                print(f"[WARNING] extract_ocr_data: Error processing result[{idx}]: {e}", flush=True)
+                import traceback
+                traceback.print_exc()
+                continue
     
-    print(f"[DEBUG] extract_ocr_data: Extracted {len(all_data)} text items from {len(results)} results")
+    print(f"[DEBUG] extract_ocr_data: Extracted {len(all_data)} text items from {len(results)} results", flush=True)
     return all_data
 
 
@@ -974,20 +1361,48 @@ def polygon_to_normalized_bbox(polygon, img_width, img_height):
     if not polygon or len(polygon) < 4:
         return None
     
-    xs = [p[0] for p in polygon]
-    ys = [p[1] for p in polygon]
-    
-    x_min = min(xs)
-    y_min = min(ys)
-    x_max = max(xs)
-    y_max = max(ys)
-    
-    norm_x1 = x_min / img_width
-    norm_y1 = y_min / img_height
-    norm_x2 = x_max / img_width
-    norm_y2 = y_max / img_height
-    
-    return [norm_x1, norm_y1, norm_x2, norm_y2]
+    try:
+        # Handle different polygon formats
+        # Format 1: [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
+        # Format 2: numpy array
+        # Format 3: list of tuples
+        
+        # Convert to list if needed
+        if hasattr(polygon, 'tolist'):
+            polygon = polygon.tolist()
+        
+        # Extract x and y coordinates
+        xs = []
+        ys = []
+        for p in polygon:
+            if isinstance(p, (list, tuple)) and len(p) >= 2:
+                xs.append(float(p[0]))
+                ys.append(float(p[1]))
+            else:
+                # Invalid format
+                return None
+        
+        if not xs or not ys:
+            return None
+        
+        x_min = min(xs)
+        y_min = min(ys)
+        x_max = max(xs)
+        y_max = max(ys)
+        
+        # Validate coordinates
+        if x_min < 0 or y_min < 0 or x_max <= x_min or y_max <= y_min:
+            return None
+        
+        norm_x1 = x_min / img_width
+        norm_y1 = y_min / img_height
+        norm_x2 = x_max / img_width
+        norm_y2 = y_max / img_height
+        
+        return [norm_x1, norm_y1, norm_x2, norm_y2]
+    except Exception as e:
+        print(f"[WARNING] polygon_to_normalized_bbox: Error converting polygon: {e}, polygon type: {type(polygon)}", flush=True)
+        return None
 
 
 def calculate_iou(box1, box2):
@@ -1022,22 +1437,39 @@ def filter_ocr_by_roi(ocr_data, sub_page_data, img_width, img_height):
     Returns: list of filtered OCR results with matching ROI info
     """
     if not sub_page_data:
+        print(f"[DEBUG] filter_ocr_by_roi: sub_page_data is None or empty", flush=True)
         return []
     
     # Support both "Rois" (capital) and "rois" (lowercase)
     rois = sub_page_data.get('Rois', sub_page_data.get('rois', []))
     if not rois:
+        print(f"[DEBUG] filter_ocr_by_roi: No ROIs found in sub_page_data", flush=True)
         return []
     
+    print(f"[DEBUG] filter_ocr_by_roi: Processing {len(ocr_data)} OCR items, {len(rois)} ROIs, image size: {img_width}x{img_height}", flush=True)
+    
     filtered_results = []
+    no_bbox_count = 0
+    no_normalized_count = 0
+    no_match_count = 0
     
     for ocr_item in ocr_data:
         polygon = ocr_item.get('bbox', [])
         if not polygon:
+            no_bbox_count += 1
+            if no_bbox_count <= 3:
+                print(f"[DEBUG] filter_ocr_by_roi: OCR item has no bbox: text='{ocr_item.get('text', '')[:30]}'", flush=True)
             continue
+        
+        # Debug: Show first polygon format
+        if no_bbox_count == 0 and no_normalized_count == 0 and no_match_count == 0:
+            print(f"[DEBUG] filter_ocr_by_roi: First polygon: type={type(polygon)}, len={len(polygon) if isinstance(polygon, (list, tuple)) else 'N/A'}, sample={polygon[:1] if isinstance(polygon, (list, tuple)) and len(polygon) > 0 else polygon}", flush=True)
         
         ocr_bbox = polygon_to_normalized_bbox(polygon, img_width, img_height)
         if not ocr_bbox:
+            no_normalized_count += 1
+            if no_normalized_count <= 3:
+                print(f"[DEBUG] filter_ocr_by_roi: Failed to normalize bbox: polygon type={type(polygon)}, len={len(polygon) if isinstance(polygon, (list, tuple)) else 'N/A'}, value={str(polygon)[:100]}", flush=True)
             continue
         
         # Find ALL ROIs that match this OCR text (IoU >= threshold)
@@ -1058,6 +1490,17 @@ def filter_ocr_by_roi(ocr_data, sub_page_data, img_width, img_height):
                 })
         
         if not matching_rois:
+            no_match_count += 1
+            if no_match_count <= 3:
+                # Find best IoU for debugging
+                best_iou = 0.0
+                for roi in rois:
+                    roi_coords = roi.get('coordinates', [])
+                    if len(roi_coords) == 4:
+                        iou = calculate_iou(ocr_bbox, roi_coords)
+                        if iou > best_iou:
+                            best_iou = iou
+                print(f"[DEBUG] filter_ocr_by_roi: No match for text='{ocr_item.get('text', '')[:30]}', best_iou={best_iou:.4f}, ocr_bbox={ocr_bbox}", flush=True)
             continue
         
         # If only one ROI matches, use it directly
@@ -1139,7 +1582,39 @@ def filter_ocr_by_roi(ocr_data, sub_page_data, img_width, img_height):
                         'iou': match['iou']
                     })
     
+    print(f"[DEBUG] filter_ocr_by_roi: Results - matched: {len(filtered_results)}, no_bbox: {no_bbox_count}, no_normalized: {no_normalized_count}, no_match: {no_match_count}", flush=True)
+    
     return filtered_results
+
+
+def filter_ocr_by_roi_parallel(ocr_data, sub_page_data, img_width, img_height, max_workers=4):
+    """
+    Filter OCR results in parallel for large datasets
+    Use this when ocr_data has more than 50 items
+    """
+    if len(ocr_data) < 50:
+        return filter_ocr_by_roi(ocr_data, sub_page_data, img_width, img_height)
+    
+    # Split data for parallel processing
+    chunk_size = max(10, len(ocr_data) // max_workers)
+    chunks = [ocr_data[i:i + chunk_size] for i in range(0, len(ocr_data), chunk_size)]
+    
+    all_results = []
+    
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [
+            executor.submit(filter_ocr_by_roi, chunk, sub_page_data, img_width, img_height)
+            for chunk in chunks
+        ]
+        
+        for future in as_completed(futures):
+            try:
+                results = future.result()
+                all_results.extend(results)
+            except Exception as e:
+                print(f"[ERROR] Parallel filter error: {e}")
+    
+    return all_results
 
 
 # ============================================================

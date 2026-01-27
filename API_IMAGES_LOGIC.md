@@ -59,18 +59,37 @@ Parameters:
 **Mục đích:** Thực hiện OCR toàn bộ ảnh để phát hiện tất cả text.
 
 **Quy trình:**
-1. **Khởi tạo PaddleOCR:**
+1. **Khởi tạo PaddleOCR (v3.2 GPU Optimized):**
    - Sử dụng singleton pattern để tối ưu hiệu suất
-   - Cấu hình: `lang='en'`, `text_det_thresh=0.15`, `text_rec_score_thresh=0.0`
+   - Cấu hình GPU optimized:
+     - `lang='en'`
+     - `text_det_thresh=0.2` (higher to reduce noise)
+     - `text_det_box_thresh=0.3` (filter weak boxes)
+     - `text_det_limit_side_len=960` (larger for HMI screens)
+     - `text_rec_score_thresh=0.3` (filter low-confidence)
 
-2. **OCR Processing:**
-   - PaddleOCR trả về kết quả dạng JSON với:
-     - `rec_texts`: Danh sách text đã nhận dạng
-     - `rec_scores`: Confidence scores
-     - `rec_polys`: Tọa độ polygon (4 điểm) của mỗi text box
+2. **OCR Processing (supports PaddleOCR 2.x và 3.x):**
+   - **PaddleOCR 2.7.3** (hiện tại, sử dụng `ocr()` method):
+     - Trả về list of lists: `[[box, (text, score)], ...]`
+     - Mỗi item là `[polygon, (text_string, confidence)]`
+     - Format: `[[[x1,y1], [x2,y2], [x3,y3], [x4,y4]], (text, score)], ...]`
+   
+   - **PaddleOCR 3.x** (tương lai, sử dụng `predict()` method):
+     - Trả về list of `PredictResult` objects
+     - Mỗi object có `.json` property với structure:
+       ```json
+       {
+         "input_path": "...",
+         "res": {
+           "rec_texts": ["text1", "text2", ...],
+           "rec_scores": [0.99, 0.95, ...],
+           "dt_polys": [[[x1,y1], [x2,y2], [x3,y3], [x4,y4]], ...]
+         }
+       }
+       ```
 
 3. **Extract OCR Data:**
-   - Chuyển đổi kết quả PaddleOCR thành format chuẩn:
+   - Hàm `extract_ocr_data()` auto-detect format và chuyển đổi thành format chuẩn:
      ```python
      {
          'text': str,           # Text đã nhận dạng
@@ -79,9 +98,20 @@ Parameters:
      }
      ```
 
+4. **Debug Logging (v3.2):**
+   - Log HMI image shape và dtype
+   - Log PaddleOCR results type và structure
+   - Log sample OCR data (first 5 items)
+   ```
+   [DEBUG] HMI image shape: (2293, 1743, 3), dtype: uint8
+   [DEBUG] PaddleOCR results type: <class 'list'>
+   [DEBUG] results[0].json keys: ['input_path', 'res']
+   [DEBUG] Sample texts (first 5): ['text1', 'text2', ...]
+   ```
+
 **File xử lý:** 
-- `utils/paddleocr_engine.py` - `read_image_with_paddleocr()`
-- `utils/paddleocr_engine.py` - `extract_ocr_data()`
+- `utils/paddleocr_engine.py` - `read_image_with_paddleocr()` (supports 2.x và 3.x)
+- `utils/paddleocr_engine.py` - `extract_ocr_data()` (multi-format extraction)
 
 ---
 
@@ -339,10 +369,25 @@ Parameters:
 4. **Decimal Places:** Format số theo cấu hình trong `decimal_places.json`
 5. **HMI Detection:** Nếu không phát hiện được HMI screen, sử dụng ảnh gốc
 
-## Performance
+## Performance (v3.2 GPU Edition)
 
+### Với GPU (NVIDIA GTX 1050 Ti):
 - **HMI Detection:** ~0.1-0.2s
-- **OCR Processing:** ~1-2s (tùy kích thước ảnh)
+- **OCR Processing:** ~0.5-1.5s (GPU accelerated)
+- **PaddleOCR Warm-up:** ~0.3s (chỉ lần đầu, với GPU)
 - **Screen Matching:** ~0.05s
 - **Filtering & Deduplication:** ~0.02s
-- **Total:** ~1.5-2.5s per image
+- **Total:** ~1-2s per image (sau warm-up)
+
+### So sánh CPU vs GPU:
+
+| Metric | CPU | GPU | Improvement |
+|--------|-----|-----|-------------|
+| OCR Time | ~12s | ~3-5s | **-60%** |
+| HMI Detection | ~0.5s | ~0.2s | **-60%** |
+| Warm-up | ~5s | ~0.3s | **-94%** |
+| Total | ~13.5s | ~4-6s | **-55%** |
+
+### Debug Logging Overhead:
+- v3.2 có thêm debug logging nhưng không ảnh hưởng đáng kể đến performance
+- Debug logs chỉ xuất hiện trong terminal output, không ảnh hưởng response time

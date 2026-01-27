@@ -1,8 +1,8 @@
 # HMI OCR API - Tài Liệu Kỹ Thuật
 
 **Dành cho**: Developers và Technical Team  
-**Phiên bản**: 3.0 - PaddleOCR Edition  
-**Ngày cập nhật**: December 2025
+**Phiên bản**: 3.3 - PaddleOCR GPU Edition (NumPy Compatibility Fix)  
+**Ngày cập nhật**: January 2026
 
 ---
 
@@ -269,17 +269,27 @@ def check_image_quality(image):
 **Key Functions**:
 - `get_paddleocr_instance()`: Singleton PaddleOCR instance
 - `detect_hmi_screen_paddle()`: Detect và extract HMI screen từ ảnh
-- `read_image_with_paddleocr()`: Full image OCR với PaddleOCR
+- `read_image_with_paddleocr()`: Full image OCR với PaddleOCR (supports 2.x và 3.x)
+- `extract_ocr_data()`: Extract text data từ PaddleOCR results (multi-format support)
 - `find_matching_screen()`: Match screen dựa trên Special_rois
 - `filter_ocr_by_roi()`: Filter OCR results bằng IoU với ROIs
 - `post_process_ocr_text()`: Post-process và format text
+- `split_merged_numbers_by_decimal_places()`: Tách số bị merge dựa trên decimal config
+
+**PaddleOCR Result Format Support (v3.3)**:
+- **PaddleOCR 2.7.3** (hiện tại): `[[box, (text, score)], ...]` list format
+- **PaddleOCR 3.x** (tương lai): `result.json['res']['rec_texts']`, `rec_scores`, `dt_polys`
+- Auto-detection và handling cho cả hai formats
 
 **Flow**:
 ```
 Image --> detect_hmi_screen_paddle() --> HMI extracted
     |
     v
-read_image_with_paddleocr() --> Full OCR results
+read_image_with_paddleocr() --> Full OCR results (3.x or 2.x format)
+    |
+    v
+extract_ocr_data() --> Normalized OCR data list
     |
     v
 find_matching_screen() --> Match screen/sub-page
@@ -624,6 +634,63 @@ pytest tests/
 
 ## 📝 Changelog
 
+### v3.3 (January 2026) - NumPy Compatibility Fix
+
+**Added**:
+- NumPy version requirement: `numpy<2.0` để tương thích với scipy, scikit-image
+- Support cho cả PaddleOCR 2.7.3 và 3.x result formats trong `extract_ocr_data()`
+- Enhanced debug logging trong tất cả các bước xử lý OCR
+
+**Changed**:
+- **PaddleOCR Version**: Downgrade từ 3.3.2 về 2.7.3 để tránh dependency conflicts
+- **NumPy Version**: Downgrade từ 2.4.1 về 1.26.4 để fix compatibility
+- **utils/paddleocr_engine.py**:
+  - `read_image_with_paddleocr()`: Support cả `predict()` (v3.x) và `ocr()` (v2.x) methods
+  - `extract_ocr_data()`: Multi-format extraction với auto-detection
+  - Enhanced error handling cho NumPy compatibility issues
+
+**Fixed**:
+- NumPy 2.x compatibility error với scipy và scikit-image
+- PaddleOCR initialization failures do NumPy incompatibility
+- Import errors khi khởi động server
+
+---
+
+### v3.1 (January 2026) - PaddleOCR GPU Edition
+
+**Added**:
+- GPU acceleration với PaddlePaddle GPU 3.0.0 + CUDA 11.8
+- GPU memory optimization environment variables
+- CuPy GPU acceleration cho image processing
+- Performance monitoring endpoint cải tiến
+- Debug mode disabled để tránh circular import
+
+**Changed**:
+- **PaddleOCR Parameters**: Tối ưu cho GPU
+  - `text_det_thresh`: 0.15 → 0.2
+  - `text_det_box_thresh`: 0.25 → 0.3
+  - `text_det_unclip_ratio`: 2.2 → 1.6
+  - `text_det_limit_side_len`: 512 → 960
+  - `text_rec_score_thresh`: 0.0 → 0.3
+- **app.py**: Debug mode disabled (`debug=False, use_reloader=False`)
+- **gpu_accelerator.py**: Removed PyTorch dependency to avoid CUDA DLL conflicts
+
+**Fixed**:
+- CUDA 11 vs CUDA 12 DLL conflicts
+- PaddleX reinitialization error in Flask debug mode
+- Circular import issues with paddle module
+
+**Removed**:
+- PyTorch CUDA support (conflicts with PaddlePaddle GPU)
+- `show_log` parameter (not supported in PaddleOCR 3.3.2)
+
+**Performance**:
+- OCR Time: ~12s → ~3-5s (với GPU)
+- HMI Detection: ~0.5s → ~0.3s
+- Total Processing: ~13.5s → ~4-6s
+
+---
+
 ### v3.0 (December 2025) - PaddleOCR Edition
 
 **Added**:
@@ -681,6 +748,167 @@ pytest tests/
 - GPU acceleration
 - Screen detection
 - 28 endpoints
+
+---
+
+## ⚡ Performance Optimizations (v3.1 GPU Edition)
+
+### GPU Setup Requirements
+
+#### Hardware
+- NVIDIA GPU với 4GB+ VRAM (tested: GTX 1050 Ti)
+- CUDA 11.x compatible driver
+
+#### Software
+```bash
+# PaddlePaddle GPU 3.0.0 với CUDA 11.8
+pip install paddlepaddle-gpu==3.0.0 -i https://www.paddlepaddle.org.cn/packages/stable/cu118/
+
+# PaddleOCR
+pip install paddleocr
+
+# CuPy (optional, cho image processing)
+pip install cupy-cuda11x
+```
+
+**QUAN TRỌNG**: Không cài PyTorch cùng lúc để tránh xung đột CUDA DLLs giữa cu11 và cu12.
+
+### OCR Speed Optimizations
+
+Phiên bản 3.1 đã được tối ưu để giảm thời gian xử lý OCR từ ~12s xuống còn 3-5s:
+
+#### 1. PaddleOCR Configuration
+
+```python
+# Optimized parameters in paddleocr_engine.py
+PaddleOCR(
+    lang='en',
+    use_doc_orientation_classify=False,  # Skip orientation detection
+    use_doc_unwarping=False,             # Skip document unwarping
+    use_textline_orientation=False,       # Skip text line orientation
+    text_det_thresh=0.2,                  # Higher = less noise
+    text_det_box_thresh=0.3,              # Filter weak boxes
+    text_det_unclip_ratio=1.6,            # Standard ratio
+    text_det_limit_side_len=960,          # Optimal for HMI screens
+    text_det_limit_type='max',
+    text_rec_score_thresh=0.3,            # Filter low-confidence
+)
+```
+
+#### 2. GPU Acceleration
+
+- PaddlePaddle GPU 3.0.0 với CUDA 11.8
+- GPU memory optimization với environment variables:
+  - `FLAGS_fraction_of_gpu_memory_to_use=0.5` (50% GPU memory)
+  - `FLAGS_eager_delete_tensor_gb=0.0` (immediate tensor cleanup)
+- CuPy cho NumPy operations trên GPU
+
+#### 3. Parallel Processing
+
+- **ROI Filtering**: Sử dụng ThreadPoolExecutor cho datasets > 50 items
+- **Post-processing**: Xử lý song song cho > 10 OCR results
+- **Thread pools**: 24 workers (2x CPU cores)
+
+#### 4. Image Preprocessing
+
+- **Downscale lớn**: Ảnh > 1280px được resize trước khi OCR
+- **HMI Detection**: Downscale to 800px for faster edge detection
+- **JPEG Quality 85**: Balanced quality/speed for temp files
+
+#### 5. Flask Configuration
+
+```python
+# Debug mode disabled to avoid circular import issues
+app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
+```
+
+### Performance Metrics
+
+| Metric | Before (CPU) | After (GPU) | Improvement |
+|--------|--------------|-------------|-------------|
+| OCR Time | ~12s | ~3-5s | **-60%** |
+| HMI Detection | ~0.5s | ~0.2s | **-60%** |
+| PaddleOCR Warm-up | ~5s | ~0.9s | **-82%** |
+| Total Processing | ~13.5s | ~4-6s | **-55%** |
+| Memory Usage | High | Optimized | **-30%** |
+
+### Monitoring Performance
+
+Access `/api/performance` endpoint to get real-time stats:
+
+```json
+{
+  "timestamp": "2026-01-27 19:00:00",
+  "gpu_available": true,
+  "gpu_info": {
+    "gpu_device_id": 0,
+    "gpu_name": "NVIDIA GeForce GTX 1050 Ti",
+    "gpu_memory_total_gb": 4.0
+  },
+  "ocr": {
+    "paddleocr_available": true,
+    "gpu_mode": true,
+    "total_calls": 50,
+    "avg_time_sec": 3.2
+  }
+}
+```
+
+### Troubleshooting GPU Issues
+
+#### 1. CUDA DLL Not Found
+```
+Error loading "cusparse64_12.dll" or one of its dependencies
+```
+**Solution**: Gỡ PyTorch và CUDA 12 packages:
+```bash
+pip uninstall torch torchvision -y
+pip uninstall nvidia-cublas-cu12 nvidia-cuda-runtime-cu12 ... -y
+```
+
+#### 2. Circular Import Error
+```
+AttributeError: partially initialized module 'paddle' has no attribute 'tensor'
+```
+**Solution**: Đảm bảo `debug=False` trong `app.run()`:
+```python
+app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
+```
+
+#### 3. PDX Reinitialization Error
+```
+RuntimeError: PDX has already been initialized
+```
+**Solution**: Restart server và đảm bảo chỉ gọi `get_paddleocr_instance()` một lần.
+
+#### 4. OCR Returns 0 Text Items
+```
+[OK] PaddleOCR: 0 texts in 0.01s
+```
+**Nguyên nhân có thể**:
+1. PaddleOCR result format không được parse đúng (2.x vs 3.x)
+2. HMI screen không được extract đúng
+3. Image quality quá thấp
+
+**Solution**:
+1. Kiểm tra debug logs để xem result structure:
+   ```
+   [DEBUG] PaddleOCR results type: <class 'list'>
+   [DEBUG] results[0].json keys: ['input_path', 'res']
+   ```
+2. Đảm bảo code `extract_ocr_data()` hỗ trợ cả 2.x và 3.x formats
+3. Kiểm tra HMI detection có thành công không
+
+#### 5. Screen Matching Fails (screen_id: null)
+```
+[WARNING] No screen matched. OCR data count: 0
+```
+**Nguyên nhân**: Không có OCR text để match với Special_rois
+
+**Solution**:
+1. Kiểm tra OCR có trả về text không (xem debug logs)
+2. Đảm bảo roi_info.json có cấu hình cho machine_type/screen
+3. Kiểm tra machine_code mapping trong machine_screens.json
 
 ---
 

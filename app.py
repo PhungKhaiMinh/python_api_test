@@ -14,7 +14,11 @@ import json
 # Import utils modules
 from utils import initialize_all_caches
 from utils.ocr_processor import init_ocr_globals
-from utils.paddleocr_engine import get_paddleocr_instance, init_paddleocr_globals
+from utils.paddleocr_engine import get_paddleocr_instance, init_paddleocr_globals, get_ocr_performance_stats
+try:
+    from utils.paddleocr_engine import USE_GPU
+except ImportError:
+    USE_GPU = False
 
 # Import route blueprints
 from routes import image_bp, machine_bp, decimal_bp, reference_bp
@@ -215,7 +219,7 @@ def debug_info():
 
 @app.route('/api/performance', methods=['GET'])
 def get_performance_stats():
-    """Get performance statistics"""
+    """Get performance statistics including OCR speed metrics"""
     try:
         import time
         stats = {
@@ -236,10 +240,22 @@ def get_performance_stats():
         else:
             stats["system"] = {"cpu_count": cpu_count()}
         
-        stats["ocr"] = {
-            "paddleocr_available": HAS_PADDLEOCR,
-            "engine": "PaddleOCR"
-        }
+        # Get OCR performance stats
+        try:
+            ocr_stats = get_ocr_performance_stats()
+            stats["ocr"] = {
+                "paddleocr_available": HAS_PADDLEOCR,
+                "engine": "PaddleOCR",
+                "gpu_mode": USE_GPU,
+                "total_calls": ocr_stats.get('ocr_calls', 0),
+                "total_time_sec": round(ocr_stats.get('total_time', 0), 2),
+                "avg_time_sec": round(ocr_stats.get('avg_time', 0), 2)
+            }
+        except:
+            stats["ocr"] = {
+                "paddleocr_available": HAS_PADDLEOCR,
+                "engine": "PaddleOCR"
+            }
         
         return jsonify(stats), 200
     except Exception as e:
@@ -424,16 +440,31 @@ if __name__ == '__main__':
     # Initialize caches at startup
     initialize_all_caches()
     
+    # Get OCR mode info - reimport to get updated value after initialization
+    try:
+        from utils.paddleocr_engine import USE_GPU as _CURRENT_USE_GPU
+        ocr_mode = "GPU" if _CURRENT_USE_GPU else "CPU"
+    except:
+        ocr_mode = "CPU"
+    
     print("\n" + "="*70)
-    print("HMI OCR API SERVER - v3.0 PaddleOCR Edition")
+    print("HMI OCR API SERVER - v3.1 PaddleOCR GPU Edition (OPTIMIZED)")
     print("="*70)
     print(f"Upload folder: {UPLOAD_FOLDER}")
     print(f"ROI data folder: {ROI_DATA_FOLDER}")
     print(f"GPU available: {is_gpu_available() if OPTIMIZATION_MODULES_AVAILABLE else False}")
     print(f"PaddleOCR available: {HAS_PADDLEOCR}")
-    print(f"OCR Engine: PaddleOCR (exclusively)")
+    print(f"OCR Engine: PaddleOCR ({ocr_mode} mode)")
+    print("="*70)
+    print("OPTIMIZATIONS ENABLED:")
+    print("  - GPU acceleration (if available)")
+    print("  - Parallel ROI filtering")
+    print("  - Parallel post-processing")
+    print("  - Optimized image preprocessing")
+    print("  - Performance tracking")
     print("="*70)
     print("Starting server on http://0.0.0.0:5000")
     print("="*70 + "\n")
     
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # Debug mode disabled to avoid circular import issues with PaddleOCR/PaddleX
+    app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)

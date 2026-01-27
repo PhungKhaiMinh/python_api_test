@@ -1,7 +1,7 @@
 """
-Image Routes Module
+Image Routes Module - OPTIMIZED FOR SPEED
 Handles image upload, retrieval, and deletion endpoints
-Uses PaddleOCR exclusively for OCR processing
+Uses PaddleOCR with GPU acceleration and parallel processing
 """
 
 from flask import Blueprint, request, jsonify, send_from_directory, abort
@@ -9,18 +9,23 @@ from werkzeug.utils import secure_filename
 import os
 import cv2
 import time
+from concurrent.futures import ThreadPoolExecutor
 from utils import (
     get_roi_info_cached, get_machine_type, perform_full_image_ocr,
     detect_hmi_screen
 )
 from utils.paddleocr_engine import (
     read_image_with_paddleocr, extract_ocr_data, find_matching_screen,
-    filter_ocr_by_roi, post_process_ocr_text, get_paddleocr_instance
+    filter_ocr_by_roi, filter_ocr_by_roi_parallel, post_process_ocr_text, 
+    get_paddleocr_instance, get_ocr_performance_stats
 )
 import re
 from utils.ocr_processor import apply_decimal_places_format
 
 image_bp = Blueprint('image', __name__)
+
+# Thread pool for parallel post-processing
+_post_process_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="PostProcess")
 
 # Will be set by app
 UPLOAD_FOLDER = None
@@ -52,6 +57,13 @@ def upload_image():
     3. Match screen based on Special_rois
     4. Filter OCR results by IoU with ROIs
     """
+    import sys
+    
+    # Force flush all print statements
+    def log(msg):
+        print(msg, flush=True)
+        sys.stdout.flush()
+    
     try:
         from utils.swagger_specs import get_upload_image_spec
         upload_image.__doc__ = get_upload_image_spec().strip()
@@ -59,6 +71,9 @@ def upload_image():
         pass
     
     try:
+        log(f"\n{'='*60}")
+        log(f"[REQUEST] POST /api/images received")
+        log(f"{'='*60}")
         # Check file
         if 'file' not in request.files:
             return jsonify({"error": "No file provided"}), 400
@@ -92,7 +107,7 @@ def upload_image():
         start_time = time.time()
         
         # STEP 1: DETECT AND EXTRACT HMI SCREEN
-        print(f"[*] Step 1: Detecting and extracting HMI screen...")
+        log(f"[*] Step 1: Detecting and extracting HMI screen...")
         hmi_screen, hmi_time = detect_hmi_screen(uploaded_image)
         
         hmi_detected = False
@@ -101,41 +116,74 @@ def upload_image():
         if hmi_screen is not None and hmi_screen.size > 0:
             hmi_detected = True
             hmi_image = hmi_screen
-            print(f"[OK] HMI screen extracted in {hmi_time:.2f}s, size: {hmi_image.shape}")
+            log(f"[OK] HMI screen extracted in {hmi_time:.2f}s, size: {hmi_image.shape}")
         else:
-            print(f"[WARN] Could not extract HMI screen, using original image")
+            log(f"[WARN] Could not extract HMI screen, using original image")
         
         img_height, img_width = hmi_image.shape[:2]
         
         # STEP 2: FULL IMAGE OCR WITH PADDLEOCR
-        print(f"[*] Step 2: Performing full image OCR with PaddleOCR...")
+        log(f"[*] Step 2: Performing full image OCR with PaddleOCR...")
+        log(f"[DEBUG] HMI image shape: {hmi_image.shape}, dtype: {hmi_image.dtype}")
+        
+        # Check PaddleOCR instance before calling
+        from utils.paddleocr_engine import get_paddleocr_instance
+        ocr_instance = get_paddleocr_instance()
+        log(f"[DEBUG] PaddleOCR instance: {type(ocr_instance)}, is None: {ocr_instance is None}")
+        
         ocr_start = time.time()
         results, img_width_ocr, img_height_ocr = read_image_with_paddleocr(hmi_image)
         
+        log(f"[DEBUG] OCR returned: results type={type(results)}, img_size={img_width_ocr}x{img_height_ocr}")
+        log(f"[DEBUG] HMI image size: {img_width}x{img_height}")
+        
         # Validate OCR results
         if results is None:
-            print(f"[ERROR] PaddleOCR returned None results")
+            log(f"[ERROR] PaddleOCR returned None results")
             ocr_data = []
         else:
+            log(f"[DEBUG] PaddleOCR returned results: {type(results)}")
+            if isinstance(results, list):
+                log(f"[DEBUG] Results list length: {len(results)}")
+            log(f"[DEBUG] Extracting data from results...")
             ocr_data = extract_ocr_data(results)
+            
+            # Debug: Show sample OCR data
+            if ocr_data:
+                log(f"[DEBUG] Sample OCR data (first 5):")
+                for i, item in enumerate(ocr_data[:5]):
+                    bbox = item.get('bbox', [])
+                    bbox_str = f"bbox={bbox[:2] if len(bbox) > 0 and isinstance(bbox[0], (list, tuple)) else bbox[:2] if bbox else 'None'}..." if bbox else "bbox=None"
+                    log(f"[DEBUG]   {i+1}. text='{item.get('text', '')[:30]}', conf={item.get('confidence', 0):.2f}, {bbox_str}")
+            else:
+                log(f"[WARNING] extract_ocr_data returned empty list!")
         
         ocr_time = time.time() - ocr_start
-        print(f"[OK] PaddleOCR found {len(ocr_data)} text items in {ocr_time:.2f}s")
+        log(f"[OK] PaddleOCR found {len(ocr_data)} text items in {ocr_time:.2f}s")
         
         # If no OCR data found, log warning but continue processing
         if len(ocr_data) == 0:
-            print(f"[WARNING] No OCR text detected in image. This may indicate:")
-            print(f"   - Image quality is too low")
-            print(f"   - Image does not contain readable text")
-            print(f"   - PaddleOCR model needs warm-up (first call may fail)")
+            log(f"[WARNING] No OCR text detected in image. This may indicate:")
+            log(f"   - Image quality is too low")
+            log(f"   - Image does not contain readable text")
+            log(f"   - PaddleOCR model needs warm-up (first call may fail)")
         
         # STEP 3: MATCH SCREEN BASED ON SPECIAL_ROIS
-        print(f"[*] Step 3: Matching screen for {area}/{machine_code}...")
+        log(f"[*] Step 3: Matching screen for {area}/{machine_code}...")
         roi_info = get_roi_info_cached()
         
         if not roi_info:
-            print(f"[ERROR] ROI info is empty or None")
+            log(f"[ERROR] ROI info is empty or None")
             roi_info = {}
+        else:
+            # Debug: Show available machines in roi_info
+            if 'machines' in roi_info:
+                log(f"[DEBUG] Available machine_types in roi_info: {list(roi_info['machines'].keys())}")
+        
+        # Get machine_type from machine_code for better matching
+        from utils.config_manager import get_machine_type as _get_machine_type
+        detected_machine_type = _get_machine_type(machine_code)
+        log(f"[DEBUG] Machine type from machine_code '{machine_code}': {detected_machine_type}")
         
         match_start = time.time()
         matched_machine_type, matched_machine, screen_name, sub_page, sub_page_data, match_count, match_percentage = find_matching_screen(
@@ -151,8 +199,17 @@ def upload_image():
             print(f"[OK] Match: {match_count} Special_rois ({match_percentage:.1f}%)")
         else:
             print(f"[WARNING] No screen matched. OCR data count: {len(ocr_data)}")
+            if len(ocr_data) == 0:
+                print(f"[WARNING] No OCR text detected - cannot match screen without text")
+            elif detected_machine_type:
+                print(f"[DEBUG] Expected machine_type: {detected_machine_type}")
+                if detected_machine_type in roi_info.get('machines', {}):
+                    mt_data = roi_info['machines'][detected_machine_type]
+                    if machine_code in mt_data:
+                        screens = mt_data[machine_code].get('screens', {})
+                        print(f"[DEBUG] Available screens for {machine_code}: {list(screens.keys())}")
         
-        # STEP 4: FILTER OCR RESULTS BY IoU WITH ROIs
+        # STEP 4: FILTER OCR RESULTS BY IoU WITH ROIs - OPTIMIZED
         # According to API_IMAGES_LOGIC.md - Step 4: Filter OCR Results bằng IoU với ROIs
         ocr_results = []
         
@@ -160,12 +217,46 @@ def upload_image():
             print(f"[OK] Matched: {matched_machine_type}/{matched_machine}/{screen_name} (sub-page {sub_page})")
             print(f"[OK] Match: {match_count} Special_rois ({match_percentage:.1f}%)")
             
-            print(f"[*] Step 4: Filtering OCR results by IoU with ROIs...")
+            log(f"[*] Step 4: Filtering OCR results by IoU with ROIs...")
+            log(f"[DEBUG] Before filtering: {len(ocr_data)} OCR items, image size: {img_width}x{img_height}")
+            log(f"[DEBUG] HMI image actual size: {hmi_image.shape[1]}x{hmi_image.shape[0]}")
+            log(f"[DEBUG] sub_page_data keys: {list(sub_page_data.keys()) if sub_page_data else 'None'}")
+            
+            # Count items with bbox
+            items_with_bbox = sum(1 for item in ocr_data if item.get('bbox'))
+            log(f"[DEBUG] OCR items with bbox: {items_with_bbox}/{len(ocr_data)}")
+            
+            if ocr_data and len(ocr_data) > 0:
+                first_item = ocr_data[0]
+                bbox = first_item.get('bbox', [])
+                log(f"[DEBUG] First OCR item: text='{first_item.get('text', '')[:30]}', has_bbox={bool(bbox)}, bbox_type={type(bbox)}, bbox_len={len(bbox) if isinstance(bbox, (list, tuple)) else 'N/A'}")
+                if bbox and len(bbox) > 0:
+                    log(f"[DEBUG] First bbox sample: {bbox[0] if isinstance(bbox[0], (list, tuple)) else bbox[:2]}")
+            
             filter_start = time.time()
-            filtered_results = filter_ocr_by_roi(ocr_data, sub_page_data, img_width, img_height)
+            
+            # Use parallel filtering for large datasets
+            # IMPORTANT: Use img_width, img_height from HMI image (not from OCR)
+            # OCR bounding boxes are relative to the HMI image size
+            if len(ocr_data) > 50:
+                filtered_results = filter_ocr_by_roi_parallel(ocr_data, sub_page_data, img_width, img_height)
+            else:
+                filtered_results = filter_ocr_by_roi(ocr_data, sub_page_data, img_width, img_height)
+            
             filter_time = time.time() - filter_start
             
-            print(f"[OK] Filtered to {len(filtered_results)} results matching ROIs")
+            log(f"[OK] Filtered to {len(filtered_results)} results matching ROIs in {filter_time:.3f}s")
+            
+            # Debug: If no results, log detailed info
+            if len(filtered_results) == 0 and len(ocr_data) > 0:
+                log(f"[WARNING] No OCR results matched ROIs!")
+                log(f"[DEBUG] Total OCR items: {len(ocr_data)}")
+                log(f"[DEBUG] Items with bbox: {items_with_bbox}")
+                log(f"[DEBUG] ROIs in sub_page_data: {len(sub_page_data.get('Rois', sub_page_data.get('rois', [])))}")
+                # Sample first few OCR items
+                for i, item in enumerate(ocr_data[:3]):
+                    bbox = item.get('bbox', [])
+                    log(f"[DEBUG] OCR item {i+1}: text='{item.get('text', '')[:30]}', has_bbox={bool(bbox)}, bbox_len={len(bbox) if isinstance(bbox, (list, tuple)) else 'N/A'}")
             
             # Get machine_type
             machine_type = matched_machine_type if matched_machine_type else get_machine_type(matched_machine)
@@ -286,43 +377,53 @@ def upload_image():
                     else:
                         print(f"[WARN] Failed to split '{orig_val}' - split_numbers={split_numbers}, expected {len(roi_decimal_configs)}")
             
-            # Now process each item
-            for item in filtered_results:
+            # Now process each item - OPTIMIZED WITH PARALLEL PROCESSING
+            from utils.paddleocr_engine import match_text_with_allowed_values, extract_number_from_text
+            
+            def process_single_ocr_item(item):
+                """Process a single OCR item - can be run in parallel"""
                 orig_val = item.get('text', '')
                 roi_name = item['matched_roi']
                 
                 # Check if this ROI has a split number
                 if orig_val in merged_splits and roi_name in merged_splits[orig_val]:
-                    # Use split number directly
                     text = merged_splits[orig_val][roi_name]
-                    print(f"[DEBUG] Using split number for ROI '{roi_name}': '{text}' (from merged '{orig_val}')")
                 else:
                     # Normal processing
-                    # 5.1: Post-Process OCR Text (convert common OCR mistakes)
                     text = post_process_ocr_text(item['text'])
                     
-                    # 5.2: Check if ROI has allowed_values - if yes, match with allowed_values first
                     allowed_values = item.get('allowed_values', [])
                     if allowed_values and len(allowed_values) > 0:
-                        from utils.paddleocr_engine import match_text_with_allowed_values
-                        print(f"[DEBUG] Processing ROI '{item['matched_roi']}' with allowed_values: {allowed_values}, text: '{text}'")
                         text = match_text_with_allowed_values(text, allowed_values)
                     else:
-                        # 5.3: Extract number from text if it contains label + value + unit
-                        from utils.paddleocr_engine import extract_number_from_text
                         text = extract_number_from_text(text)
                     
-                    # 5.4: Apply Decimal Places Format (only if not already split)
                     text = apply_decimal_places_format(text, item['matched_roi'], machine_type, screen_name, matched_machine, sub_page)
                 
-                ocr_results.append({
+                return {
                     "roi_index": item['matched_roi'],
                     "text": text,
                     "confidence": float(item['confidence']),
                     "has_text": True,
                     "original_value": orig_val,
                     "iou": float(item['iou'])
-                })
+                }
+            
+            # Process items - use parallel for large datasets
+            if len(filtered_results) > 10:
+                # Parallel processing for many items
+                from concurrent.futures import as_completed
+                futures = [_post_process_executor.submit(process_single_ocr_item, item) for item in filtered_results]
+                for future in as_completed(futures):
+                    try:
+                        result = future.result()
+                        ocr_results.append(result)
+                    except Exception as e:
+                        print(f"[WARNING] Post-process error: {e}")
+            else:
+                # Sequential for small datasets (faster due to no thread overhead)
+                for item in filtered_results:
+                    ocr_results.append(process_single_ocr_item(item))
             
             # STEP 6: DEDUPLICATION - Loại Bỏ Trùng Lặp
             # According to API_IMAGES_LOGIC.md - Step 6: Deduplication
@@ -359,6 +460,36 @@ def upload_image():
         
         total_time = time.time() - start_time
         
+        # Get OCR performance stats
+        try:
+            ocr_stats = get_ocr_performance_stats()
+        except:
+            ocr_stats = {}
+        
+        # Prepare debug info
+        debug_info = {
+            "ocr_items_total": len(ocr_data) if 'ocr_data' in locals() else 0,
+            "ocr_items_with_bbox": 0,
+            "rois_count": 0,
+            "filtered_results_count": 0,
+            "image_size": f"{img_width}x{img_height}",
+            "screen_name": screen_name,
+            "sub_page": None
+        }
+        
+        # Try to get debug info safely
+        try:
+            if 'ocr_data' in locals() and ocr_data:
+                debug_info["ocr_items_with_bbox"] = sum(1 for item in ocr_data if item.get('bbox'))
+            if screen_name and 'sub_page_data' in locals() and sub_page_data:
+                debug_info["rois_count"] = len(sub_page_data.get('Rois', sub_page_data.get('rois', [])))
+            if 'filtered_results' in locals():
+                debug_info["filtered_results_count"] = len(filtered_results)
+            if 'sub_page' in locals():
+                debug_info["sub_page"] = sub_page
+        except:
+            pass
+        
         # Build response
         response_data = {
             "success": True,
@@ -380,12 +511,17 @@ def upload_image():
             "ocr_results": ocr_results,
             "roi_count": len(ocr_results),
             "ocr_engine": "PaddleOCR",
+            "debug": debug_info,
             "processing_time": {
                 "hmi_detection": round(hmi_time, 2),
                 "ocr": round(ocr_time, 2),
                 "matching": round(match_time, 2),
                 "filtering": round(filter_time, 2) if screen_name and sub_page_data else 0,
                 "total": round(total_time, 2)
+            },
+            "performance": {
+                "ocr_avg_time": round(ocr_stats.get('avg_time', 0), 2),
+                "ocr_calls": ocr_stats.get('ocr_calls', 0)
             }
         }
         

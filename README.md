@@ -1,8 +1,8 @@
 # HMI OCR API Server - Hướng Dẫn Đầy Đủ
 
-**Phiên bản:** 3.0 - PaddleOCR Edition  
-**Cập nhật:** December 2025  
-**Trạng thái:** ✅ Sẵn sàng Production
+**Phiên bản:** 3.3 - PaddleOCR GPU Edition (NumPy Compatibility Fix)  
+**Cập nhật:** January 2026  
+**Trạng thái:** ✅ Sẵn sàng Production (GPU Accelerated)
 
 ---
 
@@ -168,26 +168,57 @@ git clone [repository-url] python_WREMBLY_test-main
    pip install cupy-cuda11x
    ```
 
-### Bước 5: Cài Đặt PaddleOCR
+### Bước 5: Cài Đặt NumPy (Quan Trọng!)
 
-**Quan trọng**: PaddleOCR cần cài đặt với GPU support nếu có NVIDIA GPU.
+**⚠️ QUAN TRỌNG**: Hệ thống yêu cầu NumPy < 2.0 để tương thích với các thư viện khác.
 
 ```bash
-# Cài đặt PaddleOCR (CPU version)
-pip install paddlepaddle paddleocr
+# Downgrade NumPy về version 1.x (nếu đã cài NumPy 2.x)
+pip install "numpy<2.0" --force-reinstall
 
-# Hoặc với GPU support (nếu có CUDA)
-pip install paddlepaddle-gpu paddleocr
+# Kiểm tra version
+python -c "import numpy; print('NumPy version:', numpy.__version__)"
+# Kết quả mong đợi: NumPy version: 1.26.4
 ```
+
+**Lý do**: NumPy 2.x không tương thích với scipy, scikit-image, và các thư viện được compile với NumPy 1.x.
+
+### Bước 6: Cài Đặt PaddleOCR
+
+**Quan trọng**: PaddleOCR cần cài đặt với GPU support để đạt hiệu năng tối ưu.
+
+```bash
+# Cài đặt PaddlePaddle GPU với CUDA 11.8 (KHUYẾN NGHỊ)
+pip install paddlepaddle-gpu==3.0.0 -i https://www.paddlepaddle.org.cn/packages/stable/cu118/
+
+# Cài đặt PaddleOCR 2.7.3 (tương thích tốt với PaddlePaddle 3.0.0)
+pip install paddleocr==2.7.3
+
+# (Tùy chọn) CuPy cho image processing acceleration
+pip install cupy-cuda11x
+```
+
+**⚠️ QUAN TRỌNG**: 
+- **KHÔNG** cài PyTorch cùng lúc với PaddlePaddle GPU vì xung đột CUDA DLLs
+- Nếu đã cài PyTorch, gỡ bỏ trước khi cài PaddlePaddle GPU:
+  ```bash
+  pip uninstall torch torchvision -y
+  pip uninstall nvidia-cublas-cu12 nvidia-cuda-runtime-cu12 nvidia-cudnn-cu12 -y
+  ```
 
 **Kiểm tra PaddleOCR**:
 ```bash
+python -c "import paddle; print('GPU:', paddle.device.is_compiled_with_cuda())"
 python -c "from paddleocr import PaddleOCR; print('PaddleOCR installed successfully')"
 ```
 
-**Lưu ý**: PaddleOCR sẽ tự động sử dụng GPU nếu có CUDA và paddlepaddle-gpu được cài đặt.
+**Kết quả mong đợi**:
+```
+GPU: True
+PaddleOCR installed successfully
+```
 
-### Bước 6: Kiểm Tra Cài Đặt
+### Bước 7: Kiểm Tra Cài Đặt
 
 ```bash
 python -c "from app import app; print('[OK] All imports successful')"
@@ -282,30 +313,73 @@ Server sẽ khởi động tại: `http://0.0.0.0:5000`
 
 **Output mong đợi**:
 ```
+[OK] CuPy GPU acceleration available
+   - GPU Device: 0
+   - GPU Memory: 4.00 GB
+[WARNING] OpenCV CUDA not available - Using CPU for OpenCV
+[INFO] PyTorch CUDA check skipped (using PaddlePaddle GPU instead)
+[*] Parallel Processor Configuration:
+   - CPU Cores: 12
+   - Thread Pool Workers: 24
+   - Process Pool Workers: 12
+   - Default Batch Size: 8
 [OK] GPU Accelerator and Parallel Processor modules loaded
+[*] Initializing PaddleOCR...
+[*] Initializing PaddleOCR reader (OPTIMIZED)...
+[OK] PaddlePaddle GPU detected: NVIDIA GeForce GTX 1050 Ti
+[OK] PaddleOCR initialized successfully (GPU mode)
+[*] Warming up PaddleOCR instance...
+[OK] PaddleOCR warm-up completed in 0.27s
 [OK] PaddleOCR initialized successfully
+[OK] OCR-ThreadPool initialized: 4-24 workers
+[OK] Image-ThreadPool initialized: 4-24 workers
 [OK] Enhanced thread pools initialized
+[*] GPU Accelerator initialized - Using GPU
 [OK] GPU Accelerator ready
+[OK] Swagger UI initialized - Available at /apidocs
+[OK] OCR Processor initialized with PaddleOCR
 [OK] Swagger docstrings injected
 [OK] Swagger docstrings injected for System routes
 
+[*] Initializing all caches at startup...
+[OK] ROI info cached successfully
+[OK] ROI info cached: 2 items
+[OK] Decimal places config cached successfully
+[OK] Decimal places config cached: 3 items
+[OK] Machine info cached successfully
+[OK] Machine info cached: {'machine_code': 'F41', 'screen_id': 'Main'}
+[OK] Cache initialization completed!
+
 ======================================================================
-HMI OCR API SERVER - v3.0 PaddleOCR Edition
+HMI OCR API SERVER - v3.1 PaddleOCR GPU Edition (OPTIMIZED)
 ======================================================================
 Upload folder: D:\python_api_test-paddleOCR\uploads
 ROI data folder: D:\python_api_test-paddleOCR\roi_data
 GPU available: True
 PaddleOCR available: True
-OCR Engine: PaddleOCR (exclusively)
+OCR Engine: PaddleOCR (GPU mode)
+======================================================================
+OPTIMIZATIONS ENABLED:
+  - GPU acceleration (if available)
+  - Parallel ROI filtering
+  - Parallel post-processing
+  - Optimized image preprocessing
+  - Performance tracking
 ======================================================================
 Starting server on http://0.0.0.0:5000
 ======================================================================
 
  * Serving Flask app 'app'
- * Debug mode: on
+ * Debug mode: off
  * Running on all addresses (0.0.0.0)
  * Running on http://127.0.0.1:5000
+ * Running on http://192.168.x.x:5000
+[2026-01-27 xx:xx:xx] [INFO] Press CTRL+C to quit
 ```
+
+**Lưu ý**: 
+- Debug mode được tắt (`debug=False`) để tránh lỗi circular import với PaddleOCR.
+- OCR warm-up thường mất ~0.3s với GPU, ~5s với CPU.
 
 ### Chế Độ Production (Với Waitress)
 
@@ -868,38 +942,148 @@ pip install -r requirements.txt
 **Kiểm tra:**
 ```bash
 nvidia-smi
-python -c "from paddleocr import PaddleOCR; ocr = PaddleOCR(use_gpu=True); print('GPU:', ocr.use_gpu)"
+python -c "import paddle; print('GPU:', paddle.device.is_compiled_with_cuda())"
 ```
 
 **Giải pháp:**
-1. Cài đặt lại CUDA Toolkit
-2. Cài đặt lại PaddleOCR với GPU support:
+1. Kiểm tra NVIDIA driver:
    ```bash
-   pip uninstall paddlepaddle paddleocr -y
-   pip install paddlepaddle-gpu paddleocr
+   nvidia-smi
    ```
-3. Kiểm tra CUDA version tương thích với paddlepaddle-gpu
+2. Cài đặt PaddlePaddle GPU với CUDA 11.8:
+   ```bash
+   pip uninstall paddlepaddle paddlepaddle-gpu -y
+   pip install paddlepaddle-gpu==3.0.0 -i https://www.paddlepaddle.org.cn/packages/stable/cu118/
+   ```
 
-### Vấn Đề 3: PaddleOCR Lỗi
+### Vấn Đề 3: CUDA DLL Conflicts (PyTorch vs PaddlePaddle)
 
 **Lỗi:**
 ```
-Exception: PaddleOCR failed to initialize
+Error loading "cusparse64_12.dll" or one of its dependencies
 ```
+
+**Nguyên nhân:** PyTorch với CUDA 12 xung đột với PaddlePaddle CUDA 11.8
 
 **Giải pháp:**
 ```bash
-pip uninstall paddlepaddle paddleocr -y
-pip install paddlepaddle paddleocr
+# Gỡ bỏ PyTorch và CUDA 12 packages
+pip uninstall torch torchvision -y
+pip uninstall nvidia-cublas-cu12 nvidia-cuda-runtime-cu12 nvidia-cudnn-cu12 nvidia-cufft-cu12 nvidia-curand-cu12 nvidia-cusolver-cu12 nvidia-cusparse-cu12 nvidia-nvjitlink-cu12 -y
+
+# Cài lại PaddlePaddle GPU
+pip install paddlepaddle-gpu==3.0.0 -i https://www.paddlepaddle.org.cn/packages/stable/cu118/
 ```
 
-Nếu vẫn lỗi, kiểm tra:
+### Vấn Đề 4: PaddleOCR Circular Import Error
+
+**Lỗi:**
+```
+AttributeError: partially initialized module 'paddle' has no attribute 'tensor' (most likely due to a circular import)
+```
+
+**Nguyên nhân:** Flask debug mode với reloader gây ra circular import
+
+**Giải pháp:**
+Đảm bảo `app.py` chạy với `debug=False`:
+```python
+# Trong app.py
+app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
+```
+
+### Vấn Đề 5: PaddleOCR Lỗi Khởi Tạo
+
+**Lỗi:**
+```
+RuntimeError: PDX has already been initialized. Reinitialization is not supported.
+```
+
+**Giải pháp:**
+1. Restart server hoàn toàn
+2. Đảm bảo không gọi `get_paddleocr_instance()` nhiều lần trong cùng process
+3. Nếu vẫn lỗi:
+   ```bash
+   # Khởi động lại PowerShell/Terminal
+   # Rồi chạy lại
+   python app.py
+   ```
+
+### Vấn Đề 6: NumPy Compatibility Error
+
+**Lỗi:**
+```
+ImportError: A module that was compiled using NumPy 1.x cannot be run in
+NumPy 2.4.1 as it may crash.
+```
+
+**Nguyên nhân:** NumPy 2.x không tương thích với scipy, scikit-image, và các thư viện được compile với NumPy 1.x.
+
+**Giải pháp:**
 ```bash
-# Kiểm tra PaddleOCR có hoạt động không
-python -c "from paddleocr import PaddleOCR; ocr = PaddleOCR(); print('OK')"
+# Downgrade NumPy về version 1.x
+pip install "numpy<2.0" --force-reinstall
+
+# Kiểm tra version
+python -c "import numpy; print(numpy.__version__)"
+# Phải là: 1.26.4 hoặc tương tự (< 2.0)
 ```
 
-### Vấn Đề 4: Port Đang Được Sử Dụng
+### Vấn Đề 7: OCR Trả Về 0 Kết Quả
+
+**Hiện tượng:**
+```json
+{
+  "ocr_results": [],
+  "roi_count": 0,
+  "screen_id": null
+}
+```
+
+**Debug:** Xem terminal logs khi xử lý request:
+```
+[DEBUG] PaddleOCR results type: <class 'list'>
+[DEBUG] extract_ocr_data: Detected PaddleOCR 2.x format
+[DEBUG] OCR items with bbox: 0/0
+```
+
+**Giải pháp:**
+1. **Kiểm tra PaddleOCR result format:**
+   - PaddleOCR 2.7.3 sử dụng list format `[[box, (text, score)], ...]`
+   - Code tự động detect format và parse đúng
+   
+2. **Kiểm tra HMI detection:**
+   - Xem log `[OK] HMI extracted: WxH`
+   - Nếu không extract được → ảnh không phát hiện được màn hình
+   
+3. **Kiểm tra image quality:**
+   - Ảnh bị mờ, quá tối, hoặc quá sáng
+   - Thử với ảnh khác chất lượng cao hơn
+
+4. **Kiểm tra NumPy version:**
+   ```bash
+   python -c "import numpy; print(numpy.__version__)"
+   # Phải là < 2.0
+   ```
+
+5. **Restart server nếu warm-up failed:**
+   ```bash
+   # Kill process cũ và restart
+   python app.py
+   ```
+
+### Vấn Đề 8: Screen Matching Thất Bại
+
+**Hiện tượng:**
+```
+[WARNING] No screen matched. OCR data count: 0
+```
+
+**Giải pháp:**
+1. Kiểm tra `roi_info.json` có đúng cấu trúc cho machine_type/machine_code
+2. Kiểm tra `machine_screens.json` có mapping đúng machine_code → machine_type
+3. Đảm bảo Special_rois trong roi_info.json khớp với text trên màn hình HMI
+
+### Vấn Đề 9: Port Đang Được Sử Dụng
 
 **Lỗi:**
 ```
@@ -917,7 +1101,7 @@ OSError: [WinError 10048] Only one usage of each socket address
    ```
 3. Hoặc đổi port trong `app.py`
 
-### Vấn Đề 5: Out of Memory (GPU)
+### Vấn Đề 10: Out of Memory (GPU)
 
 **Lỗi:**
 ```
@@ -929,7 +1113,7 @@ RuntimeError: CUDA out of memory
 2. Xử lý ít ảnh hơn cùng lúc
 3. Restart server để clear GPU memory
 
-### Vấn Đề 6: Slow Performance
+### Vấn Đề 11: Slow Performance
 
 **Hiện tượng:** Server chạy chậm
 
@@ -947,7 +1131,7 @@ curl http://localhost:5000/api/performance
    # Hoặc restart server
    ```
 
-### Vấn Đề 7: Template Not Found
+### Vấn Đề 12: Template Not Found
 
 **Lỗi:**
 ```

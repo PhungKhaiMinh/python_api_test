@@ -45,14 +45,18 @@ from .ocr_processor import (
 from .paddleocr_engine import (
     get_paddleocr_instance,
     read_image_with_paddleocr,
+    read_image_with_paddleocr_batch,
     extract_ocr_data,
     find_matching_screen,
     filter_ocr_by_roi,
+    filter_ocr_by_roi_parallel,
     post_process_ocr_text,
     load_roi_info,
     init_paddleocr_globals,
     detect_hmi_screen_paddle,
-    HAS_PADDLEOCR
+    get_ocr_performance_stats,
+    HAS_PADDLEOCR,
+    USE_GPU
 )
 
 __all__ = [
@@ -95,12 +99,16 @@ __all__ = [
     # PaddleOCR Engine
     'get_paddleocr_instance',
     'read_image_with_paddleocr',
+    'read_image_with_paddleocr_batch',
     'extract_ocr_data',
     'find_matching_screen',
     'filter_ocr_by_roi',
+    'filter_ocr_by_roi_parallel',
     'post_process_ocr_text',
     'load_roi_info',
     'init_paddleocr_globals',
     'detect_hmi_screen_paddle',
-    'HAS_PADDLEOCR'
+    'get_ocr_performance_stats',
+    'HAS_PADDLEOCR',
+    'USE_GPU'
 ]
