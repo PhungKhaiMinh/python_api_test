@@ -1,0 +1,149 @@
+{
+  "filename": "F42_setting_test2.jpg",
+  "machine_code": "IE-F4-WBI01",
+  "area": "F4",
+  "machine_name": "Máy IE-F4-WBI01",
+  "screen_id": "Setting",
+  "timestamp": "2025-06-07 01:21:52",
+  "template_path": "d:\\Wrembly\\python_api_test\\roi_data\\reference_images\\template_F42_Setting.jpg",
+  "results": [
+    {
+      "roi_index": "do_day_khuon-cai_dat",
+      "text": "407.0",
+      "confidence": 0.9687165365072381,
+      "has_text": true,
+      "original_value": "407.0"
+    },
+    {
+      "roi_index": "+alpha",
+      "text": "10.0",
+      "confidence": 0.9992899298667908,
+      "has_text": true,
+      "original_value": "10.0"
+    },
+    {
+      "roi_index": "vtri_khuon",
+      "text": "400.00",
+      "confidence": 0.9511569563636544,
+      "has_text": true,
+      "original_value": "400.00"
+    },
+    {
+      "roi_index": "do_day_khuon_thuc_te",
+      "text": "417.13",
+      "confidence": 0.9999128852374753,
+      "has_text": true,
+      "original_value": "417.13"
+    },
+    {
+      "roi_index": "vtri_bp_day",
+      "text": "54.33",
+      "confidence": 0.7901158259530725,
+      "has_text": true,
+      "original_value": "54.33"
+    },
+    {
+      "roi_index": "momen_bp_day",
+      "text": "10",
+      "confidence": 0.9989882041545739,
+      "has_text": true,
+      "original_value": "10"
+    },
+    {
+      "roi_index": "chdo_kep_khuon",
+      "text": "KHOALAI",
+      "confidence": 0.584839084277775,
+      "has_text": true,
+      "original_value": "Khoa-Iai"
+    },
+    {
+      "roi_index": "do_luc_kep_toi_thieu",
+      "text": "TAT",
+      "confidence": 0.9990437307420974,
+      "has_text": true,
+      "original_value": "TAT"
+    },
+    {
+      "roi_index": "luc_kep-cai_dat",
+      "text": "130.0",
+      "confidence": 0.9993269090676382,
+      "has_text": true,
+      "original_value": "130.0"
+    },
+    {
+      "roi_index": "c_do_chinh",
+      "text": "TDONG",
+      "confidence": 0.9980521281051968,
+      "has_text": true,
+      "original_value": "Tdong"
+    },
+    {
+      "roi_index": "hieu_chinh_luc_kep",
+      "text": "BAT",
+      "confidence": 0.5437057018280029,
+      "has_text": true,
+      "original_value": "BAT"
+    },
+    {
+      "roi_index": "g_han_ap_suat_tiep_xuc-trang_thai",
+      "text": "BAT",
+      "confidence": 0.7243753803558748,
+      "has_text": true,
+      "original_value": "BAT"
+    },
+    {
+      "roi_index": "g_han_ap_suat_tiep_xuc-so",
+      "text": "3.0",
+      "confidence": 0.6321229934692383,
+      "has_text": true,
+      "original_value": "3.0"
+    },
+    {
+      "roi_index": "gioi_han_mo_khuo",
+      "text": "50.0",
+      "confidence": 0.934125012792212,
+      "has_text": true,
+      "original_value": "50.0"
+    },
+    {
+      "roi_index": "luc_kep-thuc_te",
+      "text": "0",
+      "confidence": 0.9996885303835121,
+      "has_text": true,
+      "original_value": "0"
+    },
+    {
+      "roi_index": "momen_kep",
+      "text": "0",
+      "confidence": 0.9997085545252595,
+      "has_text": true,
+      "original_value": "0"
+    },
+    {
+      "roi_index": "do_luc_kep_toi_thieu-trang_thai",
+      "text": "CHUAHOANTHANH",
+      "confidence": 0.5536572182071862,
+      "has_text": true,
+      "original_value": "Chuahthanh"
+    },
+    {
+      "roi_index": "dieu_chinh_luc_kep-trang_thai",
+      "text": "HOANTHANH",
+      "confidence": 0.6215878985970377,
+      "has_text": true,
+      "original_value": "Hointhanh"
+    }
+  ],
+  "hmi_detection": {
+    "hmi_detected": true,
+    "hmi_image": null,
+    "hmi_refined_filename": null,
+    "visualization": null
+  },
+  "detected_screen": {
+    "screen_id": "Setting",
+    "screen_numeric_id": 1,
+    "similarity_score": 0.5875494696318434,
+    "machine_type": "F42"
+  }
+}

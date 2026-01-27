@@ -1,0 +1,42 @@
+{
+    "machine_code": "F41", 
+    "screens": [
+      {
+        "description": "Màn hình kẹp", 
+        "id": 1, 
+        "screen_id": "Clamp", 
+        "roi_info": []
+      }, 
+      {
+        "description": "Màn hình đẩy", 
+        "id": 2, 
+        "screen_id": "Ejector", 
+        "roi_info": []
+      }, 
+      {
+        "description": "Màn hình phun", 
+        "id": 3, 
+        "screen_id": "Injection", 
+        "roi_info": []
+      }, 
+      {
+        "description": "Màn hình nhiệt độ", 
+        "id": 4, 
+        "screen_id": "Temp", 
+        "roi_info": []
+      }, 
+      {
+        "description": "Màn hình sản xuất", 
+        "id": 5, 
+        "screen_id": "Production", 
+        "roi_info": []
+      }, 
+      {
+        "description": "Màn hình báo động", 
+        "id": 6, 
+        "screen_id": "Alarm", 
+        "roi_info": []
+      }
+    ]
+}
+  

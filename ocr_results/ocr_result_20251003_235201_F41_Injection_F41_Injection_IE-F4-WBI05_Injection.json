@@ -1,0 +1,524 @@
+{
+  "filename": "F41_Injection.jpg",
+  "machine_code": "IE-F4-WBI05",
+  "area": "F4",
+  "machine_name": "Máy IE-F4-WBI05",
+  "screen_id": "Injection",
+  "timestamp": "2025-10-03 23:52:01",
+  "template_path": "d:\\python_WREMBLY_test-main\\python_api_test\\roi_data\\reference_images\\template_F41_Injection.jpg",
+  "results": [
+    {
+      "roi_index": "Injection speed",
+      "text": "0.1",
+      "confidence": 0.9986322182676625,
+      "has_text": true,
+      "original_value": "0.1"
+    },
+    {
+      "roi_index": "Charge torque",
+      "text": "0.7",
+      "confidence": 0.9957707709495697,
+      "has_text": true,
+      "original_value": "0.7"
+    },
+    {
+      "roi_index": "Charge speed",
+      "text": "-0.0",
+      "confidence": 0.9799205660820007,
+      "has_text": true,
+      "original_value": "-0.0"
+    },
+    {
+      "roi_index": "Injection torque",
+      "text": "0",
+      "confidence": 0.999852543545078,
+      "has_text": true,
+      "original_value": "0"
+    },
+    {
+      "roi_index": "Inject_Pressure",
+      "text": "150.0",
+      "confidence": 0.9999736638236573,
+      "has_text": true,
+      "original_value": "150.0"
+    },
+    {
+      "roi_index": "Inject number",
+      "text": "4",
+      "confidence": 0.9791148635076053,
+      "has_text": true,
+      "original_value": "4"
+    },
+    {
+      "roi_index": "Inject_Speed_1",
+      "text": "25.0",
+      "confidence": 0.9999811053276062,
+      "has_text": true,
+      "original_value": "25.0"
+    },
+    {
+      "roi_index": "Injection maximum pre",
+      "text": "94.2",
+      "confidence": 0.614377140939748,
+      "has_text": true,
+      "original_value": "94.2"
+    },
+    {
+      "roi_index": "Inject_Speed_2",
+      "text": "23.0",
+      "confidence": 0.9997623850167742,
+      "has_text": true,
+      "original_value": "23.0"
+    },
+    {
+      "roi_index": "Inject_Speed_3",
+      "text": "20.0",
+      "confidence": 0.9999786615371704,
+      "has_text": true,
+      "original_value": "20.0"
+    },
+    {
+      "roi_index": "Injection maximum spe",
+      "text": "26.8",
+      "confidence": 0.9999898076057434,
+      "has_text": true,
+      "original_value": "26.8"
+    },
+    {
+      "roi_index": "Inject_Act_time_4",
+      "text": "0.52",
+      "confidence": 0.9999739527702332,
+      "has_text": true,
+      "original_value": "0.52"
+    },
+    {
+      "roi_index": "Holding_Speed_2",
+      "text": "12.0",
+      "confidence": 0.9999960660934448,
+      "has_text": true,
+      "original_value": "12.0"
+    },
+    {
+      "roi_index": "Inject_Position_2",
+      "text": "50.0",
+      "confidence": 0.9999926090240479,
+      "has_text": true,
+      "original_value": "50.0"
+    },
+    {
+      "roi_index": "Inject_Position_4",
+      "text": "31.0",
+      "confidence": 0.9999969601631165,
+      "has_text": true,
+      "original_value": "31.0"
+    },
+    {
+      "roi_index": "Inject_Act_time_2",
+      "text": "0.92",
+      "confidence": 0.999901533126831,
+      "has_text": true,
+      "original_value": "0.92"
+    },
+    {
+      "roi_index": "Inject_Act_time_1",
+      "text": "1.71",
+      "confidence": 0.7273024102754243,
+      "has_text": true,
+      "original_value": "1.71"
+    },
+    {
+      "roi_index": "Holding_Speed_1",
+      "text": "15.0",
+      "confidence": 0.9999820590019226,
+      "has_text": true,
+      "original_value": "15.0"
+    },
+    {
+      "roi_index": "Inject_Speed_4",
+      "text": "18.0",
+      "confidence": 0.9999929666519165,
+      "has_text": true,
+      "original_value": "18.0"
+    },
+    {
+      "roi_index": "Holding_Pressure_2",
+      "text": "65.0",
+      "confidence": 0.8531039587923642,
+      "has_text": true,
+      "original_value": "65.0"
+    },
+    {
+      "roi_index": "Holding prs",
+      "text": "2",
+      "confidence": 1.0,
+      "has_text": true,
+      "original_value": "2"
+    },
+    {
+      "roi_index": "Holding_Time_1",
+      "text": "0.5",
+      "confidence": 0.6314501166343689,
+      "has_text": true,
+      "original_value": "0.5"
+    },
+    {
+      "roi_index": "Inject_Position_1",
+      "text": "70.0",
+      "confidence": 0.9964667550501866,
+      "has_text": true,
+      "original_value": "70.0"
+    },
+    {
+      "roi_index": "Inject_Position_3",
+      "text": "40.0",
+      "confidence": 0.999988317489624,
+      "has_text": true,
+      "original_value": "40.0"
+    },
+    {
+      "roi_index": "Holding_Act_time_2",
+      "text": "0.5",
+      "confidence": 0.9999913279900958,
+      "has_text": true,
+      "original_value": "0.5"
+    },
+    {
+      "roi_index": "Holding_Pressure_1",
+      "text": "85.0",
+      "confidence": 0.9999916553497314,
+      "has_text": true,
+      "original_value": "85.0"
+    },
+    {
+      "roi_index": "Holding_Time_2",
+      "text": "0.5",
+      "confidence": 0.9998955235988211,
+      "has_text": true,
+      "original_value": "0.5"
+    },
+    {
+      "roi_index": "Inject_Act_time_3",
+      "text": "0.50",
+      "confidence": 0.9995155398663648,
+      "has_text": true,
+      "original_value": "0.50"
+    },
+    {
+      "roi_index": "Holding_Act_time_1",
+      "text": "0.5",
+      "confidence": 0.9999947692626615,
+      "has_text": true,
+      "original_value": "0.5"
+    },
+    {
+      "roi_index": "Holding_Switch_Spe_set",
+      "text": "0.0",
+      "confidence": 0.9999863725603885,
+      "has_text": true,
+      "original_value": "0.0"
+    },
+    {
+      "roi_index": "Holding_Switch_Pre_set",
+      "text": "50.0",
+      "confidence": 0.9999054074287415,
+      "has_text": true,
+      "original_value": "50.0"
+    },
+    {
+      "roi_index": "Holding_Switch_Spe_cur",
+      "text": "16.0",
+      "confidence": 0.9999627470970154,
+      "has_text": true,
+      "original_value": "16.0"
+    },
+    {
+      "roi_index": "Holding_Switch_Pre_cur",
+      "text": "94.2",
+      "confidence": 0.9999812841415405,
+      "has_text": true,
+      "original_value": "94.2"
+    },
+    {
+      "roi_index": "Holding_Switch_Time_cur",
+      "text": "3.7",
+      "confidence": 0.9999276647338152,
+      "has_text": true,
+      "original_value": "3.7"
+    },
+    {
+      "roi_index": "Delay for Injection set",
+      "text": "0.2",
+      "confidence": 0.9998390876795592,
+      "has_text": true,
+      "original_value": "0.2"
+    },
+    {
+      "roi_index": "Holding_Switch_Time_set",
+      "text": "2.0",
+      "confidence": 0.943881630897522,
+      "has_text": true,
+      "original_value": "2.0"
+    },
+    {
+      "roi_index": "Injection monitoring time cur",
+      "text": "3.7",
+      "confidence": 0.999943907415711,
+      "has_text": true,
+      "original_value": "3.7"
+    },
+    {
+      "roi_index": "Delay for Injection cur",
+      "text": "0.2",
+      "confidence": 0.9999933239279907,
+      "has_text": true,
+      "original_value": "0.2"
+    },
+    {
+      "roi_index": "Min cushion low limit",
+      "text": "20.0",
+      "confidence": 0.9999846816062927,
+      "has_text": true,
+      "original_value": "20.0"
+    },
+    {
+      "roi_index": "Injection monitoring time set",
+      "text": "5.0",
+      "confidence": 0.9999591177558067,
+      "has_text": true,
+      "original_value": "5.0"
+    },
+    {
+      "roi_index": "Min cushion position",
+      "text": "29.4",
+      "confidence": 0.9324394666622218,
+      "has_text": true,
+      "original_value": "29.4"
+    },
+    {
+      "roi_index": "Min cushion upper limit",
+      "text": "33.0",
+      "confidence": 0.9999718070030212,
+      "has_text": true,
+      "original_value": "33.0"
+    },
+    {
+      "roi_index": "Charge_ChargeSpeed_1",
+      "text": "120.0",
+      "confidence": 0.9999877382276774,
+      "has_text": true,
+      "original_value": "120.0"
+    },
+    {
+      "roi_index": "Charge_BackPressure_1",
+      "text": "10.0",
+      "confidence": 0.9999958276748657,
+      "has_text": true,
+      "original_value": "10.0"
+    },
+    {
+      "roi_index": "Charge_Suckback_1_Spe",
+      "text": "50.0",
+      "confidence": 0.9999934434890747,
+      "has_text": true,
+      "original_value": "50.0"
+    },
+    {
+      "roi_index": "Charge_Suckback_1_Pos",
+      "text": "0.0",
+      "confidence": 0.999998279362313,
+      "has_text": true,
+      "original_value": "0.0"
+    },
+    {
+      "roi_index": "Charge_ChargeSpeed_4",
+      "text": "120.0",
+      "confidence": 0.9999963214701666,
+      "has_text": true,
+      "original_value": "120.0"
+    },
+    {
+      "roi_index": "Charge_Position_1",
+      "text": "6.0",
+      "confidence": 0.999994838088129,
+      "has_text": true,
+      "original_value": "6.0"
+    },
+    {
+      "roi_index": "Charge_ChargeSpeed_3",
+      "text": "120.0",
+      "confidence": 0.9999985072634486,
+      "has_text": true,
+      "original_value": "120.0"
+    },
+    {
+      "roi_index": "Charge_ChargeSpeed_2",
+      "text": "120.0",
+      "confidence": 0.9999929628110977,
+      "has_text": true,
+      "original_value": "120.0"
+    },
+    {
+      "roi_index": "Charge_Position_3",
+      "text": "50.0",
+      "confidence": 0.9999940395355225,
+      "has_text": true,
+      "original_value": "50.0"
+    },
+    {
+      "roi_index": "Charge_BackPressure_2",
+      "text": "10.0",
+      "confidence": 0.9999945163726807,
+      "has_text": true,
+      "original_value": "10.0"
+    },
+    {
+      "roi_index": "Charge_Position_2",
+      "text": "15.0",
+      "confidence": 0.9999961256980896,
+      "has_text": true,
+      "original_value": "15.0"
+    },
+    {
+      "roi_index": "Charge_BackPressure_3",
+      "text": "10.0",
+      "confidence": 0.9999963641166687,
+      "has_text": true,
+      "original_value": "10.0"
+    },
+    {
+      "roi_index": "Charge_BackPressure_4",
+      "text": "10.0",
+      "confidence": 0.9999967813491821,
+      "has_text": true,
+      "original_value": "10.0"
+    },
+    {
+      "roi_index": "Charge_Position_4",
+      "text": "100.0",
+      "confidence": 0.9999876849155851,
+      "has_text": true,
+      "original_value": "100.0"
+    },
+    {
+      "roi_index": "Charge_Suckback_2_Spe",
+      "text": "10.0",
+      "confidence": 0.5498043687386128,
+      "has_text": true,
+      "original_value": "10.0"
+    },
+    {
+      "roi_index": "Delay for Suck back 2 set",
+      "text": "0.1",
+      "confidence": 0.999993943357101,
+      "has_text": true,
+      "original_value": "0.1"
+    },
+    {
+      "roi_index": "Delay for Suck back 1 cur",
+      "text": "0.0",
+      "confidence": 0.9750813841819763,
+      "has_text": true,
+      "original_value": "0.0"
+    },
+    {
+      "roi_index": "Charge_Suckback_2_Pos",
+      "text": "110.0",
+      "confidence": 0.9999923763784254,
+      "has_text": true,
+      "original_value": "110.0"
+    },
+    {
+      "roi_index": "Delay for Suck back 1 set",
+      "text": "0.0",
+      "confidence": 0.9999922915462542,
+      "has_text": true,
+      "original_value": "0.0"
+    },
+    {
+      "roi_index": "Delay for Charge cur",
+      "text": "0.1",
+      "confidence": 0.9956943496002533,
+      "has_text": true,
+      "original_value": "0.1"
+    },
+    {
+      "roi_index": "Cooling time set",
+      "text": "16.0",
+      "confidence": 0.9999993443489075,
+      "has_text": true,
+      "original_value": "16.0"
+    },
+    {
+      "roi_index": "Delay for Charge set",
+      "text": "0.1",
+      "confidence": 0.9999836883706708,
+      "has_text": true,
+      "original_value": "0.1"
+    },
+    {
+      "roi_index": "Delay for Suck back 2 cur",
+      "text": "0.1",
+      "confidence": 0.9848887751454236,
+      "has_text": true,
+      "original_value": "0.1"
+    },
+    {
+      "roi_index": "Charge monitoring time set",
+      "text": "13.0",
+      "confidence": 0.9999988675117493,
+      "has_text": true,
+      "original_value": "13.0"
+    },
+    {
+      "roi_index": "Cooling time cur",
+      "text": "16.0",
+      "confidence": 0.999993085861206,
+      "has_text": true,
+      "original_value": "16.0"
+    },
+    {
+      "roi_index": "Charge monitoring time cur",
+      "text": "8.9",
+      "confidence": 0.9999668950005018,
+      "has_text": true,
+      "original_value": "8.9"
+    },
+    {
+      "roi_index": "Use of manual back pressure",
+      "text": "0.0",
+      "confidence": 0.5900053381919861,
+      "has_text": true,
+      "original_value": "0.0"
+    },
+    {
+      "roi_index": "Min cushion check",
+      "text": "OFF",
+      "confidence": 1.0,
+      "has_text": true
+    },
+    {
+      "roi_index": "Use of charging after cooling",
+      "text": "OFF",
+      "confidence": 1.0,
+      "has_text": true
+    },
+    {
+      "roi_index": "Use of manual back pressure mode",
+      "text": "ON",
+      "confidence": 1.0,
+      "has_text": true
+    }
+  ],
+  "hmi_detection": {
+    "hmi_detected": true,
+    "hmi_image": null,
+    "hmi_refined_filename": null,
+    "visualization": null
+  },
+  "detected_screen": {
+    "screen_id": "Injection",
+    "screen_numeric_id": 1,
+    "similarity_score": 0.566511655631581,
+    "machine_type": "F41"
+  }
+}

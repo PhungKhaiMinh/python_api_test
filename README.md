@@ -1,0 +1,1040 @@
+# HMI OCR API Server - Hướng Dẫn Đầy Đủ
+
+**Phiên bản:** 3.0 - PaddleOCR Edition  
+**Cập nhật:** December 2025  
+**Trạng thái:** ✅ Sẵn sàng Production
+
+---
+
+## 📋 Mục Lục
+
+1. [Giới Thiệu](#giới-thiệu)
+2. [Yêu Cầu Hệ Thống](#yêu-cầu-hệ-thống)
+3. [Cài Đặt](#cài-đặt)
+4. [Cấu Trúc Dự Án](#cấu-trúc-dự-án)
+5. [Chạy Server](#chạy-server)
+6. [API Endpoints](#api-endpoints)
+7. [Cấu Hình](#cấu-hình)
+8. [Khắc Phục Sự Cố](#khắc-phục-sự-cố)
+9. [Bảo Trì](#bảo-trì)
+
+---
+
+## 🎯 Giới Thiệu
+
+**HMI OCR API Server** là hệ thống API dựa trên Flask để:
+- Tự động nhận diện loại màn hình HMI (Human-Machine Interface)
+- Trích xuất thông số từ ảnh màn hình bằng OCR (Optical Character Recognition)
+- Xử lý song song với GPU acceleration
+- Quản lý cấu hình máy móc và ROI (Region of Interest)
+
+### Tính Năng Chính
+
+✅ **Tự động phát hiện màn hình**: PaddleOCR-based HMI detection algorithm  
+✅ **OCR GPU-accelerated**: PaddleOCR với CUDA (exclusively PaddleOCR)  
+✅ **Screen Matching**: Fuzzy matching dựa trên Special_rois  
+✅ **ROI Filtering**: IoU-based filtering để match OCR với ROIs  
+✅ **Xử lý song song**: Multi-threading với 24 workers  
+✅ **Cache thông minh**: ROI info và configuration caching  
+✅ **RESTful API**: 27 API endpoints đầy đủ tính năng (unified decimal places API)  
+✅ **Swagger UI**: Tài liệu API tương tác tại `/apidocs`  
+✅ **Sub-page Detection**: Hỗ trợ Reject_Summary với nhiều sub-pages  
+✅ **History Filtering**: Lọc lịch sử OCR theo machine_code, area, screen_id, time range  
+✅ **Deduplication**: Tự động loại bỏ trùng lặp, giữ kết quả có IOU cao nhất
+
+---
+
+## 💻 Yêu Cầu Hệ Thống
+
+### Phần Cứng Tối Thiểu
+
+| Thành phần | Yêu cầu tối thiểu | Khuyến nghị |
+|------------|-------------------|-------------|
+| **CPU** | Intel Core i5 gen 8 hoặc tương đương | Intel Core i7 gen 10+ |
+| **RAM** | 8 GB | 16 GB trở lên |
+| **GPU** | Không bắt buộc | NVIDIA GPU với 4GB VRAM+ |
+| **Ổ cứng** | 10 GB trống | SSD 20 GB+ |
+| **Hệ điều hành** | Windows 10/11 64-bit | Windows 11 64-bit |
+
+### Phần Cứng Đã Test
+
+```
+Tên máy: MSI
+CPU: 12 cores
+RAM: 16 GB
+GPU: NVIDIA GeForce GTX 1050 Ti (4GB VRAM)
+GPU Driver: 580.97
+OS: Windows 11 64-bit (Build 2009)
+Python: 3.12.10
+CUDA: 12.1
+```
+
+### Phần Mềm Cần Thiết
+
+1. **Python 3.8 - 3.12** (Đã test với Python 3.12.10)
+2. **CUDA Toolkit 12.x** (nếu dùng GPU)
+3. **Visual C++ Redistributable** (cho một số thư viện)
+4. **Git** (để clone repository - tùy chọn)
+
+---
+
+## 🔧 Cài Đặt
+
+### Bước 1: Cài Đặt Python
+
+1. **Download Python 3.12.x** từ https://www.python.org/downloads/
+2. **Chạy installer** với các tùy chọn:
+   - ✅ **Add Python to PATH** (Quan trọng!)
+   - ✅ Install for all users
+   - ✅ Install pip
+3. **Kiểm tra cài đặt**:
+   ```bash
+   python --version
+   # Kết quả: Python 3.12.10
+   
+   pip --version
+   # Kết quả: pip 24.x.x
+   ```
+
+### Bước 2: Cài Đặt CUDA (Cho GPU - Tùy Chọn)
+
+**Lưu ý**: Nếu không có NVIDIA GPU, bỏ qua bước này. Hệ thống vẫn chạy được nhưng chậm hơn.
+
+1. **Kiểm tra GPU**:
+   ```bash
+   nvidia-smi
+   ```
+   Xem phiên bản CUDA Compatible (ví dụ: 12.1)
+
+2. **Download CUDA Toolkit** từ:
+   https://developer.nvidia.com/cuda-downloads
+   
+   Chọn phiên bản phù hợp với driver (ví dụ: CUDA 12.1)
+
+3. **Cài đặt CUDA Toolkit** theo hướng dẫn của NVIDIA
+
+4. **Kiểm tra**:
+   ```bash
+   nvcc --version
+   ```
+
+### Bước 3: Giải Nén/Clone Dự Án
+
+```bash
+# Nếu có file zip
+Unzip python_WREMBLY_test-main.zip
+
+# Hoặc clone từ git
+git clone [repository-url] python_WREMBLY_test-main
+```
+
+### Bước 4: Cài Đặt Dependencies
+
+1. **Mở Terminal/PowerShell** tại thư mục dự án:
+   ```bash
+   cd D:\python_WREMBLY_test-main\python_api_test
+   ```
+
+2. **Tạo Virtual Environment** (Khuyến nghị):
+   ```bash
+   python -m venv venv
+   
+   # Kích hoạt virtual environment
+   # Windows PowerShell:
+   .\venv\Scripts\Activate.ps1
+   
+   # Windows CMD:
+   .\venv\Scripts\activate.bat
+   ```
+
+3. **Nâng cấp pip**:
+   ```bash
+   python -m pip install --upgrade pip
+   ```
+
+4. **Cài đặt các packages**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+   
+   Quá trình này sẽ mất 5-15 phút tùy vào tốc độ mạng.
+
+5. **Cài đặt CuPy (cho GPU)**:
+   ```bash
+   # Cho CUDA 12.x
+   pip install cupy-cuda12x
+   
+   # Cho CUDA 11.x (nếu dùng CUDA 11)
+   pip install cupy-cuda11x
+   ```
+
+### Bước 5: Cài Đặt PaddleOCR
+
+**Quan trọng**: PaddleOCR cần cài đặt với GPU support nếu có NVIDIA GPU.
+
+```bash
+# Cài đặt PaddleOCR (CPU version)
+pip install paddlepaddle paddleocr
+
+# Hoặc với GPU support (nếu có CUDA)
+pip install paddlepaddle-gpu paddleocr
+```
+
+**Kiểm tra PaddleOCR**:
+```bash
+python -c "from paddleocr import PaddleOCR; print('PaddleOCR installed successfully')"
+```
+
+**Lưu ý**: PaddleOCR sẽ tự động sử dụng GPU nếu có CUDA và paddlepaddle-gpu được cài đặt.
+
+### Bước 6: Kiểm Tra Cài Đặt
+
+```bash
+python -c "from app import app; print('[OK] All imports successful')"
+```
+
+Nếu thành công, bạn sẽ thấy:
+```
+[OK] GPU Accelerator and Parallel Processor modules loaded
+[OK] PaddleOCR initialized successfully
+[OK] Enhanced thread pools initialized
+[OK] GPU Accelerator ready
+[OK] All imports successful
+```
+
+---
+
+## 📁 Cấu Trúc Dự Án
+
+```
+python_api_test/
+├── app.py                          # File chính - Main Flask application
+├── app_original.py                 # Backup file gốc
+│
+├── utils/                          # Các modules tiện ích
+│   ├── __init__.py                # Export functions
+│   ├── cache_manager.py           # Quản lý cache (179 dòng)
+│   ├── config_manager.py          # Quản lý cấu hình (362 dòng)
+│   ├── image_processor.py         # Xử lý ảnh (300+ dòng)
+│   ├── paddleocr_engine.py        # PaddleOCR engine (1400+ dòng) ⭐ NEW
+│   ├── ocr_processor.py           # Xử lý OCR (550+ dòng)
+│   ├── swagger_config.py          # Swagger configuration
+│   ├── swagger_specs.py           # Swagger specifications
+│   └── swagger_helper.py          # Swagger helper
+│
+├── routes/                         # API route blueprints
+│   ├── __init__.py                # Export routes
+│   ├── image_routes.py            # Routes xử lý ảnh (427 dòng)
+│   ├── machine_routes.py          # Routes quản lý máy (290 dòng)
+│   ├── decimal_routes.py          # Routes cấu hình số thập phân (447 dòng)
+│   └── reference_routes.py        # Routes ảnh tham chiếu (200+ dòng)
+│
+├── Core modules (Optional)
+│   ├── gpu_accelerator.py             # GPU acceleration
+│   ├── parallel_processor.py          # Xử lý song song
+│   ├── smart_detection_functions.py   # Thuật toán phát hiện màn hình (optional)
+│   ├── ensemble_hog_orb_classifier.py # ML classifier (optional)
+│   └── hog_svm_classifier.py          # ML classifier backup (optional)
+│
+├── Deployment
+│   ├── wsgi.py                    # WSGI server cho production
+│   ├── start_server.bat           # Script khởi động nhanh
+│   └── web.config                 # Cấu hình IIS (nếu dùng)
+│
+├── Data folders
+│   ├── roi_data/                  # Cấu hình ROI và máy móc
+│   │   ├── machine_screens.json   # Cấu hình máy và màn hình
+│   │   ├── roi_info.json          # Tọa độ ROI
+│   │   ├── decimal_places.json    # Cấu hình số thập phân
+│   │   ├── reference_images/      # Ảnh mẫu template
+│   │   └── parameter_order_value.txt
+│   │
+│   ├── uploads/                   # Ảnh được upload
+│   │   ├── aligned/               # Ảnh đã căn chỉnh
+│   │   ├── hmi_refined/           # Ảnh đã tinh chỉnh
+│   │   └── processed_roi/         # ROI đã xử lý
+│   │
+│   ├── ocr_results/               # Kết quả OCR lịch sử
+│   │
+│   └── Training data (Không xóa!)
+│       ├── augmented_training_data/    # Dữ liệu huấn luyện
+│       ├── advanced_augmented_data/    # Dữ liệu mở rộng
+│       └── focused_training_data/      # Dữ liệu tập trung
+│
+└── Documentation
+    ├── README.md                  # File này
+    ├── TECHNICAL_DOCS.md          # Tài liệu kỹ thuật
+    └── requirements.txt           # Dependencies
+```
+
+---
+
+## 🚀 Chạy Server
+
+### Chế Độ Development (Khuyến nghị cho testing)
+
+```bash
+cd D:\python_WREMBLY_test-main\python_api_test
+python app.py
+```
+
+Server sẽ khởi động tại: `http://0.0.0.0:5000`
+
+**Output mong đợi**:
+```
+[OK] GPU Accelerator and Parallel Processor modules loaded
+[OK] PaddleOCR initialized successfully
+[OK] Enhanced thread pools initialized
+[OK] GPU Accelerator ready
+[OK] Swagger docstrings injected
+[OK] Swagger docstrings injected for System routes
+
+======================================================================
+HMI OCR API SERVER - v3.0 PaddleOCR Edition
+======================================================================
+Upload folder: D:\python_api_test-paddleOCR\uploads
+ROI data folder: D:\python_api_test-paddleOCR\roi_data
+GPU available: True
+PaddleOCR available: True
+OCR Engine: PaddleOCR (exclusively)
+======================================================================
+Starting server on http://0.0.0.0:5000
+======================================================================
+
+ * Serving Flask app 'app'
+ * Debug mode: on
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+```
+
+### Chế Độ Production (Với Waitress)
+
+```bash
+python wsgi.py
+```
+
+Hoặc dùng batch file:
+```bash
+start_server.bat
+```
+
+**Waitress** an toàn hơn và hiệu năng tốt hơn cho môi trường production.
+
+### Test Server
+
+Mở browser và truy cập:
+- http://localhost:5000/ - Trang chủ
+- http://localhost:5000/debug - Thông tin debug
+- http://localhost:5000/api/performance - Thông tin hiệu năng
+- **http://localhost:5000/apidocs** - **Swagger UI** (Tài liệu API tương tác)
+
+Hoặc dùng curl:
+```bash
+curl http://localhost:5000/
+```
+
+### Swagger UI - Tài liệu API
+
+Hệ thống tích hợp **Swagger UI** để xem và test API trực tiếp trên trình duyệt.
+
+**Truy cập**: http://localhost:5000/apidocs
+
+**Tính năng:**
+- ✅ Xem tất cả 27 API endpoints được phân loại theo tags
+- ✅ Xem chi tiết parameters, request/response format
+- ✅ Test API trực tiếp trong trình duyệt
+- ✅ Tải OpenAPI spec (JSON) tại `/apispec.json`
+
+**Cấu trúc Swagger:**
+- `utils/swagger_config.py` - Cấu hình Swagger UI
+- `utils/swagger_specs.py` - Tất cả Swagger specifications
+- Tài liệu chi tiết: Xem `SWAGGER_DOCUMENTATION.md`
+
+---
+
+## 📡 API Endpoints
+
+### 1. System Endpoints (4 endpoints)
+
+**Base URL**: `http://localhost:5000`
+
+#### `GET /`
+Kiểm tra trạng thái server.
+
+**Response:**
+  ```json
+  {
+      "status": "Server is running",
+      "version": "3.0 - PaddleOCR Edition",
+      "ocr_engine": "PaddleOCR",
+      "endpoints": [...]
+  }
+```
+
+#### `GET /debug`
+Thông tin debug chi tiết về routes và cấu hình.
+
+#### `GET /api/performance`
+Thông tin hiệu năng và GPU.
+
+**Response:**
+  ```json
+  {
+  "timestamp": "2025-10-03 10:30:00",
+  "gpu_available": true,
+  "gpu_info": {
+    "gpu_device_id": 0,
+    "gpu_name": "NVIDIA GeForce GTX 1050 Ti",
+    "gpu_memory_total_gb": 4.0
+  },
+        "ocr": {
+            "paddleocr_available": true,
+            "engine": "PaddleOCR"
+      }
+  }
+  ```
+
+#### `GET /api/history`
+Lấy lịch sử OCR với filtering.
+
+**Query Parameters (Required):**
+- `start_time`: Thời gian bắt đầu (YYYY-MM-DD hoặc YYYY-MM-DD HH:MM:SS)
+- `end_time`: Thời gian kết thúc (YYYY-MM-DD hoặc YYYY-MM-DD HH:MM:SS)
+
+**Query Parameters (Optional):**
+- `machine_code`: Lọc theo mã máy (ví dụ: "IE-F1-CWA01")
+- `area`: Lọc theo khu vực (ví dụ: "F1", "F4")
+- `screen_id`: Lọc theo screen ID (ví dụ: "Production_Data")
+- `limit`: Số lượng kết quả tối đa (mặc định: 100)
+
+**Example:**
+```bash
+curl "http://localhost:5000/api/history?start_time=2025-11-01&end_time=2025-11-05&machine_code=IE-F1-CWA01&limit=50"
+```
+
+**Response:**
+```json
+{
+  "history": [...],
+  "count": 25,
+  "limit": 50,
+  "filters_applied": {
+    "start_time": "2025-11-01",
+    "end_time": "2025-11-05",
+    "machine_code": "IE-F1-CWA01"
+  }
+}
+```
+
+---
+
+### 2. Image Processing Endpoints (6 endpoints)
+
+#### `POST /api/images`
+Upload và xử lý ảnh HMI với PaddleOCR algorithm.
+
+**Request (Form-data):**
+- `file`: File ảnh (jpg, png, bmp) - **Required**
+- `area`: Mã khu vực (ví dụ: "F1", "F4") - **Required**
+- `machine_code`: Mã máy (ví dụ: "IE-F1-CWA01", "IE-F4-WBI01") - **Required**
+
+**Processing Steps:**
+1. Detect và extract HMI screen
+2. Full image OCR với PaddleOCR
+3. Match screen dựa trên Special_rois
+4. Filter OCR results bằng IoU với ROIs
+5. Post-process và format text
+6. Deduplication (keep highest IOU)
+
+**Example:**
+```bash
+curl -X POST http://localhost:5000/api/images \
+  -F "file=@test_image.jpg" \
+  -F "area=AREA1" \
+  -F "machine_code=F41"
+```
+
+**Response:**
+  ```json
+  {
+    "success": true,
+    "filename": "1696320000_test_image.jpg",
+    "machine_code": "IE-F1-CWA01",
+    "machine_type": "F1",
+    "screen_id": "Reject_Summary",
+    "area": "F1",
+    "sub_page": "1",
+    "hmi_detection": {
+      "hmi_extracted": true,
+      "hmi_size": "1797x2362",
+      "extraction_time": 0.15
+    },
+    "screen_matching": {
+      "matched": true,
+      "match_count": 7,
+      "match_percentage": 100.0
+    },
+    "ocr_results": [
+      {
+        "roi_index": "ST06 TESTED",
+        "text": "14934",
+        "confidence": 0.997,
+        "has_text": true,
+        "original_value": "14934",
+        "iou": 0.449
+      }
+    ],
+    "roi_count": 12,
+    "ocr_engine": "PaddleOCR",
+    "processing_time": {
+      "hmi_detection": 0.15,
+      "ocr": 1.23,
+      "matching": 0.05,
+      "filtering": 0.02,
+      "total": 1.45
+    }
+  }
+```
+
+#### `GET /api/images`
+Lấy danh sách tất cả ảnh đã upload.
+
+#### `GET /api/images/<filename>`
+Lấy file ảnh cụ thể.
+
+#### `DELETE /api/images/<filename>`
+Xóa file ảnh.
+
+#### `GET /api/images/hmi_detection/<filename>`
+Lấy ảnh visualization kết quả phát hiện HMI.
+
+#### `POST /api/images/ocr`
+Alternative endpoint để thực hiện OCR với automatic screen detection và ROI matching.
+
+**Request (Form-data):**
+- `file`: File ảnh (jpg, png, bmp) - **Required**
+- `area`: Mã khu vực (optional)
+- `machine_code`: Mã máy (optional)
+
+**Response:** Tương tự như `POST /api/images` nhưng với cấu trúc response đơn giản hơn.
+
+---
+
+### 3. Machine Management Endpoints (7 endpoints)
+
+#### `GET /api/machines`
+Lấy thông tin tất cả máy và khu vực.
+
+#### `GET /api/machines/<area_code>`
+Lấy danh sách máy theo khu vực.
+
+**Example:**
+```bash
+curl http://localhost:5000/api/machines/AREA1
+```
+
+#### `GET /api/machine_screens/<machine_code>`
+Lấy danh sách màn hình của một máy.
+
+**Example:**
+```bash
+curl http://localhost:5000/api/machine_screens/F41
+```
+
+**Response:**
+  ```json
+  {
+  "machine_code": "F41",
+  "machine_type": "F41",
+  "machine_name": "Máy ép F41",
+  "screens": [
+    {"id": 1, "screen_id": "Production", "description": "Màn hình sản xuất"},
+    {"id": 2, "screen_id": "Temp", "description": "Màn hình nhiệt độ"}
+  ]
+}
+```
+
+#### `POST /api/set_machine_screen`
+Đặt máy và màn hình hiện tại.
+
+**Request (JSON):**
+  ```json
+  {
+  "machine_code": "F41",
+  "screen_id": "Production"
+}
+```
+
+#### `POST /api/update_machine_screen`
+Cập nhật máy và màn hình với parameter_order_value.txt.
+
+**Request (Form-data):**
+- `machine_code`: Mã máy
+- `screen_id`: Tên màn hình
+- `area`: Mã khu vực (optional)
+
+#### `GET /api/current_machine_screen`
+Lấy máy và màn hình hiện tại.
+
+#### `GET /api/machine_screen_status`
+Kiểm tra trạng thái cấu hình máy/màn hình.
+
+---
+
+### 4. Decimal Configuration Endpoints (6 endpoints)
+
+#### `GET /api/decimal_places`
+Lấy tất cả cấu hình số thập phân.
+
+**Response:**
+```json
+{
+  "F1": {
+    "Production_Data": { "ROI_name": 0 },
+    "Reject_Summary": {
+      "ROI_0": 0,
+      "IE-F1-CWA01": {
+        "1": { "ST02_TESTED": 0 },
+        "2": { "ST14_1_TESTED": 0 }
+      }
+    }
+  }
+}
+```
+
+#### `POST /api/decimal_places`
+Cập nhật cấu hình số thập phân.
+
+**Request (JSON):**
+  ```json
+  {
+  "machine_code": "F41",
+  "screen_id": "Production",
+  "roi_config": {
+    "Temperature": 1,
+    "Pressure": 2,
+    "Speed": 0
+      }
+  }
+  ```
+
+#### `GET /api/decimal_places/<machine_type>/<screen_name>` ⭐ UNIFIED API
+Lấy cấu hình decimal places theo machine type và screen name.
+
+**Path Parameters (BẮT BUỘC):**
+- `machine_type`: Loại máy (F1, F41, F42)
+- `screen_name`: Tên màn hình (Production_Data, Reject_Summary, Injection, etc.)
+
+**Query Parameters (TÙY CHỌN):**
+- `machine_code`: Mã máy (e.g., IE-F1-CWA01) - chỉ dùng cho Reject_Summary
+- `sub_page`: Số trang con (1, 2) - chỉ dùng cho Reject_Summary với machine_code
+
+**Examples:**
+```bash
+# 1. Lấy config cho screen thông thường
+curl "http://localhost:5000/api/decimal_places/F41/Injection"
+
+# 2. Lấy toàn bộ Reject_Summary
+curl "http://localhost:5000/api/decimal_places/F1/Reject_Summary"
+
+# 3. Lấy Reject_Summary cho máy cụ thể
+curl "http://localhost:5000/api/decimal_places/F1/Reject_Summary?machine_code=IE-F1-CWA01"
+
+# 4. Lấy Reject_Summary cho máy + sub-page
+curl "http://localhost:5000/api/decimal_places/F1/Reject_Summary?machine_code=IE-F1-CWA01&sub_page=1"
+```
+
+**Response Example (Standard screen):**
+```json
+{
+  "machine_type": "F41",
+  "screen_name": "Injection",
+  "decimal_config": {
+    "Injection speed": 1,
+    "Charge speed": 1
+  }
+}
+```
+
+**Response Example (Reject_Summary với machine_code và sub_page):**
+```json
+{
+  "machine_type": "F1",
+  "screen_name": "Reject_Summary",
+  "machine_code": "IE-F1-CWA01",
+  "sub_page": "1",
+  "decimal_config": {
+    "ST02_TESTED": 0,
+    "ST02_REJECTS": 0,
+    "ST02_PERCENT": 2
+  }
+}
+```
+
+#### `POST /api/decimal_places/<machine_type>/<screen_name>` ⭐ UNIFIED API
+Cập nhật cấu hình decimal places.
+
+**Path Parameters (BẮT BUỘC):**
+- `machine_type`: Loại máy (F1, F41, F42)
+- `screen_name`: Tên màn hình
+
+**Query Parameters (TÙY CHỌN):**
+- `machine_code`: Mã máy - chỉ dùng cho Reject_Summary
+- `sub_page`: Số trang con - chỉ dùng cho Reject_Summary với machine_code
+
+**Examples:**
+```bash
+# 1. Update screen thông thường
+curl -X POST "http://localhost:5000/api/decimal_places/F41/Injection" \
+  -H "Content-Type: application/json" \
+  -d '{"Injection speed": 1, "Charge speed": 1}'
+
+# 2. Update Reject_Summary cho máy (tất cả sub-pages)
+curl -X POST "http://localhost:5000/api/decimal_places/F1/Reject_Summary?machine_code=IE-F1-CWA01" \
+  -H "Content-Type: application/json" \
+  -d '{"1": {"ST02_TESTED": 0}, "2": {"ST14_1_TESTED": 0}}'
+
+# 3. Update Reject_Summary cho máy + sub-page
+curl -X POST "http://localhost:5000/api/decimal_places/F1/Reject_Summary?machine_code=IE-F1-CWA01&sub_page=1" \
+  -H "Content-Type: application/json" \
+  -d '{"ST02_TESTED": 0, "ST02_REJECTS": 0}'
+```
+
+#### `POST /api/set_decimal_value`
+Đặt giá trị số thập phân cho ROI đơn lẻ.
+
+**Request (JSON):**
+```json
+{
+  "machine_code": "F41",
+  "screen_id": "Production",
+  "roi_index": "Temperature",
+  "decimal_places": 1
+}
+```
+
+#### `POST /api/set_all_decimal_values`
+Đặt tất cả giá trị số thập phân cho màn hình.
+
+**Request (JSON):**
+```json
+{
+  "machine_code": "F41",
+  "screen_id": "Production",
+  "decimal_config": {
+    "Temperature": 1,
+    "Pressure": 2
+  }
+}
+```
+
+---
+
+### 5. Reference Images Endpoints (4 endpoints)
+
+#### `POST /api/reference_images`
+Upload ảnh template tham chiếu.
+
+**Request (Form-data):**
+- `file`: File ảnh template
+- `machine_type`: Loại máy (F1, F41, F42)
+- `screen_id`: ID màn hình
+
+#### `GET /api/reference_images`
+Lấy danh sách ảnh template.
+
+#### `GET /api/reference_images/<filename>`
+Lấy file ảnh template cụ thể.
+
+#### `DELETE /api/reference_images/<filename>`
+Xóa ảnh template.
+
+---
+
+## ⚙️ Cấu Hình
+
+### File Cấu Hình Quan Trọng
+
+#### 1. `roi_data/machine_screens.json`
+Cấu hình máy móc và màn hình.
+
+**Cấu trúc:**
+  ```json
+  {
+  "areas": {
+    "AREA1": {
+      "name": "Khu vực 1",
+      "machines": {
+        "F41": {
+          "type": "F41",
+          "name": "Máy ép F41",
+          "description": "..."
+        }
+      }
+    }
+  },
+  "machine_types": {
+    "F41": {
+      "screens": [
+        {
+          "id": 1,
+          "screen_id": "Production",
+          "description": "Màn hình sản xuất"
+        }
+      ]
+    }
+      }
+  }
+  ```
+
+#### 2. `roi_data/roi_info.json`
+Tọa độ ROI cho từng màn hình.
+
+**Cấu trúc:**
+  ```json
+  {
+  "machines": {
+    "F41": {
+      "screens": {
+        "Production": [
+          {
+            "name": "Temperature",
+            "coordinates": [100, 200, 300, 250],
+            "allowed_values": []
+          }
+        ]
+      }
+    }
+  }
+}
+```
+
+**Lưu ý**: Tọa độ có thể là:
+- **Pixel tuyệt đối**: [x1, y1, x2, y2] (số nguyên)
+- **Normalized**: [0.1, 0.2, 0.3, 0.4] (số thập phân 0-1)
+
+#### 3. `roi_data/decimal_places.json`
+Cấu hình số chữ số thập phân.
+
+  ```json
+  {
+  "F41": {
+    "Production": {
+      "Temperature": 1,
+      "Pressure": 2,
+      "Speed": 0
+    }
+      }
+  }
+  ```
+
+### Thay Đổi Port
+
+Mặc định server chạy trên port 5000. Để thay đổi:
+
+**File `app.py`** (dòng 248):
+```python
+app.run(host='0.0.0.0', port=5001, debug=True)  # Đổi 5000 thành 5001
+```
+
+**File `wsgi.py`**:
+```python
+httpd = make_server('0.0.0.0', 5001, app)  # Đổi 5000 thành 5001
+```
+
+---
+
+## 🔥 Khắc Phục Sự Cố
+
+### Vấn Đề 1: Import Error
+
+**Lỗi:**
+```
+ModuleNotFoundError: No module named 'flask'
+```
+
+**Giải pháp:**
+```bash
+pip install -r requirements.txt
+```
+
+### Vấn Đề 2: GPU Không Phát Hiện
+
+**Lỗi:**
+```
+[WARNING] GPU not available
+```
+
+**Kiểm tra:**
+```bash
+nvidia-smi
+python -c "from paddleocr import PaddleOCR; ocr = PaddleOCR(use_gpu=True); print('GPU:', ocr.use_gpu)"
+```
+
+**Giải pháp:**
+1. Cài đặt lại CUDA Toolkit
+2. Cài đặt lại PaddleOCR với GPU support:
+   ```bash
+   pip uninstall paddlepaddle paddleocr -y
+   pip install paddlepaddle-gpu paddleocr
+   ```
+3. Kiểm tra CUDA version tương thích với paddlepaddle-gpu
+
+### Vấn Đề 3: PaddleOCR Lỗi
+
+**Lỗi:**
+```
+Exception: PaddleOCR failed to initialize
+```
+
+**Giải pháp:**
+```bash
+pip uninstall paddlepaddle paddleocr -y
+pip install paddlepaddle paddleocr
+```
+
+Nếu vẫn lỗi, kiểm tra:
+```bash
+# Kiểm tra PaddleOCR có hoạt động không
+python -c "from paddleocr import PaddleOCR; ocr = PaddleOCR(); print('OK')"
+```
+
+### Vấn Đề 4: Port Đang Được Sử Dụng
+
+**Lỗi:**
+```
+OSError: [WinError 10048] Only one usage of each socket address
+```
+
+**Giải pháp:**
+1. Tìm process đang dùng port 5000:
+   ```bash
+   netstat -ano | findstr :5000
+   ```
+2. Kill process:
+   ```bash
+   taskkill /PID <process_id> /F
+   ```
+3. Hoặc đổi port trong `app.py`
+
+### Vấn Đề 5: Out of Memory (GPU)
+
+**Lỗi:**
+```
+RuntimeError: CUDA out of memory
+```
+
+**Giải pháp:**
+1. Giảm batch size trong code
+2. Xử lý ít ảnh hơn cùng lúc
+3. Restart server để clear GPU memory
+
+### Vấn Đề 6: Slow Performance
+
+**Hiện tượng:** Server chạy chậm
+
+**Kiểm tra:**
+```bash
+curl http://localhost:5000/api/performance
+```
+
+**Giải pháp:**
+1. Kiểm tra GPU có đang hoạt động không
+2. Kiểm tra thread pool: Nên thấy "24 workers"
+3. Clear cache:
+   ```bash
+   # Xóa cache trong code
+   # Hoặc restart server
+   ```
+
+### Vấn Đề 7: Template Not Found
+
+**Lỗi:**
+```
+Template not found for machine X screen Y
+```
+
+**Giải pháp:**
+1. Kiểm tra file template trong `roi_data/reference_images/`
+2. Tên file phải đúng format: `template_{machine_type}_{screen_id}.jpg`
+3. Upload template mới qua API:
+   ```bash
+   curl -X POST http://localhost:5000/api/reference_images \
+     -F "file=@template.jpg" \
+     -F "machine_type=F41" \
+     -F "screen_id=Production"
+   ```
+
+---
+
+## 🛠️ Bảo Trì
+
+### Backup Dữ Liệu
+
+**Các thư mục cần backup định kỳ:**
+```
+roi_data/                    # Cấu hình
+uploads/                     # Ảnh đã xử lý (tùy chọn)
+ocr_results/                 # Kết quả OCR (tùy chọn)
+augmented_training_data/     # Dữ liệu training (quan trọng!)
+```
+
+**Script backup tự động:**
+```bash
+# Tạo file backup_data.bat
+@echo off
+set BACKUP_DIR=D:\Backups\HMI_OCR_%date:~-4,4%%date:~-7,2%%date:~-10,2%
+mkdir "%BACKUP_DIR%"
+xcopy /E /I /Y "roi_data" "%BACKUP_DIR%\roi_data"
+xcopy /E /I /Y "augmented_training_data" "%BACKUP_DIR%\training_data"
+echo Backup completed: %BACKUP_DIR%
+```
+
+### Update Dependencies
+
+```bash
+# Xem packages outdated
+pip list --outdated
+
+# Update một package cụ thể
+pip install --upgrade flask
+
+# Hoặc update tất cả (cẩn thận!)
+pip install --upgrade -r requirements.txt
+```
+
+### Logs và Monitoring
+
+**Xem logs:**
+- Server logs: Output terminal
+- OCR results: `ocr_results/` folder
+- Performance: `GET /api/performance`
+
+**Monitoring checklist:**
+- [ ] GPU memory usage
+- [ ] CPU usage
+- [ ] Disk space
+- [ ] Response time
+- [ ] Error rate
+
+### Clear Cache
+
+**Xóa uploaded images cũ:**
+```bash
+cd uploads
+del /Q *.jpg *.png
+cd aligned
+del /Q *.*
+```
+
+**Xóa OCR results cũ:**
+```bash
+cd ocr_results
+del /Q *.json
+```
+
+**Lưu ý:** Không xóa các thư mục training data!
+
+---
+
+

@@ -1,0 +1,305 @@
+﻿{
+    "areas": {
+        "F1": {
+            "name": "Khu vực F1",
+            "machines": {
+                "IE-F1-CWA01": {
+                    "description": "monitor 1.png",
+                    "name": "Máy IE-F1-CWA01",
+                    "type": "F1",
+                    "screens": [
+                        {
+                            "id": 1,
+                            "screen_id": "Production_Data",
+                            "description": "Màn hình Production Data",
+                            "sub_pages": 1
+                        },
+                        {
+                            "id": 2,
+                            "screen_id": "Reject_Summary",
+                            "description": "Màn hình Reject Summary",
+                            "sub_pages": 2
+                        }
+                    ]
+                },
+                "IE-F1-CTF01": {
+                    "name": "Máy IE-F1-CTF01",
+                    "type": "F1",
+                    "description": "monitor 1.png",
+                    "screens": [
+                        {
+                            "id": 1,
+                            "screen_id": "Production_Data",
+                            "description": "Màn hình Production Data",
+                            "sub_pages": 1
+                        },
+                        {
+                            "id": 2,
+                            "screen_id": "Reject_Summary",
+                            "description": "Màn hình Reject Summary",
+                            "sub_pages": 1
+                        }
+                    ]
+                },
+                "IE-F1-CFA01": {
+                    "name": "Máy IE-F1-CFA01",
+                    "type": "F1",
+                    "description": "monitor 1.png",
+                    "screens": [
+                        {
+                            "id": 1,
+                            "screen_id": "Production_Data",
+                            "description": "Màn hình Production Data",
+                            "sub_pages": 1
+                        },
+                        {
+                            "id": 2,
+                            "screen_id": "Reject_Summary",
+                            "description": "Màn hình Reject Summary",
+                            "sub_pages": 2
+                        }
+                    ]
+                },
+                "IE-F1-CSN01": {
+                    "name": "Máy IE-F1-CSN01",
+                    "type": "F1",
+                    "description": "monitor 1.png",
+                    "screens": [
+                        {
+                            "id": 1,
+                            "screen_id": "Production_Data",
+                            "description": "Màn hình Production Data",
+                            "sub_pages": 1
+                        },
+                        {
+                            "id": 2,
+                            "screen_id": "Reject_Summary",
+                            "description": "Màn hình Reject Summary",
+                            "sub_pages": 1
+                        }
+                    ]
+                }
+            }
+        },
+        "F4": {
+            "name": "Khu vực F4",
+            "machines": {
+                "IE-F4-WBI01": {
+                    "name": "Máy IE-F4-WBI01",
+                    "type": "F42",
+                    "description": "monitor 1.png",
+                    "screens": [
+                        {
+                            "id": 1,
+                            "screen_id": "Setting",
+                            "description": "Màn hình Setting",
+                            "sub_pages": 1
+                        },
+                        {
+                            "id": 2,
+                            "screen_id": "Overview",
+                            "description": "Màn hình Overview",
+                            "sub_pages": 1
+                        },
+                        {
+                            "id": 3,
+                            "screen_id": "Tracking",
+                            "description": "Màn hình Tracking",
+                            "sub_pages": 1
+                        }
+                    ]
+                },
+                "IE-F4-WBI02": {
+                    "name": "Máy IE-F4-WBI02",
+                    "type": "F42",
+                    "description": "monitor 1.png",
+                    "screens": [
+                        {
+                            "id": 1,
+                            "screen_id": "Setting",
+                            "description": "Màn hình Setting",
+                            "sub_pages": 1
+                        },
+                        {
+                            "id": 2,
+                            "screen_id": "Overview",
+                            "description": "Màn hình Overview",
+                            "sub_pages": 1
+                        },
+                        {
+                            "id": 3,
+                            "screen_id": "Tracking",
+                            "description": "Màn hình Tracking",
+                            "sub_pages": 1
+                        }
+                    ]
+                },
+                "IE-F4-WBI03": {
+                    "name": "Máy IE-F4-WBI03",
+                    "type": "F42",
+                    "description": "monitor 1.png",
+                    "screens": [
+                        {
+                            "id": 1,
+                            "screen_id": "Setting",
+                            "description": "Màn hình Setting",
+                            "sub_pages": 1
+                        },
+                        {
+                            "id": 2,
+                            "screen_id": "Overview",
+                            "description": "Màn hình Overview",
+                            "sub_pages": 1
+                        },
+                        {
+                            "id": 3,
+                            "screen_id": "Tracking",
+                            "description": "Màn hình Tracking",
+                            "sub_pages": 1
+                        }
+                    ]
+                },
+                "IE-F4-WBI04": {
+                    "name": "Máy IE-F4-WBI04",
+                    "type": "F42",
+                    "description": "monitor 1.png",
+                    "screens": [
+                        {
+                            "id": 1,
+                            "screen_id": "Setting",
+                            "description": "Màn hình Setting",
+                            "sub_pages": 1
+                        },
+                        {
+                            "id": 2,
+                            "screen_id": "Overview",
+                            "description": "Màn hình Overview",
+                            "sub_pages": 1
+                        },
+                        {
+                            "id": 3,
+                            "screen_id": "Tracking",
+                            "description": "Màn hình Tracking",
+                            "sub_pages": 1
+                        }
+                    ]
+                },
+                "IE-F4-WBI05": {
+                    "name": "Máy IE-F4-WBI05",
+                    "type": "F41",
+                    "description": "monitor 1.png",
+                    "screens": [
+                        {
+                            "id": 1,
+                            "screen_id": "Injection",
+                            "description": "Màn hình Injection",
+                            "sub_pages": 1
+                        },
+                        {
+                            "id": 2,
+                            "screen_id": "Temp",
+                            "description": "Màn hình Temp",
+                            "sub_pages": 1
+                        },
+                        {
+                            "id": 3,
+                            "screen_id": "Production",
+                            "description": "Màn hình Production",
+                            "sub_pages": 1
+                        }
+                    ]
+                },
+                "IE-F4-WBI06": {
+                    "name": "Máy IE-F4-WBI06",
+                    "type": "F41",
+                    "description": "monitor 1.png",
+                    "screens": [
+                        {
+                            "id": 1,
+                            "screen_id": "Injection",
+                            "description": "Màn hình Injection",
+                            "sub_pages": 1
+                        },
+                        {
+                            "id": 2,
+                            "screen_id": "Temp",
+                            "description": "Màn hình Temp",
+                            "sub_pages": 1
+                        },
+                        {
+                            "id": 3,
+                            "screen_id": "Production",
+                            "description": "Màn hình Production",
+                            "sub_pages": 1
+                        }
+                    ]
+                }
+            }
+        }
+    },
+    "machine_types": {
+        "F1": {
+            "name": "Máy F1",
+            "screens": [
+                {
+                    "id": 1,
+                    "screen_id": "Production_Data",
+                    "description": "Màn hình Production Data",
+                    "max_sub_pages": 1
+                },
+                {
+                    "id": 2,
+                    "screen_id": "Reject_Summary",
+                    "description": "Màn hình Reject Summary",
+                    "max_sub_pages": 2
+                }      
+            ]
+        },
+        "F41": {
+            "name": "Máy F41",
+            "screens": [
+                {
+                    "id": 1,
+                    "screen_id": "Injection",
+                    "description": "Màn hình Injection",
+                    "max_sub_pages": 1
+                },
+                {
+                    "id": 2,
+                    "screen_id": "Temp",
+                    "description": "Màn hình Temp",
+                    "max_sub_pages": 1
+                },
+                {
+                    "id": 3,
+                    "screen_id": "Production",
+                    "description": "Màn hình Production",
+                    "max_sub_pages": 1
+                }
+            ]
+        },
+        "F42": {
+            "name": "Máy F42",
+            "screens": [
+                {
+                    "id": 1,
+                    "screen_id": "Setting",
+                    "description": "Màn hình Setting",
+                    "max_sub_pages": 1
+                },
+                {
+                    "id": 2,
+                    "screen_id": "Overview",
+                    "description": "Màn hình Overview",
+                    "max_sub_pages": 1
+                },
+                {
+                    "id": 3,
+                    "screen_id": "Tracking",
+                    "description": "Màn hình Tracking",
+                    "max_sub_pages": 1
+                }
+            ]
+        }
+    }
+}
